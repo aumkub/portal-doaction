@@ -1,0 +1,193 @@
+import { Form, useActionData, useNavigation, redirect } from "react-router";
+import type { Route } from "./+types/login";
+import { createAuth, sendMagicLinkEmail, generateMagicToken } from "~/lib/auth.server";
+import { createDB } from "~/lib/db.server";
+import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
+import { Label } from "~/components/ui/label";
+import { z } from "zod";
+
+export function meta() {
+  return [{ title: "เข้าสู่ระบบ — DoAction Portal" }];
+}
+
+const Schema = z.object({
+  email: z.string().email("รูปแบบอีเมลไม่ถูกต้อง"),
+  mode: z.enum(["magic", "password"]).default("magic"),
+  password: z.string().optional(),
+});
+
+export async function action({ request, context }: Route.ActionArgs) {
+  const env = context.cloudflare.env;
+  const formData = await request.formData();
+  const raw = Object.fromEntries(formData);
+  const parsed = Schema.safeParse(raw);
+
+  if (!parsed.success) {
+    return { errors: parsed.error.flatten().fieldErrors, sent: false };
+  }
+
+  const { email, mode, password } = parsed.data;
+  const db = createDB(env.DB);
+  const user = await db.getUserByEmail(email);
+
+  // ── Admin password login ──────────────────────────────────────────────────
+  if (mode === "password") {
+    if (!password || !user || user.role !== "admin") {
+      return { errors: { email: ["อีเมลหรือรหัสผ่านไม่ถูกต้อง"] }, sent: false };
+    }
+    const { verifyPassword, createAuth } = await import("~/lib/auth.server");
+    const storedHash = await env.SESSION_KV.get(`pw:${user.id}`);
+    if (!storedHash || !(await verifyPassword(password, storedHash))) {
+      return { errors: { email: ["อีเมลหรือรหัสผ่านไม่ถูกต้อง"] }, sent: false };
+    }
+    const { lucia } = createAuth(env.DB, env.SESSION_KV);
+    const session = await lucia.createSession(user.id, {});
+    const cookie = lucia.createSessionCookie(session.id);
+    const dest = new URL(request.url).searchParams.get("redirect") ?? "/admin/clients";
+    return redirect(dest, { headers: { "Set-Cookie": cookie.serialize() } });
+  }
+
+  // ── Magic link (default) ───────────────────────────────────────────────────
+  if (user) {
+    const { id, token, expires_at } = generateMagicToken();
+    await db.createMagicLinkToken({ id, user_id: user.id, token, expires_at, used: 0 });
+
+    const origin = new URL(request.url).origin;
+    const magicUrl = `${origin}/magic-link?token=${token}`;
+
+    try {
+      await sendMagicLinkEmail({
+        to: email,
+        magicUrl,
+        resendApiKey: env.RESEND_API_KEY,
+      });
+    } catch (err) {
+      console.error("[magic-link] send failed:", err);
+      // Don't leak sending errors to the client
+    }
+  }
+
+  // Always return success to prevent email enumeration
+  return { sent: true, errors: null };
+}
+
+export default function LoginPage() {
+  const actionData = useActionData<typeof action>();
+  const navigation = useNavigation();
+  const isSubmitting = navigation.state === "submitting";
+
+  if (actionData?.sent) {
+    return (
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-10 text-center">
+        <div className="w-16 h-16 bg-violet-50 rounded-full flex items-center justify-center mx-auto mb-4">
+          <span className="text-3xl">📬</span>
+        </div>
+        <h2 className="text-xl font-semibold text-slate-900 mb-2">
+          ตรวจสอบอีเมลของคุณ
+        </h2>
+        <p className="text-sm text-slate-500 leading-relaxed">
+          เราได้ส่งลิ้งก์เข้าสู่ระบบไปยัง email ของคุณแล้ว
+          <br />
+          ลิ้งก์จะหมดอายุใน <span className="font-medium text-slate-700">15 นาที</span>
+        </p>
+        <Form method="post" className="mt-6">
+          <input type="hidden" name="mode" value="magic" />
+          <button
+            type="submit"
+            className="text-sm text-violet-600 hover:text-violet-700 underline underline-offset-2"
+          >
+            ส่งลิ้งก์ใหม่
+          </button>
+        </Form>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-10">
+      {/* Logo */}
+      <div className="mb-8">
+        <div className="flex items-center gap-2 mb-1">
+          <div className="w-8 h-8 bg-[#F0D800] rounded-lg flex items-center justify-center shadow-sm">
+            <span className="text-slate-900 font-bold text-sm leading-none">D</span>
+          </div>
+          <span className="font-bold text-2xl text-slate-900 tracking-tight">
+            DoAction
+          </span>
+        </div>
+        <p className="text-sm text-slate-500 ml-10">Client Portal</p>
+      </div>
+
+      {/* Heading */}
+      <h1 className="text-xl font-semibold text-slate-900 mb-1">
+        ยินดีต้อนรับ
+      </h1>
+      <p className="text-sm text-slate-500 mb-7">
+        เราจะส่งลิ้งก์เข้าระบบไปยัง email ของคุณ
+      </p>
+
+      <Form method="post" className="space-y-4" id="magic-form">
+        <input type="hidden" name="mode" value="magic" />
+
+        <div className="space-y-1.5">
+          <Label htmlFor="email">อีเมล</Label>
+          <Input
+            id="email"
+            name="email"
+            type="email"
+            required
+            autoFocus
+            placeholder="you@example.com"
+            className="h-11"
+          />
+          {actionData?.errors?.email && (
+            <p className="text-red-500 text-xs">{actionData.errors.email[0]}</p>
+          )}
+        </div>
+
+        <Button
+          type="submit"
+          disabled={isSubmitting}
+          className="w-full h-11 bg-violet-600 hover:bg-violet-700 text-white"
+        >
+          {isSubmitting ? "กำลังส่ง…" : "ส่ง Magic Link"}
+        </Button>
+      </Form>
+
+      {/* Admin divider */}
+      <div className="mt-6 pt-6 border-t border-slate-100">
+        <details className="group">
+          <summary className="text-xs text-slate-400 cursor-pointer hover:text-slate-600 transition-colors list-none text-center">
+            ผู้ดูแลระบบ? เข้าสู่ระบบด้วยรหัสผ่าน
+          </summary>
+          <Form method="post" className="mt-4 space-y-3">
+            <input type="hidden" name="mode" value="password" />
+            <Input
+              name="email"
+              type="email"
+              required
+              placeholder="admin@doaction.co.th"
+              className="h-11"
+            />
+            <Input
+              name="password"
+              type="password"
+              required
+              placeholder="••••••••"
+              className="h-11"
+            />
+            <Button
+              type="submit"
+              variant="outline"
+              className="w-full h-11"
+              disabled={isSubmitting}
+            >
+              เข้าสู่ระบบ (Admin)
+            </Button>
+          </Form>
+        </details>
+      </div>
+    </div>
+  );
+}
