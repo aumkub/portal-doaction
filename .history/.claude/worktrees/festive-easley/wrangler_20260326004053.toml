@@ -1,0 +1,44 @@
+name = "client-portal"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = "./build/client"
+
+[[d1_databases]]
+binding = "DB"
+
+      database_name: "portal",
+      database_id: "YOUR_D1_DATABASE_ID"
+database_name = "client-portal-db"
+database_id = "YOUR_D1_DATABASE_ID"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "YOUR_KV_NAMESPACE_ID"
+
+[vars]
+SMTP2GO_API_KEY = "api-EA966EF08F334828ABB31EB240C5647D"
+APP_URL = "https://portal.doaction.co.th"
+SESSION_SECRET = "y8N4vQ2mK7pLx3Rz9tW6cJ1hF5uD0sBa"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# ขั้นตอน deploy (Cloudflare Pages)
+#
+# 1. สร้าง D1 database:
+#    npx wrangler d1 create client-portal-db
+#    → นำ database_id ที่ได้มาใส่ใน database_id ด้านบน
+#
+# 2. รัน migration:
+#    npx wrangler d1 execute client-portal-db --file=./migrations/0001_init.sql
+#
+# 3. สร้าง KV namespace:
+#    npx wrangler kv namespace create "SESSION_STORE"
+#    → นำ id ที่ได้มาใส่ใน kv_namespaces[0].id ด้านบน
+#
+# 4. ตั้งค่า secrets (อย่าใส่ลงใน wrangler.toml โดยตรง):
+#    npx wrangler pages secret put SMTP2GO_API_KEY
+#    npx wrangler pages secret put SESSION_SECRET
+#
+# 5. Build และ Deploy:
+#    npm run build
+#    npx wrangler pages deploy ./build/client
+# ──────────────────────────────────────────────────────────────────────────────

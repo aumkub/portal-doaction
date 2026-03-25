@@ -14,9 +14,10 @@ const clientNav: NavItem[] = [
 ];
 
 const adminNav: NavItem[] = [
-  { label: "จัดการลูกค้า", href: "/admin/clients", icon: "👥" },
+  { label: "Overview", href: "/admin", icon: "🏠" },
+  { label: "Clients", href: "/admin/clients", icon: "👥" },
   { label: "Reports", href: "/admin/reports", icon: "📋" },
-  { label: "Tickets", href: "/admin/tickets", icon: "🎫" },
+  { label: "All Tickets", href: "/admin/tickets", icon: "🎫" },
   { label: "Settings", href: "/admin/settings", icon: "⚙️" },
 ];
 
@@ -90,8 +91,15 @@ function SidebarContent({
 }: SidebarProps) {
   const nav = role === "admin" ? adminNav : clientNav;
   return (
-    <div className="flex flex-col h-full bg-slate-900">
+    <div className={`flex h-full flex-col ${role === "admin" ? "bg-slate-950" : "bg-slate-900"}`}>
       <LogoBlock companyName={companyName} />
+      {role === "admin" ? (
+        <div className="px-5 pt-3">
+          <span className="inline-flex rounded-full bg-violet-600/20 px-2.5 py-1 text-[11px] font-semibold text-violet-300">
+            Admin
+          </span>
+        </div>
+      ) : null}
       <ScrollArea className="flex-1">
         <NavItems nav={nav} />
       </ScrollArea>

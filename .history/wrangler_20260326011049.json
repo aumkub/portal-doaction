@@ -22,7 +22,7 @@
   ],
   "kv_namespaces": [
     {
-      "binding": "SESSIONPORTAL",
+      "binding": "SESSION_PORTAL",
       "id": "5223ac89a8474cd4b972b490f357bdd5",
       "remote": true
     }

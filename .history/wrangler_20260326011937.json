@@ -16,8 +16,7 @@
     {
       "binding": "DB",      
       "database_name": "portal",
-      "database_id": "b9e1971c-8c20-42ad-a0e6-5c28b38994a7",
-      "remote": true
+      "database_id": "b9e1971c-8c20-42ad-a0e6-5c28b38994a7"
     }
   ],
   "kv_namespaces": [
