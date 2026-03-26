@@ -1,4 +1,4 @@
-import { Lucia } from "lucia";
+import { Lucia, TimeSpan } from "lucia";
 import { generateId } from "~/lib/utils";
 import { createDB } from "~/lib/db.server";
 import type { User, UserRole } from "~/types";
@@ -105,7 +105,7 @@ export function createAuth(d1: D1Database, kv: KVNamespace) {
   const adapter = createKVAdapter(kv, db);
 
   const lucia = new Lucia(adapter, {
-    sessionExpiresIn: { days: 30 },
+    sessionExpiresIn: new TimeSpan(30, "d"),
     sessionCookie: {
       name: "doaction_session",
       attributes: {
