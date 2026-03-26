@@ -54,7 +54,7 @@ function NavItems({ nav }: { nav: NavItem[] }) {
 
 function LogoBlock({ companyName }: { companyName?: string | null }) {
   return (
-    <div className="py-4 flex flex-col justify-center px-5 border-b !border-gray-700 shrink-0">
+    <div className="py-4 flex flex-col justify-center px-5 border-b border-white/10 shrink-0">
       <div className="flex items-center gap-2">
         <div className="w-7 h-7 bg-[#F0D800] rounded-lg flex items-center justify-center shadow-sm shrink-0">
           <span className="text-slate-900 font-bold text-xs leading-none">D</span>
@@ -73,7 +73,7 @@ function LogoBlock({ companyName }: { companyName?: string | null }) {
 
 function LogoutButton() {
   return (
-    <div className="p-3 border-t !border-gray-700 shrink-0">
+    <div className="p-3 border-t border-white/10 shrink-0">
       <Form method="post" action="/logout">
         <button
           type="submit"
@@ -93,7 +93,7 @@ function SidebarContent({
 }: SidebarProps) {
   const nav = role === "admin" ? adminNav : clientNav;
   return (
-    <div className={`flex h-full flex-col ${role === "admin" ? "bg-black/90" : "bg-black/90"}`}>
+    <div className={`flex h-full flex-col ${role === "admin" ? "bg-black-800" : "bg-black+8"}`}>
       <LogoBlock companyName={companyName} />
       {role === "admin" ? (
         <div className="px-5 pt-3">

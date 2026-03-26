@@ -1,5 +1,4 @@
 import type { Route } from "./+types/tickets";
-import { useState } from "react";
 import { requireAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { formatRelativeTime } from "~/lib/utils";
@@ -33,7 +32,14 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     counts[t.status] = (counts[t.status] ?? 0) + 1;
   }
 
-  return { tickets: allTickets, counts };
+  const url = new URL(request.url);
+  const filter = url.searchParams.get("status") ?? "all";
+  const filtered =
+    filter === "all"
+      ? allTickets
+      : allTickets.filter((t) => t.status === filter);
+
+  return { tickets: filtered.slice(0, 50), filter, counts };
 }
 
 const statusConfig = {
@@ -54,13 +60,11 @@ const priorityConfig = {
 const FILTERS = ["all", "open", "in_progress", "waiting", "resolved", "closed"] as const;
 
 export default function AdminTicketsPage({ loaderData }: Route.ComponentProps) {
-  const { tickets, counts } = loaderData as {
+  const { tickets, filter, counts } = loaderData as {
     tickets: (SupportTicket & { company_name: string })[];
+    filter: string;
     counts: Record<string, number>;
   };
-  const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
-  const filteredTickets =
-    filter === "all" ? tickets : tickets.filter((t) => t.status === filter);
 
   return (
     <div className="space-y-6">
@@ -78,10 +82,9 @@ export default function AdminTicketsPage({ loaderData }: Route.ComponentProps) {
           const label =
             s === "all" ? "ทั้งหมด" : statusConfig[s as keyof typeof statusConfig]?.label ?? s;
           return (
-            <button
+            <a
               key={s}
-              type="button"
-              onClick={() => setFilter(s)}
+              href={`/admin/tickets?status=${s}`}
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                 isActive
                   ? "bg-slate-900 text-white"
@@ -106,7 +109,7 @@ export default function AdminTicketsPage({ loaderData }: Route.ComponentProps) {
                   {count}
                 </span>
               )}
-            </button>
+            </a>
           );
         })}
       </div>
@@ -123,14 +126,14 @@ export default function AdminTicketsPage({ loaderData }: Route.ComponentProps) {
             </tr>
           </thead>
           <tbody>
-            {filteredTickets.length === 0 ? (
+            {tickets.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-5 py-12 text-center text-slate-400">
                   ไม่มี Ticket
                 </td>
               </tr>
             ) : (
-              filteredTickets.map((ticket) => {
+              tickets.map((ticket) => {
                 const st = statusConfig[ticket.status];
                 const pr = priorityConfig[ticket.priority];
                 return (

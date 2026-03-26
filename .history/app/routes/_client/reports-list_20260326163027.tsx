@@ -24,7 +24,7 @@ export default function ReportsListPage({ loaderData }: Route.ComponentProps) {
   const { reports } = loaderData as { reports: MonthlyReport[] };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-5xl">
       <PageHeader
         title="รายงานประจำเดือน"
         subtitle="สรุปงานที่ทีมดำเนินการในแต่ละเดือน"
