@@ -10,7 +10,7 @@ import MessageBubble from "~/components/tickets/MessageBubble";
 import PageHeader from "~/components/layout/PageHeader";
 
 const ReplySchema = z.object({
-  message: z.string().min(1, "กรุณาพิมพ์ข้อความ"),
+  message: z.string().default(""),
   is_internal: z.string().optional(),
   intent: z.enum(["reply", "status"]).default("reply"),
   status: z.string().optional(),
@@ -65,6 +65,11 @@ export async function action({ request, context, params }: any) {
   }
 
   const { intent, message, is_internal, status } = parsed.data;
+
+  // Validate message only for reply intent
+  if (intent === "reply" && !message.trim()) {
+    return { errors: { message: ["กรุณาพิมพ์ข้อความ"] } };
+  }
 
   if (intent === "status" && status) {
     const updateData: any = { status };
@@ -169,7 +174,6 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
         <p className="text-xs font-medium text-slate-600 mb-3">เปลี่ยนสถานะ</p>
         <Form method="post" className="flex flex-wrap gap-2">
           <input type="hidden" name="intent" value="status" />
-          <input type="hidden" name="message" value="" />
           {STATUSES.map((s) => (
             <button
               key={s.value}

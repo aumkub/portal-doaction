@@ -1,3 +1,4 @@
+import { Form } from "react-router";
 import type { Route } from "./+types/clients";
 import { requireAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
@@ -60,6 +61,7 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
                 สัญญา
               </th>
               <th className="px-5 py-3" />
+              <th className="px-5 py-3" />
             </tr>
           </thead>
           <tbody>
@@ -112,6 +114,24 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
                     >
                       ดูรายละเอียด →
                     </a>
+                  </td>
+                  <td className="px-5 py-4 text-right">
+                    <Form
+                      method="post"
+                      action={`/admin/clients/${client.id}`}
+                      onSubmit={(e) => {
+                        if (!confirm(`เข้าระบบในมุมมองของ ${client.company_name}?`)) {
+                          e.preventDefault();
+                        }
+                      }}
+                    >
+                      <button
+                        type="submit"
+                        className="text-xs text-amber-600 hover:text-amber-700 font-medium transition-colors border border-amber-200 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg"
+                      >
+                        👁 Impersonate
+                      </button>
+                    </Form>
                   </td>
                 </tr>
               ))
