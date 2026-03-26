@@ -9,7 +9,7 @@ import PriorityBadge from "~/components/tickets/PriorityBadge";
 import MessageBubble from "~/components/tickets/MessageBubble";
 
 const ReplySchema = z.object({
-  message: z.string().min(1, "Please enter your reply"),
+  message: z.string().min(1, "กรุณาพิมพ์ข้อความ"),
 });
 
 type LoaderData = {
@@ -89,29 +89,29 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
           <p className="text-xs font-medium text-slate-400">#{ticket.id}</p>
           <h1 className="text-2xl font-semibold text-slate-900">{ticket.title}</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Created on {formatDate(ticket.created_at)}
+            สร้างเมื่อ {formatDate(ticket.created_at)}
           </p>
         </div>
         <Link to="/tickets" className="text-sm text-slate-500 hover:text-slate-900">
-          Back to tickets
+          ← กลับ
         </Link>
       </div>
 
       <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-3">
         <div>
-          <p className="text-xs text-slate-500">Status</p>
+          <p className="text-xs text-slate-500">สถานะ</p>
           <div className="mt-1">
             <StatusBadge status={ticket.status} />
           </div>
         </div>
         <div>
-          <p className="text-xs text-slate-500">Priority</p>
+          <p className="text-xs text-slate-500">ความสำคัญ</p>
           <div className="mt-1">
             <PriorityBadge priority={ticket.priority} />
           </div>
         </div>
         <div>
-          <p className="text-xs text-slate-500">Opened</p>
+          <p className="text-xs text-slate-500">เปิดเมื่อ</p>
           <p className="mt-1 text-sm font-medium text-slate-700">
             {formatDate(ticket.created_at)}
           </p>
@@ -135,11 +135,12 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4">
         <Form method="post" className="space-y-3">
-          <label className="block text-sm font-medium text-slate-700">Reply</label>
+          <label className="block text-sm font-medium text-slate-700">ตอบกลับ</label>
           <textarea
             name="message"
             rows={4}
             required
+            placeholder="พิมพ์ข้อความ..."
             className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
           />
           {errors?.message ? (
@@ -150,7 +151,7 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
               type="submit"
               className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
             >
-              Send reply
+              ส่งข้อความ
             </button>
           </div>
         </Form>

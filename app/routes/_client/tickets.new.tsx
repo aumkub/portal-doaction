@@ -5,13 +5,13 @@ import { createDB } from "~/lib/db.server";
 import { generateId } from "~/lib/utils";
 
 const TicketSchema = z.object({
-  title: z.string().min(1, "Please enter a title"),
-  description: z.string().min(10, "Please provide more details"),
+  title: z.string().min(1, "กรุณากรอกหัวข้อ"),
+  description: z.string().min(10, "กรุณาระบุรายละเอียดอย่างน้อย 10 ตัวอักษร"),
   priority: z.enum(["low", "medium", "high", "urgent"]).default("medium"),
 });
 
 export function meta() {
-  return [{ title: "Create Ticket — DoAction Portal" }];
+  return [{ title: "แจ้งปัญหาใหม่ — DoAction Portal" }];
 }
 
 export async function action({ request, context }: any) {
@@ -67,7 +67,7 @@ export default function NewTicketPage({ actionData }: any) {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Create ticket</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">แจ้งปัญหาใหม่</h1>
         <p className="mt-1 text-sm text-slate-500">
           ส่งหัวข้อและรายละเอียดเพื่อแจ้งทีมงาน
         </p>
@@ -77,11 +77,12 @@ export default function NewTicketPage({ actionData }: any) {
         <Form method="post" className="space-y-4">
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">
-              Title
+              หัวข้อ
             </label>
             <input
               name="title"
               required
+              placeholder="เช่น เว็บไซต์ไม่สามารถเข้าถึงได้"
               className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
             />
             {errors?.title ? (
@@ -91,12 +92,13 @@ export default function NewTicketPage({ actionData }: any) {
 
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">
-              Description
+              รายละเอียด
             </label>
             <textarea
               name="description"
               required
               rows={6}
+              placeholder="อธิบายปัญหาหรือสิ่งที่ต้องการให้ทีมดำเนินการ..."
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
             />
             {errors?.description ? (
@@ -108,17 +110,17 @@ export default function NewTicketPage({ actionData }: any) {
 
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">
-              Priority
+              ความสำคัญ
             </label>
             <select
               name="priority"
               defaultValue="medium"
               className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
             >
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-              <option value="urgent">Urgent</option>
+              <option value="low">ต่ำ</option>
+              <option value="medium">กลาง</option>
+              <option value="high">สูง</option>
+              <option value="urgent">เร่งด่วน</option>
             </select>
           </div>
 
@@ -127,13 +129,13 @@ export default function NewTicketPage({ actionData }: any) {
               to="/tickets"
               className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
             >
-              Cancel
+              ยกเลิก
             </Link>
             <button
               type="submit"
               className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
             >
-              Submit ticket
+              ส่งคำร้อง
             </button>
           </div>
         </Form>
