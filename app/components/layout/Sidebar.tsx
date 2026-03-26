@@ -3,10 +3,10 @@ import { Sheet, SheetContent, SheetTrigger } from "~/components/ui/sheet";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { cn } from "~/lib/utils";
 
-type NavItem = { label: string; href: string; icon: string };
+type NavItem = { label: string; href: string; icon: string; end?: boolean };
 
 const clientNav: NavItem[] = [
-  { label: "Dashboard", href: "/dashboard", icon: "📊" },
+  { label: "Dashboard", href: "/dashboard", icon: "📊", end: true },
   { label: "Monthly Reports", href: "/reports", icon: "📋" },
   { label: "Support Tickets", href: "/tickets", icon: "🎫" },
   { label: "Documents", href: "/documents", icon: "📄" },
@@ -14,7 +14,7 @@ const clientNav: NavItem[] = [
 ];
 
 const adminNav: NavItem[] = [
-  { label: "Overview", href: "/admin", icon: "🏠" },
+  { label: "Overview", href: "/admin", icon: "🏠", end: true },
   { label: "Clients", href: "/admin/clients", icon: "👥" },
   { label: "Reports", href: "/admin/reports", icon: "📋" },
   { label: "All Tickets", href: "/admin/tickets", icon: "🎫" },
@@ -33,6 +33,7 @@ function NavItems({ nav }: { nav: NavItem[] }) {
         <NavLink
           key={item.href}
           to={item.href}
+          end={item.end}
           prefetch="intent"
           className={({ isActive }) =>
             cn(

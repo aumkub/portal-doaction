@@ -6,7 +6,7 @@ import { generateId } from "~/lib/utils";
 
 const TicketSchema = z.object({
   title: z.string().min(1, "กรุณากรอกหัวข้อ"),
-  description: z.string().min(10, "กรุณาระบุรายละเอียดอย่างน้อย 10 ตัวอักษร"),
+  description: z.string().min(1, "กรุณาระบุรายละเอียด"),
   priority: z.enum(["low", "medium", "high", "urgent"]).default("medium"),
 });
 

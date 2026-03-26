@@ -3,7 +3,7 @@ import { requireAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { formatRelativeTime } from "~/lib/utils";
 import PageHeader from "~/components/layout/PageHeader";
-import type { SupportTicket, Client } from "~/types";
+import type { SupportTicket } from "~/types";
 
 export function meta() {
   return [{ title: "จัดการ Tickets — Admin" }];
@@ -15,7 +15,6 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const db = createDB(env.DB);
 
   const clients = await db.listClients();
-  const clientMap = Object.fromEntries(clients.map((c) => [c.id, c]));
 
   const allTickets: (SupportTicket & { company_name: string })[] = [];
   for (const client of clients) {
@@ -26,13 +25,20 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   }
   allTickets.sort((a, b) => b.updated_at - a.updated_at);
 
+  // Count per status
+  const counts: Record<string, number> = { all: allTickets.length };
+  for (const t of allTickets) {
+    counts[t.status] = (counts[t.status] ?? 0) + 1;
+  }
+
   const url = new URL(request.url);
   const filter = url.searchParams.get("status") ?? "open";
-  const filtered = filter === "all"
-    ? allTickets
-    : allTickets.filter((t) => t.status === filter);
+  const filtered =
+    filter === "all"
+      ? allTickets
+      : allTickets.filter((t) => t.status === filter);
 
-  return { tickets: filtered.slice(0, 50), filter };
+  return { tickets: filtered.slice(0, 50), filter, counts };
 }
 
 const statusConfig = {
@@ -53,34 +59,58 @@ const priorityConfig = {
 const FILTERS = ["all", "open", "in_progress", "waiting", "resolved", "closed"] as const;
 
 export default function AdminTicketsPage({ loaderData }: Route.ComponentProps) {
-  const { tickets, filter } = loaderData as {
+  const { tickets, filter, counts } = loaderData as {
     tickets: (SupportTicket & { company_name: string })[];
     filter: string;
+    counts: Record<string, number>;
   };
 
   return (
     <div className="space-y-6 max-w-5xl">
       <PageHeader
         title="จัดการ Tickets"
-        subtitle={`${tickets.length} รายการ`}
+        subtitle={`${counts.all ?? 0} รายการทั้งหมด`}
         breadcrumbs={[{ label: "Admin" }, { label: "Tickets" }]}
       />
 
-      {/* Filters */}
+      {/* Filters with counts */}
       <div className="flex gap-2 flex-wrap">
-        {FILTERS.map((s) => (
-          <a
-            key={s}
-            href={s === "all" ? "/admin/tickets" : `/admin/tickets?status=${s}`}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              filter === s
-                ? "bg-slate-900 text-white"
-                : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
-            }`}
-          >
-            {s === "all" ? "ทั้งหมด" : statusConfig[s as keyof typeof statusConfig]?.label ?? s}
-          </a>
-        ))}
+        {FILTERS.map((s) => {
+          const count = counts[s] ?? 0;
+          const isActive = filter === s;
+          const label =
+            s === "all" ? "ทั้งหมด" : statusConfig[s as keyof typeof statusConfig]?.label ?? s;
+          return (
+            <a
+              key={s}
+              href={s === "all" ? "/admin/tickets" : `/admin/tickets?status=${s}`}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                isActive
+                  ? "bg-slate-900 text-white"
+                  : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              {label}
+              {count > 0 && (
+                <span
+                  className={`inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-semibold ${
+                    isActive
+                      ? "bg-white/20 text-white"
+                      : s === "open"
+                      ? "bg-amber-100 text-amber-700"
+                      : s === "in_progress"
+                      ? "bg-blue-100 text-blue-700"
+                      : s === "waiting"
+                      ? "bg-slate-100 text-slate-600"
+                      : "bg-slate-100 text-slate-500"
+                  }`}
+                >
+                  {count}
+                </span>
+              )}
+            </a>
+          );
+        })}
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto">
@@ -109,7 +139,9 @@ export default function AdminTicketsPage({ loaderData }: Route.ComponentProps) {
                   <tr
                     key={ticket.id}
                     className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors cursor-pointer"
-                    onClick={() => { window.location.href = `/admin/tickets/${ticket.id}`; }}
+                    onClick={() => {
+                      window.location.href = `/admin/tickets/${ticket.id}`;
+                    }}
                   >
                     <td className="px-5 py-4 text-slate-500 text-xs">
                       {ticket.company_name}
@@ -127,7 +159,9 @@ export default function AdminTicketsPage({ loaderData }: Route.ComponentProps) {
                       {pr.label}
                     </td>
                     <td className="px-5 py-4">
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${st.color}`}>
+                      <span
+                        className={`text-xs font-medium px-2 py-0.5 rounded-full ${st.color}`}
+                      >
                         {st.label}
                       </span>
                     </td>

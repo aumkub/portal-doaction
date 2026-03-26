@@ -21,21 +21,34 @@ async function fetchUptimeForDomain(
 ): Promise<{ uptimeRatio: number | null; isUp: boolean | null }> {
   try {
     const domain = new URL(websiteUrl).hostname.replace(/^www\./, "");
-    const resp = await fetch("https://api.uptimerobot.com/v3/monitors", {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
+
+    // UptimeRobot v2 API — POST with form-encoded body
+    const body = new URLSearchParams({
+      api_key: apiKey,
+      format: "json",
+      custom_uptime_ratios: "30", // 30-day uptime percentage
     });
+
+    const resp = await fetch("https://api.uptimerobot.com/v2/getMonitors", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString(),
+    });
+
     if (!resp.ok) return { uptimeRatio: null, isUp: null };
+
     const data = (await resp.json()) as {
+      stat?: string;
       monitors?: Array<{
         url?: string;
         status?: number;
-        uptime_ratio?: string | number;
+        custom_uptime_ratio?: string;
       }>;
     };
-    const monitor = data.monitors?.find((m) => {
+
+    if (data.stat !== "ok" || !data.monitors) return { uptimeRatio: null, isUp: null };
+
+    const monitor = data.monitors.find((m) => {
       if (!m.url) return false;
       try {
         return new URL(m.url).hostname.replace(/^www\./, "") === domain;
@@ -43,9 +56,16 @@ async function fetchUptimeForDomain(
         return false;
       }
     });
+
     if (!monitor) return { uptimeRatio: null, isUp: null };
+
+    // custom_uptime_ratio is a dash-separated string matching the requested periods
+    const ratio = monitor.custom_uptime_ratio
+      ? parseFloat(monitor.custom_uptime_ratio.split("-")[0])
+      : null;
+
     return {
-      uptimeRatio: monitor.uptime_ratio != null ? parseFloat(String(monitor.uptime_ratio)) : null,
+      uptimeRatio: ratio != null && !isNaN(ratio) ? ratio : null,
       isUp: monitor.status === MONITOR_UP,
     };
   } catch {
