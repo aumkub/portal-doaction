@@ -1,4 +1,4 @@
-import { CheckCircle2, Globe, Zap, Ticket, ArrowRight } from "lucide-react";
+import { CheckCircle2, Globe, Ticket, ArrowRight, Wifi, WifiOff } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { th } from "date-fns/locale";
 import type { Route } from "./+types/dashboard";
@@ -12,30 +12,81 @@ export function meta() {
   return [{ title: "Dashboard — DoAction Portal" }];
 }
 
+// UptimeRobot monitor status codes
+const MONITOR_UP = 2;
+
+async function fetchUptimeForDomain(
+  websiteUrl: string,
+  apiKey: string
+): Promise<{ uptimeRatio: number | null; isUp: boolean | null }> {
+  try {
+    const domain = new URL(websiteUrl).hostname.replace(/^www\./, "");
+    const resp = await fetch("https://api.uptimerobot.com/v3/monitors", {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+    });
+    if (!resp.ok) return { uptimeRatio: null, isUp: null };
+    const data = (await resp.json()) as {
+      monitors?: Array<{
+        url?: string;
+        status?: number;
+        uptime_ratio?: string | number;
+      }>;
+    };
+    const monitor = data.monitors?.find((m) => {
+      if (!m.url) return false;
+      try {
+        return new URL(m.url).hostname.replace(/^www\./, "") === domain;
+      } catch {
+        return false;
+      }
+    });
+    if (!monitor) return { uptimeRatio: null, isUp: null };
+    return {
+      uptimeRatio: monitor.uptime_ratio != null ? parseFloat(String(monitor.uptime_ratio)) : null,
+      isUp: monitor.status === MONITOR_UP,
+    };
+  } catch {
+    return { uptimeRatio: null, isUp: null };
+  }
+}
+
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = context.cloudflare.env;
   const user = await requireUser(request, env.DB, env.SESSIONPORTAL);
   const db = createDB(env.DB);
   const client = await db.getClientByUserId(user.id);
   if (!client) {
-    return { stats: null, activity: [], client: null };
+    return { stats: null, activity: [], client: null, latestReportId: null };
   }
 
-  const [tickets, reports] = await Promise.all([
+  const apiKey =
+    (env as any).UPTIMEROBOT_API_KEY ?? "ur2618139-5281beb51ff9820a629669c2";
+
+  const [ticketsResult, reportsResult, uptimeResult] = await Promise.allSettled([
     db.listTicketsByClient(client.id),
     db.listReportsByClient(client.id),
+    client.website_url
+      ? fetchUptimeForDomain(client.website_url, apiKey)
+      : Promise.resolve({ uptimeRatio: null, isUp: null }),
   ]);
 
+  const tickets = ticketsResult.status === "fulfilled" ? ticketsResult.value : [];
+  const reports = reportsResult.status === "fulfilled" ? reportsResult.value : [];
+  const uptime =
+    uptimeResult.status === "fulfilled"
+      ? uptimeResult.value
+      : { uptimeRatio: null, isUp: null };
+
   const latestReport = reports.find((r) => r.status === "published") ?? null;
-  const tasks = latestReport
-    ? await db.listTasksByReport(latestReport.id)
-    : [];
+  const tasks = latestReport ? await db.listTasksByReport(latestReport.id) : [];
 
   const openTickets = tickets.filter((t) =>
     ["open", "in_progress", "waiting"].includes(t.status)
   );
 
-  // Build activity feed: merge recent tasks + tickets, sort by time, take 5
   type ActivityItem = {
     id: string;
     type: "task" | "ticket";
@@ -67,10 +118,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   return {
     stats: {
       completedTasks: latestReport?.total_tasks ?? 0,
-      uptimePercent: latestReport?.uptime_percent ?? null,
-      speedScore: latestReport?.speed_score ?? null,
+      uptimePercent: uptime.uptimeRatio,
+      isUp: uptime.isUp,
       openTickets: openTickets.length,
-      prevSpeedScore: null as number | null, // from previous report if available
     },
     activity,
     client,
@@ -84,6 +134,8 @@ export default function DashboardPage({ loaderData }: Route.ComponentProps) {
   const fmt = (unix: number) =>
     formatDistanceToNow(new Date(unix * 1000), { addSuffix: true, locale: th });
 
+  const isOnline = stats?.isUp;
+
   return (
     <div className="space-y-6 max-w-6xl">
       <PageHeader
@@ -92,7 +144,7 @@ export default function DashboardPage({ loaderData }: Route.ComponentProps) {
       />
 
       {/* ── Stat Cards ───────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatsCard
           title="งานเสร็จเดือนนี้"
           value={stats?.completedTasks ?? 0}
@@ -101,7 +153,7 @@ export default function DashboardPage({ loaderData }: Route.ComponentProps) {
           color="emerald"
         />
         <StatsCard
-          title="Uptime"
+          title="Uptime (30 วัน)"
           value={
             stats?.uptimePercent != null
               ? `${stats.uptimePercent.toFixed(2)}%`
@@ -109,21 +161,6 @@ export default function DashboardPage({ loaderData }: Route.ComponentProps) {
           }
           icon={<Globe className="w-5 h-5" />}
           color="blue"
-        />
-        <StatsCard
-          title="Speed Score"
-          value={stats?.speedScore ?? "—"}
-          suffix={stats?.speedScore != null ? "/ 100" : undefined}
-          icon={<Zap className="w-5 h-5" />}
-          color="amber"
-          trend={
-            stats?.speedScore != null && stats?.prevSpeedScore != null
-              ? {
-                  value: stats.speedScore - stats.prevSpeedScore,
-                  label: "vs เดือนก่อน",
-                }
-              : undefined
-          }
         />
         <StatsCard
           title="Tickets เปิดอยู่"
@@ -217,10 +254,30 @@ export default function DashboardPage({ loaderData }: Route.ComponentProps) {
                 <StatusRow
                   label="สถานะ"
                   value={
-                    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
-                      <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                      Online
-                    </span>
+                    isOnline === null ? (
+                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full">
+                        <span className="w-1.5 h-1.5 bg-slate-300 rounded-full" />
+                        ไม่ทราบ
+                      </span>
+                    ) : isOnline ? (
+                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                        <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                        Online
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
+                        <span className="w-1.5 h-1.5 bg-red-500 rounded-full" />
+                        Offline
+                      </span>
+                    )
+                  }
+                />
+                <StatusRow
+                  label="Uptime 30 วัน"
+                  value={
+                    stats?.uptimePercent != null
+                      ? `${stats.uptimePercent.toFixed(2)}%`
+                      : "—"
                   }
                 />
                 <StatusRow label="SSL Certificate" value="ยังไม่ได้ตั้งค่า" />

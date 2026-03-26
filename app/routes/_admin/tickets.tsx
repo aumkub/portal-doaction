@@ -108,13 +108,20 @@ export default function AdminTicketsPage({ loaderData }: Route.ComponentProps) {
                 return (
                   <tr
                     key={ticket.id}
-                    className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors"
+                    className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors cursor-pointer"
+                    onClick={() => { window.location.href = `/admin/tickets/${ticket.id}`; }}
                   >
                     <td className="px-5 py-4 text-slate-500 text-xs">
                       {ticket.company_name}
                     </td>
                     <td className="px-5 py-4 font-medium text-slate-900 max-w-[240px]">
-                      <p className="truncate">{ticket.title}</p>
+                      <a
+                        href={`/admin/tickets/${ticket.id}`}
+                        className="truncate block hover:text-violet-600 transition-colors"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {ticket.title}
+                      </a>
                     </td>
                     <td className={`px-5 py-4 text-xs font-medium ${pr.color}`}>
                       {pr.label}
