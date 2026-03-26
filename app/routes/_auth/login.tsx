@@ -1,7 +1,5 @@
 import { Form, useActionData, useNavigation, redirect } from "react-router";
 import type { Route } from "./+types/login";
-import { createAuth, sendMagicLinkEmail, generateMagicToken } from "~/lib/auth.server";
-import { createDB } from "~/lib/db.server";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
@@ -28,6 +26,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   const { email, mode, password } = parsed.data;
+  const { createDB } = await import("~/lib/db.server");
   const db = createDB(env.DB);
   const user = await db.getUserByEmail(email);
 
@@ -37,11 +36,11 @@ export async function action({ request, context }: Route.ActionArgs) {
       return { errors: { email: ["อีเมลหรือรหัสผ่านไม่ถูกต้อง"] }, sent: false };
     }
     const { verifyPassword, createAuth } = await import("~/lib/auth.server");
-    const storedHash = await env.SESSION_KV.get(`pw:${user.id}`);
+    const storedHash = await env.SESSIONPORTAL.get(`pw:${user.id}`);
     if (!storedHash || !(await verifyPassword(password, storedHash))) {
       return { errors: { email: ["อีเมลหรือรหัสผ่านไม่ถูกต้อง"] }, sent: false };
     }
-    const { lucia } = createAuth(env.DB, env.SESSION_KV);
+    const { lucia } = createAuth(env.DB, env.SESSIONPORTAL);
     const session = await lucia.createSession(user.id, {});
     const cookie = lucia.createSessionCookie(session.id);
     const dest = new URL(request.url).searchParams.get("redirect") ?? "/admin/clients";
@@ -50,6 +49,8 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   // ── Magic link (default) ───────────────────────────────────────────────────
   if (user) {
+    const { generateMagicToken } = await import("~/lib/auth.server");
+    const { sendMagicLinkEmail } = await import("~/lib/email.server");
     const { id, token, expires_at } = generateMagicToken();
     await db.createMagicLinkToken({ id, user_id: user.id, token, expires_at, used: 0 });
 
@@ -59,8 +60,9 @@ export async function action({ request, context }: Route.ActionArgs) {
     try {
       await sendMagicLinkEmail({
         to: email,
+        toName: user.name,
         magicUrl,
-        resendApiKey: env.RESEND_API_KEY,
+        apiKey: env.SMTP2GO_API_KEY,
       });
     } catch (err) {
       console.error("[magic-link] send failed:", err);

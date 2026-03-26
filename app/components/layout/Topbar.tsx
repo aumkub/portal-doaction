@@ -1,4 +1,5 @@
-import { Form } from "react-router";
+import { Form, useRevalidator } from "react-router";
+import { useEffect } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
 import {
   DropdownMenu,
@@ -9,46 +10,137 @@ import {
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
 import { MobileSidebarTrigger } from "~/components/layout/Sidebar";
-import type { User } from "~/types";
+import { formatRelativeTime } from "~/lib/utils";
+import type { User, Notification } from "~/types";
 
 interface TopbarProps {
   user: User;
   companyName?: string | null;
-  notifCount?: number;
+  notifications?: Notification[];
   role?: "client" | "admin";
 }
 
-function BellIcon({ count }: { count: number }) {
+// ─── 30-second polling ───────────────────────────────────────────────────────
+function usePolling(intervalMs: number) {
+  const revalidator = useRevalidator();
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (revalidator.state === "idle") revalidator.revalidate();
+    }, intervalMs);
+    return () => clearInterval(id);
+  }, [revalidator, intervalMs]);
+}
+
+// ─── Bell + Notification Dropdown ────────────────────────────────────────────
+function NotificationDropdown({ notifications }: { notifications: Notification[] }) {
+  const unread = notifications.filter((n) => !n.read);
+
   return (
-    <button className="relative p-2 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors">
-      <svg
-        className="w-5 h-5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={1.8}
-        viewBox="0 0 24 24"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
-        />
-      </svg>
-      {count > 0 && (
-        <span className="absolute top-1 right-1 w-4 h-4 bg-violet-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center leading-none">
-          {count > 9 ? "9+" : count}
-        </span>
-      )}
-    </button>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          className="relative p-2 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors focus:outline-none"
+          aria-label="Notifications"
+        >
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.8}
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+            />
+          </svg>
+          {unread.length > 0 && (
+            <span className="absolute top-1 right-1 w-4 h-4 bg-violet-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center leading-none">
+              {unread.length > 9 ? "9+" : unread.length}
+            </span>
+          )}
+        </button>
+      </DropdownMenuTrigger>
+
+      <DropdownMenuContent align="end" className="w-80">
+        <div className="flex items-center justify-between px-3 py-2 border-b border-slate-100">
+          <span className="text-sm font-semibold text-slate-900">
+            การแจ้งเตือน
+          </span>
+          {unread.length > 0 && (
+            <Form method="post" action="/api/notifications/read">
+              <button
+                type="submit"
+                className="text-xs text-violet-600 hover:text-violet-700 transition-colors"
+              >
+                อ่านทั้งหมด
+              </button>
+            </Form>
+          )}
+        </div>
+
+        {notifications.length === 0 ? (
+          <div className="px-3 py-8 text-center">
+            <p className="text-2xl mb-1">🔔</p>
+            <p className="text-sm text-slate-400">ไม่มีการแจ้งเตือน</p>
+          </div>
+        ) : (
+          <div className="max-h-80 overflow-y-auto">
+            {notifications.slice(0, 10).map((n) => (
+              <Form
+                key={n.id}
+                method="post"
+                action="/api/notifications/read"
+              >
+                <input type="hidden" name="id" value={n.id} />
+                <button
+                  type="submit"
+                  className={`w-full text-left px-3 py-3 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 ${
+                    !n.read ? "bg-violet-50/50" : ""
+                  }`}
+                >
+                  <div className="flex items-start gap-2">
+                    <span className="text-base leading-none mt-0.5 shrink-0">
+                      {n.type === "report_published" ? "📋" : "🔔"}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-800 leading-tight">
+                        {n.title}
+                      </p>
+                      {n.body && (
+                        <p className="text-xs text-slate-500 mt-0.5 leading-relaxed truncate">
+                          {n.body}
+                        </p>
+                      )}
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        {formatRelativeTime(n.created_at)}
+                      </p>
+                    </div>
+                    {!n.read && (
+                      <span className="w-2 h-2 bg-violet-500 rounded-full mt-1.5 shrink-0" />
+                    )}
+                  </div>
+                </button>
+              </Form>
+            ))}
+          </div>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
+// ─── Topbar ───────────────────────────────────────────────────────────────────
 export default function Topbar({
   user,
   companyName,
-  notifCount = 0,
+  notifications = [],
   role = "client",
 }: TopbarProps) {
+  // Poll every 30 s so notification count stays fresh
+  usePolling(30_000);
+
   const initials = user.name
     .split(" ")
     .map((n) => n[0])
@@ -58,7 +150,7 @@ export default function Topbar({
 
   return (
     <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 lg:px-6 shrink-0">
-      {/* Left: mobile menu + company name */}
+      {/* Left */}
       <div className="flex items-center gap-3">
         <MobileSidebarTrigger role={role} companyName={companyName} />
         {companyName && (
@@ -68,9 +160,9 @@ export default function Topbar({
         )}
       </div>
 
-      {/* Right: notifications + user menu */}
+      {/* Right */}
       <div className="flex items-center gap-1">
-        <BellIcon count={notifCount} />
+        <NotificationDropdown notifications={notifications} />
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -93,11 +185,7 @@ export default function Topbar({
                 strokeWidth={2}
                 viewBox="0 0 24 24"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M19 9l-7 7-7-7"
-                />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
               </svg>
             </button>
           </DropdownMenuTrigger>
@@ -116,10 +204,7 @@ export default function Topbar({
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
               <Form method="post" action="/logout" className="w-full">
-                <button
-                  type="submit"
-                  className="flex items-center gap-2 w-full text-red-500 text-sm"
-                >
+                <button type="submit" className="flex items-center gap-2 w-full text-red-500 text-sm">
                   <span>🚪</span> ออกจากระบบ
                 </button>
               </Form>

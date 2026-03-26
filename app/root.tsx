@@ -46,30 +46,45 @@ export default function App() {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-	let message = "Oops!";
-	let details = "An unexpected error occurred.";
+	let status = 500;
+	let title = "เกิดข้อผิดพลาด";
+	let detail = "เกิดข้อผิดพลาดที่ไม่คาดคิด กรุณาลองใหม่อีกครั้ง";
 	let stack: string | undefined;
 
 	if (isRouteErrorResponse(error)) {
-		message = error.status === 404 ? "404" : "Error";
-		details =
-			error.status === 404
-				? "The requested page could not be found."
-				: error.statusText || details;
-	} else if (import.meta.env.DEV && error && error instanceof Error) {
-		details = error.message;
+		status = error.status;
+		if (error.status === 404) {
+			title = "ไม่พบหน้านี้";
+			detail = "ขออภัย ไม่พบหน้าที่คุณกำลังมองหา";
+		} else if (error.status === 403) {
+			title = "ไม่มีสิทธิ์เข้าถึง";
+			detail = "คุณไม่มีสิทธิ์เข้าถึงหน้านี้";
+		} else {
+			detail = error.statusText || detail;
+		}
+	} else if (import.meta.env.DEV && error instanceof Error) {
+		detail = error.message;
 		stack = error.stack;
 	}
 
 	return (
-		<main className="pt-16 p-4 container mx-auto">
-			<h1>{message}</h1>
-			<p>{details}</p>
-			{stack && (
-				<pre className="w-full p-4 overflow-x-auto">
-					<code>{stack}</code>
-				</pre>
-			)}
+		<main className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+			<div className="bg-white rounded-2xl border border-slate-200 p-10 max-w-md w-full text-center space-y-4">
+				<p className="text-5xl font-bold text-slate-200">{status}</p>
+				<h1 className="text-xl font-semibold text-slate-900">{title}</h1>
+				<p className="text-sm text-slate-500">{detail}</p>
+				{stack && (
+					<pre className="mt-4 text-left text-xs bg-slate-50 rounded-lg p-4 overflow-x-auto text-slate-600 border border-slate-100">
+						{stack}
+					</pre>
+				)}
+				<a
+					href="/"
+					className="inline-block mt-2 px-5 py-2.5 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 transition-colors"
+				>
+					กลับหน้าหลัก
+				</a>
+			</div>
 		</main>
 	);
 }

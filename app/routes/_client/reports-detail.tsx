@@ -20,7 +20,7 @@ export function meta({ data }: Route.MetaArgs) {
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   const env = context.cloudflare.env;
-  const user = await requireUser(request, env.DB, env.SESSION_KV);
+  const user = await requireUser(request, env.DB, env.SESSIONPORTAL);
   const db = createDB(env.DB);
 
   const report = await db.getReport(params.reportId);

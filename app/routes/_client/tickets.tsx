@@ -17,7 +17,7 @@ const NewTicketSchema = z.object({
 });
 
 export async function action({ request, context }: Route.ActionArgs) {
-  const user = await requireUser(request, context.cloudflare.env.DB, context.cloudflare.env.SESSION_KV);
+  const user = await requireUser(request, context.cloudflare.env.DB, context.cloudflare.env.SESSIONPORTAL);
   const db = createDB(context.cloudflare.env.DB);
   const client = await db.getClientByUserId(user.id);
   if (!client) return { error: "ไม่พบข้อมูลลูกค้า" };
@@ -44,7 +44,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
-  const user = await requireUser(request, context.cloudflare.env.DB, context.cloudflare.env.SESSION_KV);
+  const user = await requireUser(request, context.cloudflare.env.DB, context.cloudflare.env.SESSIONPORTAL);
   const db = createDB(context.cloudflare.env.DB);
   const client = await db.getClientByUserId(user.id);
   if (!client) return { tickets: [], client: null };
