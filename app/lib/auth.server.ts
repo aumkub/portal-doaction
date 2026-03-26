@@ -12,6 +12,79 @@ interface KVSessionData {
   expiresAt: number; // unix ms
 }
 
+interface ImpersonationData {
+  adminUserId: string;
+}
+
+const SESSION_CACHE_TTL_MS = 2000;
+const sessionUserCache = new Map<
+  string,
+  { cachedAt: number; user: User | null }
+>();
+
+export function evictSessionUserCache(sessionId: string) {
+  sessionUserCache.delete(sessionId);
+}
+
+export async function getImpersonationData(
+  request: Request,
+  d1: D1Database,
+  kv: KVNamespace
+): Promise<ImpersonationData | null> {
+  const { lucia } = createAuth(d1, kv);
+  const cookieHeader = request.headers.get("Cookie") ?? "";
+  const sessionId = lucia.readSessionCookie(cookieHeader);
+  if (!sessionId) return null;
+  return kv.get<ImpersonationData>(`imp:${sessionId}`, "json");
+}
+
+export async function startImpersonation(
+  request: Request,
+  d1: D1Database,
+  kv: KVNamespace,
+  targetUserId: string,
+  adminUserId: string
+) {
+  const { lucia } = createAuth(d1, kv);
+  const cookieHeader = request.headers.get("Cookie") ?? "";
+  const currentSessionId = lucia.readSessionCookie(cookieHeader);
+
+  const newSession = await lucia.createSession(targetUserId, {});
+  await kv.put(
+    `imp:${newSession.id}`,
+    JSON.stringify({ adminUserId } satisfies ImpersonationData),
+    { expirationTtl: 60 * 60 * 24 * 30 }
+  );
+
+  if (currentSessionId) {
+    await lucia.invalidateSession(currentSessionId);
+    evictSessionUserCache(currentSessionId);
+  }
+
+  return lucia.createSessionCookie(newSession.id);
+}
+
+export async function stopImpersonation(
+  request: Request,
+  d1: D1Database,
+  kv: KVNamespace
+) {
+  const { lucia } = createAuth(d1, kv);
+  const cookieHeader = request.headers.get("Cookie") ?? "";
+  const currentSessionId = lucia.readSessionCookie(cookieHeader);
+  if (!currentSessionId) return null;
+
+  const data = await kv.get<ImpersonationData>(`imp:${currentSessionId}`, "json");
+  if (!data?.adminUserId) return null;
+
+  await kv.delete(`imp:${currentSessionId}`);
+  await lucia.invalidateSession(currentSessionId);
+  evictSessionUserCache(currentSessionId);
+
+  const adminSession = await lucia.createSession(data.adminUserId, {});
+  return lucia.createSessionCookie(adminSession.id);
+}
+
 function createKVAdapter(kv: KVNamespace, db: ReturnType<typeof createDB>) {
   return {
     async getSessionAndUser(
@@ -43,6 +116,8 @@ function createKVAdapter(kv: KVNamespace, db: ReturnType<typeof createDB>) {
             name: user.name,
             role: user.role,
             avatar_url: user.avatar_url,
+            created_at: user.created_at,
+            updated_at: user.updated_at,
           },
         },
       ];
@@ -114,11 +189,14 @@ export function createAuth(d1: D1Database, kv: KVNamespace) {
       },
     },
     getUserAttributes(attributes) {
+      const attrs = attributes as Record<string, unknown>;
       return {
-        email: attributes.email as string,
-        name: attributes.name as string,
-        role: attributes.role as UserRole,
-        avatar_url: attributes.avatar_url as string | null,
+        email: attrs.email as string,
+        name: attrs.name as string,
+        role: attrs.role as UserRole,
+        avatar_url: attrs.avatar_url as string | null,
+        created_at: attrs.created_at as number,
+        updated_at: attrs.updated_at as number,
       };
     },
   });
@@ -147,15 +225,27 @@ export async function getAuthenticatedUser(
   d1: D1Database,
   kv: KVNamespace
 ): Promise<User | null> {
-  const { lucia, db } = createAuth(d1, kv);
+  const { lucia } = createAuth(d1, kv);
   const cookieHeader = request.headers.get("Cookie") ?? "";
   const sessionId = lucia.readSessionCookie(cookieHeader);
   if (!sessionId) return null;
+  const cached = sessionUserCache.get(sessionId);
+  if (cached && Date.now() - cached.cachedAt < SESSION_CACHE_TTL_MS) {
+    return cached.user;
+  }
 
   const { session, user } = await lucia.validateSession(sessionId);
-  if (!session || !user) return null;
+  if (!session || !user) {
+    sessionUserCache.set(sessionId, { cachedAt: Date.now(), user: null });
+    return null;
+  }
 
-  return db.getUserById(user.id);
+  const authenticatedUser = user as unknown as User;
+  sessionUserCache.set(sessionId, {
+    cachedAt: Date.now(),
+    user: authenticatedUser,
+  });
+  return authenticatedUser;
 }
 
 export async function requireUser(

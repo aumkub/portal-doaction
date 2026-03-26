@@ -78,6 +78,9 @@ export default function LoginPage() {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
+  const submittingMode = navigation.formData?.get("mode");
+  const isSubmittingMagic = isSubmitting && submittingMode === "magic";
+  const isSubmittingAdmin = isSubmitting && submittingMode === "password";
 
   if (actionData?.sent) {
     return (
@@ -150,10 +153,10 @@ export default function LoginPage() {
 
         <Button
           type="submit"
-          disabled={isSubmitting}
+          disabled={isSubmittingMagic}
           className="w-full h-11 bg-violet-600 hover:bg-violet-700 text-white"
         >
-          {isSubmitting ? "กำลังส่ง…" : "ส่ง Magic Link"}
+          {isSubmittingMagic ? "กำลังส่ง…" : "ส่ง Magic Link"}
         </Button>
       </Form>
 
@@ -183,9 +186,9 @@ export default function LoginPage() {
               type="submit"
               variant="outline"
               className="w-full h-11"
-              disabled={isSubmitting}
+              disabled={isSubmittingAdmin}
             >
-              เข้าสู่ระบบ (Admin)
+              {isSubmittingAdmin ? "กำลังเข้าสู่ระบบ…" : "เข้าสู่ระบบ (Admin)"}
             </Button>
           </Form>
         </details>

@@ -1,4 +1,4 @@
-import { Form, Outlet, redirect, useNavigation } from "react-router";
+import { Form, Outlet, redirect } from "react-router";
 import type { Route } from "./+types/layout";
 import { getImpersonationData, requireUser } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
@@ -13,7 +13,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const db = createDB(env.DB);
   const [client, notifications, impersonation] = await Promise.all([
     db.getClientByUserId(user.id),
-    db.listNotifications(user.id),
+    db.listNotifications(user.id), // all recent (unread first)
     getImpersonationData(request, env.DB, env.SESSIONPORTAL),
   ]);
 
@@ -22,19 +22,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
 export default function ClientLayout({ loaderData }: Route.ComponentProps) {
   const { user, client, notifications, isImpersonating } = loaderData;
-  const navigation = useNavigation();
-  const isLoading = navigation.state !== "idle";
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
       <Sidebar role="client" companyName={client?.company_name} />
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-        {/* Top loading bar */}
-        {isLoading && (
-          <div className="fixed top-0 left-0 right-0 z-50 h-0.5 bg-violet-100">
-            <div className="h-full bg-violet-500 animate-[loading_1s_ease-in-out_infinite]" style={{ width: "60%" }} />
-          </div>
-        )}
         <Topbar
           user={user}
           companyName={client?.company_name}
@@ -42,7 +34,7 @@ export default function ClientLayout({ loaderData }: Route.ComponentProps) {
           role="client"
         />
         {isImpersonating ? (
-          <div className="bg-amber-50 border-b border-amber-200 px-4 lg:px-6 py-2 flex items-center justify-between gap-3 shrink-0">
+          <div className="bg-amber-50 border-b border-amber-200 px-4 lg:px-6 py-2 flex items-center justify-between gap-3">
             <p className="text-xs text-amber-900">
               You are impersonating a client session.
             </p>
@@ -56,11 +48,7 @@ export default function ClientLayout({ loaderData }: Route.ComponentProps) {
             </Form>
           </div>
         ) : null}
-        <main
-          className={`flex-1 overflow-y-auto p-4 lg:p-6 transition-opacity duration-150 ${
-            isLoading ? "opacity-60" : "opacity-100 animate-fade-in"
-          }`}
-        >
+        <main className="flex-1 overflow-y-auto p-4 lg:p-6 animate-fade-in">
           <Outlet context={{ user, client }} />
         </main>
       </div>
