@@ -2,9 +2,9 @@
  * Shared component used by both /admin/reports/new and /admin/reports/:reportId
  * A client-side interactive form for creating/editing reports with dynamic tasks.
  */
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Form } from "react-router";
-import { PlusCircle, Trash2, GripVertical } from "lucide-react";
+import { PlusCircle, Trash2, GripVertical, Loader2 } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
@@ -19,7 +19,7 @@ import {
 import type { MonthlyReport, ReportTask, Client, TaskCategory } from "~/types";
 
 interface TaskDraft {
-  id: string;      // temp ID for UI key
+  id: string;
   category: TaskCategory;
   title: string;
   description: string;
@@ -47,8 +47,24 @@ const MONTHS = [
   "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม",
 ];
 
+/** Common tasks admins add every month */
+const PRESET_TASKS: { category: TaskCategory; title: string; description?: string }[] = [
+  { category: "maintenance", title: "อัพเดทปลั๊กอิน", description: "อัพเดทปลั๊กอินทั้งหมดให้เป็นเวอร์ชันล่าสุด" },
+  { category: "maintenance", title: "อัพเดทธีม", description: "อัพเดทธีมให้เป็นเวอร์ชันล่าสุด" },
+  { category: "maintenance", title: "ตรวจสอบการทำงานปกติของเว็บไซต์", description: "ตรวจสอบหน้าหลัก ฟอร์ม และระบบต่างๆ" },
+  { category: "maintenance", title: "Backup website", description: "สำรองข้อมูลเว็บไซต์และฐานข้อมูล" },
+  { category: "security", title: "ตรวจสอบความปลอดภัย", description: "สแกนและตรวจสอบช่องโหว่ความปลอดภัย" },
+  { category: "seo", title: "ตรวจสอบ SEO", description: "ตรวจสอบ sitemap, robots.txt และ meta tags" },
+  { category: "performance", title: "ตรวจสอบความเร็วเว็บไซต์", description: "วัดและบันทึกค่า Core Web Vitals" },
+  { category: "maintenance", title: "อัพเดท WordPress Core", description: "อัพเดท WordPress ให้เป็นเวอร์ชันล่าสุด" },
+];
+
 function makeDraftId() {
   return `draft-${Math.random().toString(36).slice(2)}`;
+}
+
+function autoTitle(month: number, year: number) {
+  return `รายงานประจำเดือน ${MONTHS[month - 1]} ${year + 543}`;
 }
 
 export default function ReportEditor({
@@ -59,6 +75,25 @@ export default function ReportEditor({
   errors,
 }: ReportEditorProps) {
   const currentYear = new Date().getFullYear();
+  const currentMonth = new Date().getMonth() + 1;
+
+  const initMonth = report?.month ?? currentMonth;
+  const initYear = report?.year ?? currentYear;
+
+  const [month, setMonth] = useState(initMonth);
+  const [year, setYear] = useState(initYear);
+  const [title, setTitle] = useState(
+    report?.title && report.title !== "" ? report.title : autoTitle(initMonth, initYear)
+  );
+  const [titleManuallyEdited, setTitleManuallyEdited] = useState(
+    !!(report?.title && report.title !== "")
+  );
+
+  const [uptimePercent, setUptimePercent] = useState<string>(
+    report?.uptime_percent != null ? String(report.uptime_percent) : ""
+  );
+  const [uptimeFetching, setUptimeFetching] = useState(false);
+  const [selectedClientId, setSelectedClientId] = useState(report?.client_id ?? "");
 
   const [taskDrafts, setTaskDrafts] = useState<TaskDraft[]>(
     tasks.length > 0
@@ -71,10 +106,57 @@ export default function ReportEditor({
       : [{ id: makeDraftId(), category: "maintenance", title: "", description: "" }]
   );
 
+  const handleMonthChange = (newMonth: number) => {
+    setMonth(newMonth);
+    if (!titleManuallyEdited) {
+      setTitle(autoTitle(newMonth, year));
+    }
+  };
+
+  const handleYearChange = (newYear: number) => {
+    setYear(newYear);
+    if (!titleManuallyEdited) {
+      setTitle(autoTitle(month, newYear));
+    }
+  };
+
+  const handleClientChange = useCallback(async (clientId: string) => {
+    setSelectedClientId(clientId);
+    if (!clientId) return;
+    setUptimeFetching(true);
+    try {
+      const resp = await fetch(`/api/uptime?clientId=${clientId}`);
+      if (resp.ok) {
+        const data = await resp.json() as { uptimeRatio: number | null };
+        if (data.uptimeRatio != null) {
+          setUptimePercent(data.uptimeRatio.toFixed(2));
+        }
+      }
+    } catch {
+      // ignore
+    } finally {
+      setUptimeFetching(false);
+    }
+  }, []);
+
   const addTask = () => {
     setTaskDrafts((prev) => [
       ...prev,
       { id: makeDraftId(), category: "maintenance", title: "", description: "" },
+    ]);
+  };
+
+  const addPresetTask = (preset: typeof PRESET_TASKS[number]) => {
+    // Don't add duplicate titles
+    if (taskDrafts.some((t) => t.title === preset.title)) return;
+    setTaskDrafts((prev) => [
+      ...prev,
+      {
+        id: makeDraftId(),
+        category: preset.category,
+        title: preset.title,
+        description: preset.description ?? "",
+      },
     ]);
   };
 
@@ -110,7 +192,8 @@ export default function ReportEditor({
             <select
               id="client_id"
               name="client_id"
-              defaultValue={report?.client_id ?? ""}
+              value={selectedClientId}
+              onChange={(e) => handleClientChange(e.target.value)}
               required
               className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
             >
@@ -133,7 +216,8 @@ export default function ReportEditor({
               id="year"
               name="year"
               type="number"
-              defaultValue={report?.year ?? currentYear}
+              value={year}
+              onChange={(e) => handleYearChange(Number(e.target.value))}
               min={2020}
               max={currentYear + 2}
               required
@@ -146,7 +230,8 @@ export default function ReportEditor({
             <select
               id="month"
               name="month"
-              defaultValue={report?.month ?? new Date().getMonth() + 1}
+              value={month}
+              onChange={(e) => handleMonthChange(Number(e.target.value))}
               required
               className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
             >
@@ -164,8 +249,11 @@ export default function ReportEditor({
             <Input
               id="title"
               name="title"
-              defaultValue={report?.title ?? ""}
-              placeholder="รายงานประจำเดือน มีนาคม 2569"
+              value={title}
+              onChange={(e) => {
+                setTitle(e.target.value);
+                setTitleManuallyEdited(true);
+              }}
               required
             />
           </div>
@@ -183,33 +271,28 @@ export default function ReportEditor({
           />
         </div>
 
-        {/* Metrics */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="uptime_percent">Uptime %</Label>
-            <Input
-              id="uptime_percent"
-              name="uptime_percent"
-              type="number"
-              step="0.01"
-              min={0}
-              max={100}
-              defaultValue={report?.uptime_percent ?? ""}
-              placeholder="99.95"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="speed_score">Speed Score (0–100)</Label>
-            <Input
-              id="speed_score"
-              name="speed_score"
-              type="number"
-              min={0}
-              max={100}
-              defaultValue={report?.speed_score ?? ""}
-              placeholder="90"
-            />
-          </div>
+        {/* Uptime only */}
+        <div className="space-y-1.5 max-w-xs">
+          <Label htmlFor="uptime_percent" className="flex items-center gap-2">
+            Uptime %
+            {uptimeFetching && (
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />
+            )}
+          </Label>
+          <Input
+            id="uptime_percent"
+            name="uptime_percent"
+            type="number"
+            step="0.01"
+            min={0}
+            max={100}
+            value={uptimePercent}
+            onChange={(e) => setUptimePercent(e.target.value)}
+            placeholder="99.95"
+          />
+          {uptimePercent === "" && !uptimeFetching && selectedClientId && (
+            <p className="text-xs text-slate-400">ดึงข้อมูล UptimeRobot ไม่สำเร็จ กรุณากรอกเอง</p>
+          )}
         </div>
       </section>
 
@@ -226,13 +309,39 @@ export default function ReportEditor({
             onClick={addTask}
             className="gap-1.5"
           >
-            <PlusCircle className="w-4 h-4" /> เพิ่มงาน
+            <PlusCircle className="w-4 h-4" /> เพิ่มงานเอง
           </Button>
+        </div>
+
+        {/* Preset tasks */}
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-slate-500">งานบ่อยๆ — คลิกเพื่อเพิ่ม</p>
+          <div className="flex flex-wrap gap-2">
+            {PRESET_TASKS.map((preset) => {
+              const alreadyAdded = taskDrafts.some((t) => t.title === preset.title);
+              return (
+                <button
+                  key={preset.title}
+                  type="button"
+                  onClick={() => addPresetTask(preset)}
+                  disabled={alreadyAdded}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                    alreadyAdded
+                      ? "bg-violet-50 border-violet-200 text-violet-400 cursor-default"
+                      : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300"
+                  }`}
+                >
+                  {alreadyAdded ? "✓ " : "+ "}
+                  {preset.title}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {taskDrafts.length === 0 && (
           <p className="text-slate-400 text-sm py-4 text-center">
-            กด "เพิ่มงาน" เพื่อเพิ่มรายการ
+            เลือกงานบ่อยๆ ด้านบน หรือกด "เพิ่มงานเอง"
           </p>
         )}
 
