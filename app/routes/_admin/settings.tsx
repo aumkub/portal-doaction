@@ -5,7 +5,7 @@ export function meta() {
 }
 
 export async function loader({ request, context }: any) {
-  await requireAdmin(request, context.cloudflare.env.DB, context.cloudflare.env.SESSION_KV);
+  await requireAdmin(request, context.cloudflare.env.DB, context.cloudflare.env.SESSIONPORTAL);
   return null;
 }
 

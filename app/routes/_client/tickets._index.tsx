@@ -12,7 +12,7 @@ export async function loader({ request, context }: any) {
   const user = await requireUser(
     request,
     context.cloudflare.env.DB,
-    context.cloudflare.env.SESSION_KV
+    context.cloudflare.env.SESSIONPORTAL
   );
   const db = createDB(context.cloudflare.env.DB);
   const client = await db.getClientByUserId(user.id);

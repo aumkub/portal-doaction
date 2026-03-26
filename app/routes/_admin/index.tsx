@@ -15,7 +15,7 @@ export function meta() {
 }
 
 export async function loader({ request, context }: any) {
-  await requireAdmin(request, context.cloudflare.env.DB, context.cloudflare.env.SESSION_KV);
+  await requireAdmin(request, context.cloudflare.env.DB, context.cloudflare.env.SESSIONPORTAL);
   const db = createDB(context.cloudflare.env.DB);
   const now = new Date();
   const year = now.getFullYear();

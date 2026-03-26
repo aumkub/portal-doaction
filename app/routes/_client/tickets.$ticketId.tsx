@@ -22,7 +22,7 @@ export async function loader({ request, context, params }: any) {
   const user = await requireUser(
     request,
     context.cloudflare.env.DB,
-    context.cloudflare.env.SESSION_KV
+    context.cloudflare.env.SESSIONPORTAL
   );
   const db = createDB(context.cloudflare.env.DB);
   const ticket = await db.getTicket(params.ticketId);
@@ -51,7 +51,7 @@ export async function action({ request, context, params }: any) {
   const user = await requireUser(
     request,
     context.cloudflare.env.DB,
-    context.cloudflare.env.SESSION_KV
+    context.cloudflare.env.SESSIONPORTAL
   );
   const db = createDB(context.cloudflare.env.DB);
   const ticket = await db.getTicket(params.ticketId);

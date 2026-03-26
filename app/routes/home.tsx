@@ -10,7 +10,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const user = await getAuthenticatedUser(
     request,
     context.cloudflare.env.DB,
-    context.cloudflare.env.SESSION_KV
+    context.cloudflare.env.SESSIONPORTAL
   );
 
   if (!user) throw redirect("/login");
