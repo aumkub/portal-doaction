@@ -16,7 +16,7 @@ export default function ReportStats({ report }: ReportStatsProps) {
     },
     {
       icon: <Globe className="w-5 h-5" />,
-      label: "Uptime",
+      label: "อัพไทม์",
       value:
         report.uptime_percent != null
           ? `${report.uptime_percent.toFixed(2)}%`
@@ -25,7 +25,7 @@ export default function ReportStats({ report }: ReportStatsProps) {
     },
     {
       icon: <Zap className="w-5 h-5" />,
-      label: "Speed Score",
+      label: "คะแนนสปีด",
       value: report.speed_score != null ? String(report.speed_score) : "—",
       suffix: report.speed_score != null ? "/ 100" : undefined,
       color: "amber" as const,

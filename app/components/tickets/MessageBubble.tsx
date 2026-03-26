@@ -24,7 +24,7 @@ export default function MessageBubble({
         <p className="whitespace-pre-wrap">{message}</p>
         {isInternal ? (
           <p className="mt-2 text-[11px] uppercase tracking-wide opacity-75">
-            Internal note
+            บันทึกภายใน
           </p>
         ) : null}
       </div>
