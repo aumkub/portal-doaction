@@ -28,7 +28,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   await db.markMagicLinkUsed(record.id);
 
   // Create Lucia session stored in KV
-  const { lucia } = createAuth(env.DB, env.SESSION_KV);
+  const { lucia } = createAuth(env.DB, env.SESSIONPORTAL);
   const session = await lucia.createSession(record.user_id, {});
   const sessionCookie = lucia.createSessionCookie(session.id);
 

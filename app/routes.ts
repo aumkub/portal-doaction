@@ -22,12 +22,15 @@ export default [
     route("reports", "routes/_client/reports-list.tsx"),
     route("reports/:reportId", "routes/_client/reports-detail.tsx"),
     route("tickets", "routes/_client/tickets.tsx"),
+    route("tickets/:ticketId", "routes/_client/tickets-detail.tsx"),
   ]),
 
   // ── Admin routes ─────────────────────────────────────────────────────────────
   ...prefix("admin", [
     layout("routes/_admin/layout.tsx", [
       route("clients", "routes/_admin/clients.tsx"),
+      route("clients/new", "routes/_admin/clients-new.tsx"),
+      route("tickets", "routes/_admin/tickets.tsx"),
       route("reports", "routes/_admin/reports.tsx"),
       route("reports/new", "routes/_admin/reports-new.tsx"),
       route("reports/:reportId", "routes/_admin/reports-detail.tsx"),
@@ -36,4 +39,6 @@ export default [
 
   // ── API / Action routes ───────────────────────────────────────────────────────
   route("logout", "routes/api/logout.ts"),
+  route("api/send-magic-link", "routes/api/send-magic-link.ts"),
+  route("api/notifications/read", "routes/api/notifications-read.ts"),
 ] satisfies RouteConfig;

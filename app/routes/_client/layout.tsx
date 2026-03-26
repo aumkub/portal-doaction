@@ -7,20 +7,20 @@ import Topbar from "~/components/layout/Topbar";
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = context.cloudflare.env;
-  const user = await requireUser(request, env.DB, env.SESSION_KV);
+  const user = await requireUser(request, env.DB, env.SESSIONPORTAL);
   if (user.role === "admin") throw redirect("/admin/clients");
 
   const db = createDB(env.DB);
   const [client, notifications] = await Promise.all([
     db.getClientByUserId(user.id),
-    db.listNotifications(user.id, true), // unread only
+    db.listNotifications(user.id), // all recent (unread first)
   ]);
 
-  return { user, client, notifCount: notifications.length };
+  return { user, client, notifications };
 }
 
 export default function ClientLayout({ loaderData }: Route.ComponentProps) {
-  const { user, client, notifCount } = loaderData;
+  const { user, client, notifications } = loaderData;
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
@@ -29,10 +29,10 @@ export default function ClientLayout({ loaderData }: Route.ComponentProps) {
         <Topbar
           user={user}
           companyName={client?.company_name}
-          notifCount={notifCount}
+          notifications={notifications}
           role="client"
         />
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6">
+        <main className="flex-1 overflow-y-auto p-4 lg:p-6 animate-fade-in">
           <Outlet context={{ user, client }} />
         </main>
       </div>

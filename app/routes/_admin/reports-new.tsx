@@ -34,7 +34,7 @@ const ReportSchema = z.object({
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = context.cloudflare.env;
-  await requireAdmin(request, env.DB, env.SESSION_KV);
+  await requireAdmin(request, env.DB, env.SESSIONPORTAL);
   const db = createDB(env.DB);
   const clients = await db.listClients();
   return { clients };
@@ -42,7 +42,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
 export async function action({ request, context }: Route.ActionArgs) {
   const env = context.cloudflare.env;
-  await requireAdmin(request, env.DB, env.SESSION_KV);
+  await requireAdmin(request, env.DB, env.SESSIONPORTAL);
   const db = createDB(env.DB);
 
   const formData = await request.formData();

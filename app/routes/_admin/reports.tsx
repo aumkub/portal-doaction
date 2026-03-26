@@ -9,7 +9,7 @@ export function meta() {
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
-  await requireAdmin(request, context.cloudflare.env.DB, context.cloudflare.env.SESSION_KV);
+  await requireAdmin(request, context.cloudflare.env.DB, context.cloudflare.env.SESSIONPORTAL);
   const db = createDB(context.cloudflare.env.DB);
   const clients = await db.listClients();
 

@@ -130,9 +130,5 @@ export interface Notification {
 
 // ─── Cloudflare Env ───────────────────────────────────────────────────────────
 
-export interface CloudflareEnv {
-  DB: D1Database;
-  SESSION_KV: KVNamespace;
-  RESEND_API_KEY: string;
-  VALUE_FROM_CLOUDFLARE: string;
-}
+// Canonical env type — also declared globally in app/types/cloudflare.d.ts
+export type { } // keep module

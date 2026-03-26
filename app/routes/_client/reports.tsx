@@ -10,7 +10,7 @@ export function meta() {
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
-  const user = await requireUser(request, context.cloudflare.env.DB, context.cloudflare.env.SESSION_KV);
+  const user = await requireUser(request, context.cloudflare.env.DB, context.cloudflare.env.SESSIONPORTAL);
   const db = createDB(context.cloudflare.env.DB);
   const client = await db.getClientByUserId(user.id);
   if (!client) return { reports: [], tasks: [], selectedReport: null };

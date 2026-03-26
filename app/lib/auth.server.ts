@@ -138,55 +138,7 @@ export function generateMagicToken() {
   };
 }
 
-/** Send magic link email via Resend API. */
-export async function sendMagicLinkEmail({
-  to,
-  magicUrl,
-  resendApiKey,
-}: {
-  to: string;
-  magicUrl: string;
-  resendApiKey: string;
-}): Promise<void> {
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${resendApiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from: "DoAction Portal <noreply@mail.doaction.co.th>",
-      to,
-      subject: "ลิงก์เข้าสู่ระบบ DoAction Portal",
-      html: `
-        <div style="font-family:Inter,sans-serif;max-width:480px;margin:0 auto;padding:40px 24px">
-          <div style="margin-bottom:32px">
-            <span style="font-size:24px;font-weight:700;color:#0f172a">DoAction</span>
-            <span style="font-size:14px;color:#64748b;margin-left:6px">Client Portal</span>
-          </div>
-          <p style="font-size:16px;color:#0f172a;margin-bottom:8px">สวัสดีครับ/ค่ะ</p>
-          <p style="font-size:14px;color:#475569;line-height:1.6;margin-bottom:32px">
-            คลิกปุ่มด้านล่างเพื่อเข้าสู่ระบบ DoAction Portal
-            ลิงก์นี้จะหมดอายุใน <strong>15 นาที</strong>
-          </p>
-          <a href="${magicUrl}"
-             style="display:inline-block;background:#7c3aed;color:#fff;text-decoration:none;
-                    padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600">
-            เข้าสู่ระบบ
-          </a>
-          <p style="font-size:12px;color:#94a3b8;margin-top:32px">
-            หากคุณไม่ได้ขอลิงก์นี้ กรุณาเพิกเฉยต่ออีเมลฉบับนี้
-          </p>
-        </div>
-      `,
-    }),
-  });
-
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Resend error ${res.status}: ${body}`);
-  }
-}
+// Email sending is handled by app/lib/email.server.ts (SMTP2GO)
 
 // ─── Session / Auth helpers ───────────────────────────────────────────────────
 
