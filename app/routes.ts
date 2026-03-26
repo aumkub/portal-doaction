@@ -44,4 +44,6 @@ export default [
   route("logout", "routes/api/logout.ts"),
   route("api/send-magic-link", "routes/api/send-magic-link.ts"),
   route("api/notifications/read", "routes/api/notifications-read.ts"),
+  route("api/impersonate", "routes/api/impersonate.ts"),
+  route("api/impersonate-exit", "routes/api/impersonate-exit.ts"),
 ] satisfies RouteConfig;

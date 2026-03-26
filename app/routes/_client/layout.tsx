@@ -1,31 +1,67 @@
-import { Outlet, redirect } from "react-router";
+import { Outlet, redirect, Form } from "react-router";
 import type { Route } from "./+types/layout";
 import { requireUser } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import Sidebar from "~/components/layout/Sidebar";
 import Topbar from "~/components/layout/Topbar";
 
+function parseCookie(header: string, name: string): string | null {
+  const match = header.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = context.cloudflare.env;
   const user = await requireUser(request, env.DB, env.SESSIONPORTAL);
-  if (user.role === "admin") throw redirect("/admin/clients");
+
+  // Allow admins through when they're impersonating
+  const isImpersonating = !!parseCookie(
+    request.headers.get("Cookie") ?? "",
+    "_admin_session"
+  );
+  if (user.role === "admin" && !isImpersonating) {
+    throw redirect("/admin/clients");
+  }
 
   const db = createDB(env.DB);
   const [client, notifications] = await Promise.all([
     db.getClientByUserId(user.id),
-    db.listNotifications(user.id), // all recent (unread first)
+    db.listNotifications(user.id),
   ]);
 
-  return { user, client, notifications };
+  return { user, client, notifications, isImpersonating };
 }
 
 export default function ClientLayout({ loaderData }: Route.ComponentProps) {
-  const { user, client, notifications } = loaderData;
+  const { user, client, notifications, isImpersonating } = loaderData as {
+    user: import("~/types").User;
+    client: import("~/types").Client | null;
+    notifications: import("~/types").Notification[];
+    isImpersonating: boolean;
+  };
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
       <Sidebar role="client" companyName={client?.company_name} />
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+
+        {/* Impersonation banner */}
+        {isImpersonating && (
+          <div className="flex items-center justify-between bg-amber-500 text-white text-xs font-medium px-4 py-2 shrink-0">
+            <span>
+              👤 กำลังใช้งานแทน <strong>{client?.company_name ?? user.email}</strong>
+            </span>
+            <Form method="post" action="/api/impersonate-exit">
+              <button
+                type="submit"
+                className="rounded-md bg-white/20 hover:bg-white/30 px-3 py-1 transition-colors"
+              >
+                ออกจากโหมดนี้ →
+              </button>
+            </Form>
+          </div>
+        )}
+
         <Topbar
           user={user}
           companyName={client?.company_name}

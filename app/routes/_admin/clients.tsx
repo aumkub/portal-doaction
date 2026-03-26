@@ -1,7 +1,8 @@
+import { Form } from "react-router";
 import type { Route } from "./+types/clients";
 import { requireAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
-import type { Client, User } from "~/types";
+import type { Client } from "~/types";
 
 export function meta() {
   return [{ title: "จัดการลูกค้า — Admin" }];
@@ -59,7 +60,7 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
               <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">
                 สัญญา
               </th>
-              <th className="px-5 py-3" />
+              <th className="px-5 py-3 text-right text-xs font-medium text-slate-500">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -106,12 +107,23 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
                     {client.contract_end ?? "—"}
                   </td>
                   <td className="px-5 py-4 text-right">
-                    <a
-                      href={`/admin/clients/${client.id}`}
-                      className="text-xs text-slate-500 hover:text-slate-900 transition-colors"
-                    >
-                      ดูรายละเอียด →
-                    </a>
+                    <div className="flex items-center justify-end gap-3">
+                      <Form method="post" action="/api/impersonate">
+                        <input type="hidden" name="clientId" value={client.id} />
+                        <button
+                          type="submit"
+                          className="text-xs text-violet-600 hover:text-violet-800 font-medium transition-colors"
+                        >
+                          เข้าใช้งานแทน
+                        </button>
+                      </Form>
+                      <a
+                        href={`/admin/clients/${client.id}`}
+                        className="text-xs text-slate-500 hover:text-slate-900 transition-colors"
+                      >
+                        ดูรายละเอียด →
+                      </a>
+                    </div>
                   </td>
                 </tr>
               ))
