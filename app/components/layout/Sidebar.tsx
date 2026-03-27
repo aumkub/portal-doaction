@@ -2,23 +2,25 @@ import { NavLink, Form } from "react-router";
 import { Sheet, SheetContent, SheetTrigger } from "~/components/ui/sheet";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { cn } from "~/lib/utils";
+import { useT } from "~/lib/i18n";
+import type { TranslationKey } from "~/lib/translations";
 
-type NavItem = { label: string; href: string; icon: string; end?: boolean };
+type NavItem = { labelKey: TranslationKey; href: string; icon: string; end?: boolean };
 
 const clientNav: NavItem[] = [
-  { label: "Dashboard", href: "/dashboard", icon: "📊", end: true },
-  { label: "Monthly Reports", href: "/reports", icon: "📋" },
-  { label: "Support Tickets", href: "/tickets", icon: "🎫" },
-  { label: "Documents", href: "/documents", icon: "📄" },
-  { label: "Settings", href: "/settings", icon: "⚙️" },
+  { labelKey: "nav_dashboard", href: "/dashboard", icon: "📊", end: true },
+  { labelKey: "nav_reports", href: "/reports", icon: "📋" },
+  { labelKey: "nav_tickets", href: "/tickets", icon: "🎫" },
+  { labelKey: "nav_documents", href: "/documents", icon: "📄" },
+  { labelKey: "nav_settings", href: "/settings", icon: "⚙️" },
 ];
 
 const adminNav: NavItem[] = [
-  { label: "Overview", href: "/admin", icon: "🏠", end: true },
-  { label: "Clients", href: "/admin/clients", icon: "👥" },
-  { label: "Reports", href: "/admin/reports", icon: "📋" },
-  { label: "All Tickets", href: "/admin/tickets", icon: "🎫" },
-  { label: "Settings", href: "/admin/settings", icon: "⚙️" },
+  { labelKey: "nav_overview", href: "/admin", icon: "🏠", end: true },
+  { labelKey: "nav_clients", href: "/admin/clients", icon: "👥" },
+  { labelKey: "nav_admin_reports", href: "/admin/reports", icon: "📋" },
+  { labelKey: "nav_all_tickets", href: "/admin/tickets", icon: "🎫" },
+  { labelKey: "nav_settings", href: "/admin/settings", icon: "⚙️" },
 ];
 
 interface SidebarProps {
@@ -27,6 +29,7 @@ interface SidebarProps {
 }
 
 function NavItems({ nav }: { nav: NavItem[] }) {
+  const { t } = useT();
   return (
     <nav className="flex-1 py-4 px-3 space-y-0.5">
       {nav.map((item) => (
@@ -45,7 +48,7 @@ function NavItems({ nav }: { nav: NavItem[] }) {
           }
         >
           <span className="text-base leading-none">{item.icon}</span>
-          {item.label}
+          {t(item.labelKey)}
         </NavLink>
       ))}
     </nav>
@@ -72,6 +75,7 @@ function LogoBlock({ companyName }: { companyName?: string | null }) {
 }
 
 function LogoutButton() {
+  const { t } = useT();
   return (
     <div className="p-3 border-t border-white/10 shrink-0">
       <Form method="post" action="/logout">
@@ -80,17 +84,14 @@ function LogoutButton() {
           className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
         >
           <span className="text-base leading-none">🚪</span>
-          ออกจากระบบ
+          {t("nav_logout")}
         </button>
       </Form>
     </div>
   );
 }
 
-function SidebarContent({
-  role,
-  companyName,
-}: SidebarProps) {
+function SidebarContent({ role, companyName }: SidebarProps) {
   const nav = role === "admin" ? adminNav : clientNav;
   return (
     <div className={`flex h-full flex-col ${role === "admin" ? "bg-slate-950" : "bg-slate-900"}`}>

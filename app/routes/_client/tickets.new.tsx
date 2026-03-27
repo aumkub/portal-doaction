@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireUser } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { generateId } from "~/lib/utils";
+import { useT } from "~/lib/i18n";
 
 const TicketSchema = z.object({
   title: z.string().min(1, "กรุณากรอกหัวข้อ"),
@@ -11,7 +12,7 @@ const TicketSchema = z.object({
 });
 
 export function meta() {
-  return [{ title: "แจ้งปัญหาใหม่ — DoAction Portal" }];
+  return [{ title: "New Ticket — DoAction Portal" }];
 }
 
 export async function action({ request, context }: any) {
@@ -43,7 +44,6 @@ export async function action({ request, context }: any) {
     resolved_at: null,
   });
 
-  // Notify admins when a new ticket arrives.
   const admins = await db.listAdminUsers();
   await Promise.all(
     admins.map((admin) =>
@@ -64,25 +64,25 @@ export async function action({ request, context }: any) {
 
 export default function NewTicketPage({ actionData }: any) {
   const errors = actionData?.errors;
+  const { t } = useT();
+
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">แจ้งปัญหาใหม่</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          ส่งหัวข้อและรายละเอียดเพื่อแจ้งทีมงาน
-        </p>
+        <h1 className="text-2xl font-semibold text-slate-900">{t("new_ticket_title")}</h1>
+        <p className="mt-1 text-sm text-slate-500">{t("new_ticket_subtitle")}</p>
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <Form method="post" className="space-y-4">
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">
-              หัวข้อ
+              {t("field_subject")}
             </label>
             <input
               name="title"
               required
-              placeholder="เช่น เว็บไซต์ไม่สามารถเข้าถึงได้"
+              placeholder={t("ph_subject")}
               className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
             />
             {errors?.title ? (
@@ -92,13 +92,13 @@ export default function NewTicketPage({ actionData }: any) {
 
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">
-              รายละเอียด
+              {t("field_description")}
             </label>
             <textarea
               name="description"
               required
               rows={6}
-              placeholder="อธิบายปัญหาหรือสิ่งที่ต้องการให้ทีมดำเนินการ..."
+              placeholder={t("ph_description")}
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
             />
             {errors?.description ? (
@@ -110,17 +110,17 @@ export default function NewTicketPage({ actionData }: any) {
 
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">
-              ความสำคัญ
+              {t("field_priority")}
             </label>
             <select
               name="priority"
               defaultValue="medium"
               className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
             >
-              <option value="low">ต่ำ</option>
-              <option value="medium">กลาง</option>
-              <option value="high">สูง</option>
-              <option value="urgent">เร่งด่วน</option>
+              <option value="low">{t("priority_low")}</option>
+              <option value="medium">{t("priority_medium")}</option>
+              <option value="high">{t("priority_high")}</option>
+              <option value="urgent">{t("priority_urgent")}</option>
             </select>
           </div>
 
@@ -129,13 +129,13 @@ export default function NewTicketPage({ actionData }: any) {
               to="/tickets"
               className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
             >
-              ยกเลิก
+              {t("cancel")}
             </Link>
             <button
               type="submit"
               className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
             >
-              ส่งคำร้อง
+              {t("btn_submit_ticket")}
             </button>
           </div>
         </Form>

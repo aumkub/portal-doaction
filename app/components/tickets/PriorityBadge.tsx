@@ -1,26 +1,28 @@
 import type { TicketPriority } from "~/types";
+import { useT } from "~/lib/i18n";
+import type { TranslationKey } from "~/lib/translations";
 
-const priorityConfig: Record<
-  TicketPriority,
-  { label: string; className: string }
-> = {
-  low: { label: "ต่ำ", className: "bg-slate-100 text-slate-700" },
-  medium: { label: "กลาง", className: "bg-violet-50 text-violet-700" },
-  high: { label: "สูง", className: "bg-orange-50 text-orange-700" },
-  urgent: { label: "เร่งด่วน", className: "bg-rose-50 text-rose-700" },
+const priorityClass: Record<TicketPriority, string> = {
+  low: "bg-slate-100 text-slate-700",
+  medium: "bg-violet-50 text-violet-700",
+  high: "bg-orange-50 text-orange-700",
+  urgent: "bg-rose-50 text-rose-700",
 };
 
-export default function PriorityBadge({
-  priority,
-}: {
-  priority: TicketPriority;
-}) {
-  const config = priorityConfig[priority];
+const priorityKey: Record<TicketPriority, TranslationKey> = {
+  low: "priority_low",
+  medium: "priority_medium",
+  high: "priority_high",
+  urgent: "priority_urgent",
+};
+
+export default function PriorityBadge({ priority }: { priority: TicketPriority }) {
+  const { t } = useT();
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${config.className}`}
+      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${priorityClass[priority]}`}
     >
-      {config.label}
+      {t(priorityKey[priority])}
     </span>
   );
 }

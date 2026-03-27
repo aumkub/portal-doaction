@@ -2,7 +2,8 @@ import { Printer } from "lucide-react";
 import type { Route } from "./+types/documents";
 import { requireUser } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
-import { getThaiMonth } from "~/lib/utils";
+import { getMonthName } from "~/lib/utils";
+import { useT } from "~/lib/i18n";
 import PageHeader from "~/components/layout/PageHeader";
 import type { MonthlyReport } from "~/types";
 
@@ -27,36 +28,40 @@ export default function DocumentsPage({ loaderData }: Route.ComponentProps) {
     reports: MonthlyReport[];
     client: any;
   };
+  const { t, lang } = useT();
+
+  const yearDisplay = (year: number) => (lang === "th" ? year + 543 : year);
 
   return (
     <div className="space-y-6 max-w-4xl">
       <PageHeader
-        title="Documents"
-        subtitle="เอกสารและรายงานของคุณ"
-        breadcrumbs={[{ label: "Dashboard", href: "/dashboard" }, { label: "Documents" }]}
+        title={t("docs_title")}
+        subtitle={t("docs_subtitle")}
+        breadcrumbs={[
+          { label: "Dashboard", href: "/dashboard" },
+          { label: t("docs_title") },
+        ]}
       />
 
       {/* Monthly Reports section */}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-slate-700">
-            รายงานประจำเดือน ({reports.length})
+            {t("docs_monthly_reports")} ({reports.length})
           </h2>
           <a
             href="/reports"
             className="text-xs text-violet-600 hover:text-violet-700 font-medium"
           >
-            ดูทั้งหมด →
+            {t("view_all")}
           </a>
         </div>
 
         {reports.length === 0 ? (
           <div className="bg-white rounded-xl border border-slate-200 p-16 text-center">
             <p className="text-4xl mb-3">📄</p>
-            <p className="text-slate-600 font-medium">ยังไม่มีเอกสาร</p>
-            <p className="text-slate-400 text-sm mt-1">
-              ทีมจะเผยแพร่รายงานหลังสิ้นสุดแต่ละเดือน
-            </p>
+            <p className="text-slate-600 font-medium">{t("docs_no_docs_title")}</p>
+            <p className="text-slate-400 text-sm mt-1">{t("docs_no_docs_subtitle")}</p>
           </div>
         ) : (
           <div className="bg-white rounded-xl border border-slate-200 divide-y divide-slate-100">
@@ -71,11 +76,11 @@ export default function DocumentsPage({ loaderData }: Route.ComponentProps) {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-slate-800 truncate">
                     {report.title ||
-                      `รายงาน ${getThaiMonth(report.month)} ${report.year + 543}`}
+                      `${t("docs_monthly_reports")} ${getMonthName(report.month, lang)} ${yearDisplay(report.year)}`}
                   </p>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    {getThaiMonth(report.month)} {report.year + 543}
-                    {report.total_tasks > 0 && ` · ${report.total_tasks} งาน`}
+                    {getMonthName(report.month, lang)} {yearDisplay(report.year)}
+                    {report.total_tasks > 0 && ` · ${report.total_tasks} ${t("docs_tasks_suffix")}`}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -83,7 +88,7 @@ export default function DocumentsPage({ loaderData }: Route.ComponentProps) {
                     href={`/reports/${report.id}`}
                     className="text-xs text-slate-500 hover:text-violet-600 transition-colors font-medium"
                   >
-                    ดูรายงาน
+                    {t("docs_view_report")}
                   </a>
                   <a
                     href={`/reports/${report.id}?print=1`}
@@ -109,13 +114,11 @@ export default function DocumentsPage({ loaderData }: Route.ComponentProps) {
 
       {/* Info box */}
       <div className="rounded-xl border border-slate-200 bg-white p-5">
-        <p className="text-xs font-semibold text-slate-600 mb-1">เกี่ยวกับเอกสาร</p>
+        <p className="text-xs font-semibold text-slate-600 mb-1">{t("docs_about_title")}</p>
         <p className="text-sm text-slate-500 leading-relaxed">
-          รายงานประจำเดือนสรุปงานที่ทีม DoAction ดำเนินการให้คุณในแต่ละเดือน
-          คุณสามารถดูรายละเอียดหรือ Export เป็น PDF ได้
-          หากต้องการเอกสารเพิ่มเติม กรุณา{" "}
+          {t("docs_about_body")}{" "}
           <a href="/tickets/new" className="text-violet-600 hover:underline">
-            แจ้งทีมงาน
+            {t("docs_contact_link")}
           </a>
         </p>
       </div>
