@@ -29,25 +29,42 @@ const THAI_MONTHS = [
   "ธันวาคม",
 ];
 
+const EN_MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
 export function getThaiMonth(month: number): string {
   return THAI_MONTHS[month - 1] ?? "";
 }
 
-/** Format unix timestamp to Thai locale date string */
-export function formatDate(unix: number): string {
-  return new Date(unix * 1000).toLocaleDateString("th-TH", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+/** Get month name by locale */
+export function getMonthName(month: number, locale: "th" | "en" = "th"): string {
+  if (locale === "en") return EN_MONTHS[month - 1] ?? "";
+  return THAI_MONTHS[month - 1] ?? "";
 }
 
-/** Relative time in Thai ("2 ชั่วโมงที่แล้ว") */
-export function formatRelativeTime(unix: number): string {
+/** Format unix timestamp to locale date string */
+export function formatDate(unix: number, locale: "th" | "en" = "th"): string {
+  return new Date(unix * 1000).toLocaleDateString(
+    locale === "en" ? "en-US" : "th-TH",
+    { year: "numeric", month: "long", day: "numeric" }
+  );
+}
+
+/** Relative time ("2 hours ago" / "2 ชั่วโมงที่แล้ว") */
+export function formatRelativeTime(unix: number, locale: "th" | "en" = "th"): string {
   const diff = Math.floor(Date.now() / 1000) - unix;
+  if (locale === "en") {
+    if (diff < 60) return "just now";
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
+    return formatDate(unix, "en");
+  }
   if (diff < 60) return "เมื่อสักครู่";
   if (diff < 3600) return `${Math.floor(diff / 60)} นาทีที่แล้ว`;
   if (diff < 86400) return `${Math.floor(diff / 3600)} ชั่วโมงที่แล้ว`;
   if (diff < 604800) return `${Math.floor(diff / 86400)} วันที่แล้ว`;
-  return formatDate(unix);
+  return formatDate(unix, "th");
 }

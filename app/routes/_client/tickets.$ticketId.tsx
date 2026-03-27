@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireUser } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { formatDate, generateId } from "~/lib/utils";
+import { useT } from "~/lib/i18n";
 import type { SupportTicket, TicketMessage, User } from "~/types";
 import StatusBadge from "~/components/tickets/StatusBadge";
 import PriorityBadge from "~/components/tickets/PriorityBadge";
@@ -81,6 +82,7 @@ export async function action({ request, context, params }: any) {
 export default function TicketDetailPage({ loaderData, actionData }: any) {
   const { ticket, messages, usersById } = loaderData as LoaderData;
   const errors = actionData?.errors;
+  const { t, lang } = useT();
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -89,31 +91,31 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
           <p className="text-xs font-medium text-slate-400">#{ticket.id}</p>
           <h1 className="text-2xl font-semibold text-slate-900">{ticket.title}</h1>
           <p className="mt-1 text-sm text-slate-500">
-            สร้างเมื่อ {formatDate(ticket.created_at)}
+            {t("ticket_created_at")} {formatDate(ticket.created_at, lang)}
           </p>
         </div>
         <Link to="/tickets" className="text-sm text-slate-500 hover:text-slate-900">
-          ← กลับ
+          {t("back")}
         </Link>
       </div>
 
       <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-3">
         <div>
-          <p className="text-xs text-slate-500">สถานะ</p>
+          <p className="text-xs text-slate-500">{t("ticket_status_label")}</p>
           <div className="mt-1">
             <StatusBadge status={ticket.status} />
           </div>
         </div>
         <div>
-          <p className="text-xs text-slate-500">ความสำคัญ</p>
+          <p className="text-xs text-slate-500">{t("ticket_priority_label")}</p>
           <div className="mt-1">
             <PriorityBadge priority={ticket.priority} />
           </div>
         </div>
         <div>
-          <p className="text-xs text-slate-500">เปิดเมื่อ</p>
+          <p className="text-xs text-slate-500">{t("ticket_opened_at")}</p>
           <p className="mt-1 text-sm font-medium text-slate-700">
-            {formatDate(ticket.created_at)}
+            {formatDate(ticket.created_at, lang)}
           </p>
         </div>
       </div>
@@ -135,12 +137,14 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4">
         <Form method="post" className="space-y-3">
-          <label className="block text-sm font-medium text-slate-700">ตอบกลับ</label>
+          <label className="block text-sm font-medium text-slate-700">
+            {t("ticket_reply_label")}
+          </label>
           <textarea
             name="message"
             rows={4}
             required
-            placeholder="พิมพ์ข้อความ..."
+            placeholder={t("ticket_ph_reply")}
             className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
           />
           {errors?.message ? (
@@ -151,7 +155,7 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
               type="submit"
               className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
             >
-              ส่งข้อความ
+              {t("btn_send_message")}
             </button>
           </div>
         </Form>

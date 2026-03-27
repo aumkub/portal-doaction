@@ -1,9 +1,9 @@
-import { CheckCircle2, Globe, Ticket, ArrowRight, Wifi, WifiOff } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
-import { th } from "date-fns/locale";
+import { CheckCircle2, Globe, Ticket, ArrowRight } from "lucide-react";
 import type { Route } from "./+types/dashboard";
 import { requireUser } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
+import { formatRelativeTime } from "~/lib/utils";
+import { useT } from "~/lib/i18n";
 import StatsCard from "~/components/dashboard/StatsCard";
 import PageHeader from "~/components/layout/PageHeader";
 import type { SupportTicket, ReportTask } from "~/types";
@@ -22,11 +22,10 @@ async function fetchUptimeForDomain(
   try {
     const domain = new URL(websiteUrl).hostname.replace(/^www\./, "");
 
-    // UptimeRobot v2 API — POST with form-encoded body
     const body = new URLSearchParams({
       api_key: apiKey,
       format: "json",
-      custom_uptime_ratios: "30", // 30-day uptime percentage
+      custom_uptime_ratios: "30",
     });
 
     const resp = await fetch("https://api.uptimerobot.com/v2/getMonitors", {
@@ -59,7 +58,6 @@ async function fetchUptimeForDomain(
 
     if (!monitor) return { uptimeRatio: null, isUp: null };
 
-    // custom_uptime_ratio is a dash-separated string matching the requested periods
     const ratio = monitor.custom_uptime_ratio
       ? parseFloat(monitor.custom_uptime_ratio.split("-")[0])
       : null;
@@ -150,30 +148,30 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
 export default function DashboardPage({ loaderData }: Route.ComponentProps) {
   const { stats, activity, client, latestReportId } = loaderData;
+  const { t, lang } = useT();
 
-  const fmt = (unix: number) =>
-    formatDistanceToNow(new Date(unix * 1000), { addSuffix: true, locale: th });
+  const fmt = (unix: number) => formatRelativeTime(unix, lang);
 
   const isOnline = stats?.isUp;
 
   return (
     <div className="space-y-6 max-w-6xl">
       <PageHeader
-        title={`สวัสดี, ${client?.company_name ?? "ลูกค้า"}`}
-        subtitle="ภาพรวมการดูแลเว็บไซต์ของคุณ"
+        title={`${t("dash_greeting_prefix")} ${client?.company_name ?? t("dash_default_client")}`}
+        subtitle={t("dash_subtitle")}
       />
 
       {/* ── Stat Cards ───────────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatsCard
-          title="งานเสร็จเดือนนี้"
+          title={t("dash_completed_tasks")}
           value={stats?.completedTasks ?? 0}
-          suffix="รายการ"
+          suffix={t("items")}
           icon={<CheckCircle2 className="w-5 h-5" />}
           color="emerald"
         />
         <StatsCard
-          title="Uptime (30 วัน)"
+          title={t("dash_uptime_label")}
           value={
             stats?.uptimePercent != null
               ? `${stats.uptimePercent.toFixed(2)}%`
@@ -183,9 +181,9 @@ export default function DashboardPage({ loaderData }: Route.ComponentProps) {
           color="blue"
         />
         <StatsCard
-          title="Tickets เปิดอยู่"
+          title={t("dash_open_tickets")}
           value={stats?.openTickets ?? 0}
-          suffix="รายการ"
+          suffix={t("items")}
           icon={<Ticket className="w-5 h-5" />}
           color="violet"
         />
@@ -196,11 +194,11 @@ export default function DashboardPage({ loaderData }: Route.ComponentProps) {
         {/* Recent Activity — 2/3 width */}
         <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-5">
           <h2 className="text-sm font-semibold text-slate-900 mb-4">
-            กิจกรรมล่าสุด
+            {t("dash_recent_activity")}
           </h2>
           {activity.length === 0 ? (
             <p className="text-slate-400 text-sm py-6 text-center">
-              ยังไม่มีกิจกรรม
+              {t("dash_no_activity")}
             </p>
           ) : (
             <ul className="divide-y divide-slate-100">
@@ -228,28 +226,28 @@ export default function DashboardPage({ loaderData }: Route.ComponentProps) {
           {/* Quick Actions */}
           <div className="bg-white rounded-xl border border-slate-200 p-5">
             <h2 className="text-sm font-semibold text-slate-900 mb-3">
-              Quick Actions
+              {t("dash_quick_actions")}
             </h2>
             <div className="space-y-2">
               <a
                 href="/tickets?new=1"
                 className="flex items-center justify-between w-full rounded-lg bg-[#F0D800] px-4 py-2.5 text-sm font-medium text-slate-900 hover:bg-yellow-400 transition-colors group"
               >
-                <span>+ แจ้งงานใหม่</span>
+                <span>{t("dash_new_request")}</span>
                 <ArrowRight className="w-4 h-4 opacity-60 group-hover:translate-x-0.5 transition-transform" />
               </a>
               <a
                 href={latestReportId ? `/reports/${latestReportId}` : "/reports"}
                 className="flex items-center justify-between w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors group"
               >
-                <span>📄 ดู Report ล่าสุด</span>
+                <span>{t("dash_view_latest_report")}</span>
                 <ArrowRight className="w-4 h-4 opacity-40 group-hover:translate-x-0.5 transition-transform" />
               </a>
               <a
                 href="mailto:support@doaction.co.th"
                 className="flex items-center justify-between w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors group"
               >
-                <span>💬 ติดต่อทีม</span>
+                <span>{t("dash_contact_team")}</span>
                 <ArrowRight className="w-4 h-4 opacity-40 group-hover:translate-x-0.5 transition-transform" />
               </a>
             </div>
@@ -258,7 +256,7 @@ export default function DashboardPage({ loaderData }: Route.ComponentProps) {
           {/* Website Status */}
           <div className="bg-white rounded-xl border border-slate-200 p-5">
             <h2 className="text-sm font-semibold text-slate-900 mb-3">
-              Website Status
+              {t("dash_website_status")}
             </h2>
             {client?.website_url ? (
               <div className="space-y-3">
@@ -272,12 +270,12 @@ export default function DashboardPage({ loaderData }: Route.ComponentProps) {
                 </a>
 
                 <StatusRow
-                  label="สถานะ"
+                  label={t("dash_status_label")}
                   value={
                     isOnline === null ? (
                       <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full">
                         <span className="w-1.5 h-1.5 bg-slate-300 rounded-full" />
-                        ไม่ทราบ
+                        {t("dash_unknown")}
                       </span>
                     ) : isOnline ? (
                       <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
@@ -293,18 +291,18 @@ export default function DashboardPage({ loaderData }: Route.ComponentProps) {
                   }
                 />
                 <StatusRow
-                  label="Uptime 30 วัน"
+                  label={t("dash_uptime_30d")}
                   value={
                     stats?.uptimePercent != null
                       ? `${stats.uptimePercent.toFixed(2)}%`
                       : "—"
                   }
                 />
-                <StatusRow label="SSL Certificate" value="ยังไม่ได้ตั้งค่า" />
-                <StatusRow label="Domain Expiry" value="ยังไม่ได้ตั้งค่า" />
+                <StatusRow label={t("dash_ssl_cert")} value={t("not_set")} />
+                <StatusRow label={t("dash_domain_expiry")} value={t("not_set")} />
               </div>
             ) : (
-              <p className="text-slate-400 text-sm">ยังไม่มีข้อมูลเว็บไซต์</p>
+              <p className="text-slate-400 text-sm">{t("dash_no_website")}</p>
             )}
           </div>
         </div>
