@@ -2,6 +2,7 @@ import type { Route } from "./+types/report-email-preview";
 import { requireAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { buildReportCustomerNotification } from "~/lib/report-customer-email.server";
+import { createReportAccessToken } from "~/lib/report-access.server";
 
 /** GET /api/report-email-preview?reportId= — admin-only JSON for modal preview */
 export async function loader({ request, context }: Route.LoaderArgs) {
@@ -26,7 +27,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   if (!user?.email) return Response.json({ error: "no_email" }, { status: 400 });
 
   const origin = env.APP_URL || new URL(request.url).origin;
-  const reportUrl = `${String(origin).replace(/\/$/, "")}/reports/${report.id}`;
+  const secret = env.SESSION_SECRET || "doaction-report-link-secret";
+  const exp = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 14; // 14 days
+  const token = await createReportAccessToken(
+    { reportId: report.id, email: user.email.toLowerCase(), exp },
+    secret
+  );
+  const reportUrl = `${String(origin).replace(/\/$/, "")}/public/report/${report.id}?t=${encodeURIComponent(token)}`;
 
   const { subject, html, text } = buildReportCustomerNotification({
     companyName: client.company_name,

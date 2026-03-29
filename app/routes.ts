@@ -9,6 +9,7 @@ import {
 export default [
   // Root redirect
   index("routes/home.tsx"),
+  route("public/report/:reportId", "routes/public.report.$reportId.tsx"),
 
   // ── Auth routes ─────────────────────────────────────────────────────────────
   layout("routes/_auth/layout.tsx", [

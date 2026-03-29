@@ -3,6 +3,7 @@ import { requireAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { sendEmail } from "~/lib/email.server";
 import { buildReportCustomerNotification } from "~/lib/report-customer-email.server";
+import { createReportAccessToken } from "~/lib/report-access.server";
 
 /** POST /api/report-notify — send report notification email to client user */
 export async function action({ request, context }: Route.ActionArgs) {
@@ -37,7 +38,13 @@ export async function action({ request, context }: Route.ActionArgs) {
   if (!user?.email) return Response.json({ error: "no_email" }, { status: 400 });
 
   const origin = env.APP_URL || new URL(request.url).origin;
-  const reportUrl = `${String(origin).replace(/\/$/, "")}/reports/${report.id}`;
+  const secret = env.SESSION_SECRET || "doaction-report-link-secret";
+  const exp = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 14; // 14 days
+  const token = await createReportAccessToken(
+    { reportId: report.id, email: user.email.toLowerCase(), exp },
+    secret
+  );
+  const reportUrl = `${String(origin).replace(/\/$/, "")}/public/report/${report.id}?t=${encodeURIComponent(token)}`;
 
   const { subject, html, text } = buildReportCustomerNotification({
     companyName: client.company_name,
