@@ -6,7 +6,7 @@ import type { SupportTicket, TicketStatus } from "~/types";
 import TicketCard from "~/components/tickets/TicketCard";
 
 export function meta() {
-  return [{ title: "Support Tickets — DoAction Portal" }];
+  return [{ title: "Support Tickets — do action portal" }];
 }
 
 export async function loader({ request, context }: any) {

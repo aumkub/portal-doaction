@@ -8,7 +8,7 @@ import { z } from "zod";
 import type { SupportTicket, TicketStatus, TicketPriority } from "~/types";
 
 export function meta() {
-  return [{ title: "Support Tickets — DoAction Portal" }];
+  return [{ title: "Support Tickets — do action portal" }];
 }
 
 const NewTicketSchema = z.object({

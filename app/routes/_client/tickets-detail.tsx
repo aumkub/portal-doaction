@@ -25,7 +25,7 @@ const priorityConfig = {
 const ReplySchema = z.object({ message: z.string().min(1) });
 
 export function meta() {
-  return [{ title: "Ticket Detail — DoAction Portal" }];
+  return [{ title: "Ticket Detail — do action portal" }];
 }
 
 export async function action({ request, params, context }: Route.ActionArgs) {

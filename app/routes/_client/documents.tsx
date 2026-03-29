@@ -8,7 +8,7 @@ import PageHeader from "~/components/layout/PageHeader";
 import type { MonthlyReport } from "~/types";
 
 export function meta() {
-  return [{ title: "Documents — DoAction Portal" }];
+  return [{ title: "Documents — do action portal" }];
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {

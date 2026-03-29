@@ -60,7 +60,7 @@ export async function sendMagicLinkEmail({
   await sendEmail({
     to,
     toName,
-    subject: "ลิ้งก์เข้าสู่ระบบ DoAction Portal",
+    subject: "ลิ้งก์เข้าสู่ระบบ do action portal",
     apiKey,
     text: `สวัสดีคุณ ${displayName}\n\nคลิกลิ้งก์ด้านล่างเพื่อเข้าสู่ระบบ (หมดอายุใน 15 นาที)\n\n${magicUrl}\n\nหากคุณไม่ได้ขอลิ้งก์นี้ กรุณาเพิกเฉย\n\n— ทีม DoAction`,
     html: magicLinkHtml({ displayName, magicUrl }),
@@ -79,7 +79,7 @@ function magicLinkHtml({
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>เข้าสู่ระบบ DoAction Portal</title>
+  <title>เข้าสู่ระบบ do action portal</title>
 </head>
 <body style="margin:0;padding:0;background:#f8fafc;font-family:'Inter',ui-sans-serif,system-ui,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;padding:40px 16px;">

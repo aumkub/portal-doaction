@@ -2,6 +2,9 @@ import { redirect, Form } from "react-router";
 import { z } from "zod";
 import type { Route } from "./+types/clients-new";
 import { generateId } from "~/lib/utils";
+import { requireAdmin, generateMagicToken } from "~/lib/auth.server";
+import { createDB } from "~/lib/db.server";
+import { sendMagicLinkEmail } from "~/lib/email.server";
 import PageHeader from "~/components/layout/PageHeader";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
@@ -26,16 +29,12 @@ const Schema = z.object({
 });
 
 export async function loader({ request, context }: Route.LoaderArgs) {
-  const { requireAdmin } = await import("~/lib/auth.server");
   await requireAdmin(request, context.cloudflare.env.DB, context.cloudflare.env.SESSIONPORTAL);
   return null;
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
   const env = context.cloudflare.env;
-  const { requireAdmin, generateMagicToken } = await import("~/lib/auth.server");
-  const { createDB } = await import("~/lib/db.server");
-  const { sendMagicLinkEmail } = await import("~/lib/email.server");
   await requireAdmin(request, env.DB, env.SESSIONPORTAL);
   const db = createDB(env.DB);
 

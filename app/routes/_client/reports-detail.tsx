@@ -10,10 +10,10 @@ import type { MonthlyReport, ReportTask } from "~/types";
 
 export function meta({ data }: Route.MetaArgs) {
   const report = (data as { report: MonthlyReport } | null)?.report;
-  if (!report) return [{ title: "Report — DoAction Portal" }];
+  if (!report) return [{ title: "Report — do action portal" }];
   return [
     {
-      title: `รายงาน ${getThaiMonth(report.month)} ${report.year + 543} — DoAction Portal`,
+      title: `รายงาน ${getThaiMonth(report.month)} ${report.year + 543} — do action portal`,
     },
   ];
 }

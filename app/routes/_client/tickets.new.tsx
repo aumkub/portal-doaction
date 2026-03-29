@@ -12,7 +12,7 @@ const TicketSchema = z.object({
 });
 
 export function meta() {
-  return [{ title: "New Ticket — DoAction Portal" }];
+  return [{ title: "New Ticket — do action portal" }];
 }
 
 export async function action({ request, context }: any) {

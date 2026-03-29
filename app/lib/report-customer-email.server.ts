@@ -37,7 +37,7 @@ export function buildReportCustomerNotification(opts: {
               <h1 style="margin:12px 0 0;font-size:22px;line-height:1.3;color:#0f172a;">รายงานประจำเดือนพร้อมแล้ว</h1>
               <p style="margin:12px 0 0;font-size:15px;line-height:1.6;color:#475569;">
                 สวัสดีคุณ <strong style="color:#0f172a;">${escapeHtml(opts.contactName)}</strong><br />
-                บริษัท <strong style="color:#0f172a;">${escapeHtml(opts.companyName)}</strong>
+                <strong style="color:#0f172a;">${escapeHtml(opts.companyName)}</strong>
               </p>
               <p style="margin:16px 0 0;font-size:15px;line-height:1.6;color:#475569;">
                 รายงาน <strong style="color:#0f172a;">${escapeHtml(opts.reportTitle)}</strong>
@@ -67,7 +67,7 @@ export function buildReportCustomerNotification(opts: {
           <tr>
             <td style="padding:16px 28px 24px;border-top:1px solid #e2e8f0;background:#fafafa;">
               <p style="margin:0;font-size:12px;color:#94a3b8;line-height:1.5;">
-                อีเมลนี้ส่งจาก DoAction Portal แจ้งเตือนรายงานประจำเดือน<br />
+                อีเมลนี้ส่งจาก do action portal แจ้งเตือนรายงานประจำเดือน<br />
                 หากมีคำถาม ติดต่อทีม DoAction ได้ตามช่องทางที่คุณคุ้นเคย
               </p>
             </td>
@@ -82,7 +82,7 @@ export function buildReportCustomerNotification(opts: {
   const text = [
     `สวัสดีคุณ ${opts.contactName} (${opts.companyName})`,
     "",
-    `รายงาน "${opts.reportTitle}" สำหรับ ${periodTh} พร้อมแล้วใน DoAction Portal`,
+    `รายงาน "${opts.reportTitle}" สำหรับ ${periodTh} พร้อมแล้วใน do action portal`,
     opts.summary ? `\n${opts.summary}\n` : "",
     `เปิดรายงาน: ${opts.reportUrl}`,
     "",

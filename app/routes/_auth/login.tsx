@@ -3,10 +3,13 @@ import type { Route } from "./+types/login";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
+import { createDB } from "~/lib/db.server";
+import { verifyPassword, createAuth, generateMagicToken } from "~/lib/auth.server";
+import { sendMagicLinkEmail } from "~/lib/email.server";
 import { z } from "zod";
 
 export function meta() {
-  return [{ title: "เข้าสู่ระบบ — DoAction Portal" }];
+  return [{ title: "เข้าสู่ระบบ — do action portal" }];
 }
 
 const Schema = z.object({
@@ -26,7 +29,6 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   const { email, mode, password } = parsed.data;
-  const { createDB } = await import("~/lib/db.server");
   const db = createDB(env.DB);
   const user = await db.getUserByEmail(email);
 
@@ -35,7 +37,6 @@ export async function action({ request, context }: Route.ActionArgs) {
     if (!password || !user || user.role !== "admin") {
       return { errors: { email: ["อีเมลหรือรหัสผ่านไม่ถูกต้อง"] }, sent: false };
     }
-    const { verifyPassword, createAuth } = await import("~/lib/auth.server");
     const storedHash = await env.SESSIONPORTAL.get(`pw:${user.id}`);
     if (!storedHash || !(await verifyPassword(password, storedHash))) {
       return { errors: { email: ["อีเมลหรือรหัสผ่านไม่ถูกต้อง"] }, sent: false };
@@ -49,8 +50,6 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   // ── Magic link (default) ───────────────────────────────────────────────────
   if (user) {
-    const { generateMagicToken } = await import("~/lib/auth.server");
-    const { sendMagicLinkEmail } = await import("~/lib/email.server");
     const { id, token, expires_at } = generateMagicToken();
     await db.createMagicLinkToken({ id, user_id: user.id, token, expires_at, used: 0 });
 

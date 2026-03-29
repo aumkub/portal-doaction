@@ -6,7 +6,7 @@ import { useT } from "~/lib/i18n";
 import PageHeader from "~/components/layout/PageHeader";
 
 export function meta() {
-  return [{ title: "Settings — DoAction Portal" }];
+  return [{ title: "Settings — do action portal" }];
 }
 
 const ProfileSchema = z.object({

@@ -5,7 +5,7 @@ import PageHeader from "~/components/layout/PageHeader";
 import { useT } from "~/lib/i18n";
 
 export function meta() {
-  return [{ title: "ติดต่อทีม — DoAction Portal" }];
+  return [{ title: "ติดต่อทีม — do action portal" }];
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {

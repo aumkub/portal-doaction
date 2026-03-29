@@ -10,7 +10,7 @@ import PageHeader from "~/components/layout/PageHeader";
 import type { SupportTicket, ReportTask } from "~/types";
 
 export function meta() {
-  return [{ title: "Dashboard — DoAction Portal" }];
+  return [{ title: "Dashboard — do action portal" }];
 }
 
 // UptimeRobot monitor status codes

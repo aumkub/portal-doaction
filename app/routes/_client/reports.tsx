@@ -6,7 +6,7 @@ import { useT } from "~/lib/i18n";
 import type { MonthlyReport, ReportTask } from "~/types";
 
 export function meta() {
-  return [{ title: "Monthly Reports — DoAction Portal" }];
+  return [{ title: "Monthly Reports — do action portal" }];
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {

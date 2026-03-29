@@ -12,7 +12,7 @@ type DashboardTicket = {
 };
 
 export function meta() {
-  return [{ title: "Admin Overview — DoAction Portal" }];
+  return [{ title: "Admin Overview — do action portal" }];
 }
 
 export async function loader({ request, context }: any) {
