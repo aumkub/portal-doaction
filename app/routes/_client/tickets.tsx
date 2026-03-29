@@ -98,7 +98,7 @@ export default function TicketsPage({ loaderData, actionData }: Route.ComponentP
     filter === "all" ? tickets : tickets.filter((t) => t.status === filter);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-4xl">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">

@@ -57,18 +57,21 @@ function NavItems({ nav }: { nav: NavItem[] }) {
 
 function LogoBlock({ companyName }: { companyName?: string | null }) {
   return (
-    <div className="py-4 flex flex-col justify-center px-5 border-b !border-gray-700 shrink-0">
-      <div className="flex items-center gap-2">
-        <div className="w-7 h-7 bg-[#F0D800] rounded-lg flex items-center justify-center shadow-sm shrink-0">
-          <span className="text-slate-900 font-bold text-xs leading-none">D</span>
+    <div className="py-3 pb-4 pt-1 flex flex-col justify-center px-5 border-b !border-gray-700 shrink-0">
+
+      <div>
+        <div className="flex items-center gap-3">
+          <img
+            src="/logo-white.svg"
+            alt="DoAction"
+            className="object-cover w-[150px] mx-auto block"
+          />
+          {/* <span className="font-bold text-2xl text-slate-900 tracking-tight">DoAction</span> */}
         </div>
-        <div className="min-w-0">
-          <p className="text-white font-semibold text-sm leading-tight">DoAction</p>
-          <p className="text-slate-500 text-xs leading-tight">Client Portal</p>
-        </div>
+        {/* <p className="block text-center text-[10px] text-black mt-2 tracking-widest font-bold">CLIENT PORTAL</p> */}
       </div>
       {companyName && (
-        <p className="text-slate-400 text-xs mt-1.5 ml-9 truncate">{companyName}</p>
+        <p className="text-white text-xs mt-1.5 truncate text-center">{companyName}</p>
       )}
     </div>
   );

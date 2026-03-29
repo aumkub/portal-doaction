@@ -86,6 +86,9 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
+      <Link to="/tickets" className="text-sm text-slate-500 hover:text-slate-900 mb-4 inline-block">
+        {t("back")}
+      </Link>
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs font-medium text-slate-400">#{ticket.id}</p>
@@ -94,9 +97,6 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
             {t("ticket_created_at")} {formatDate(ticket.created_at, lang)}
           </p>
         </div>
-        <Link to="/tickets" className="text-sm text-slate-500 hover:text-slate-900">
-          {t("back")}
-        </Link>
       </div>
 
       <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-3">

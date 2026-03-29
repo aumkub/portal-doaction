@@ -28,6 +28,8 @@ const th = {
   send: "ส่ง",
   items: "รายการ",
   not_set: "ยังไม่ได้ตั้งค่า",
+  set: "ตั้งค่าแล้ว",
+  not_expired: "ยังไม่หมดอายุ",
   view_all: "ดูทั้งหมด →",
 
   // ─── Ticket status ────────────────────────────────────
@@ -59,8 +61,9 @@ const th = {
   dash_status_label: "สถานะ",
   dash_unknown: "ไม่ทราบ",
   dash_uptime_30d: "Uptime 30 วัน",
-  dash_ssl_cert: "SSL Certificate",
-  dash_domain_expiry: "Domain Expiry",
+  dash_ssl_cert: "เข้ารหัสด้วย SSL",
+  dash_domain_expiry: "สถานะ Domain",
+  dash_not_expired: "ยังไม่หมดอายุ",
   dash_no_website: "ยังไม่มีข้อมูลเว็บไซต์",
   dash_impersonate_notice: "You are impersonating a client session.",
   dash_return_admin: "Return to admin",
@@ -327,6 +330,8 @@ const en: Record<keyof typeof th, string> = {
   send: "Send",
   items: "items",
   not_set: "Not set",
+  set: "Set",
+  not_expired: "Not expired",
   view_all: "View all →",
 
   // ─── Ticket status ────────────────────────────────────
@@ -360,6 +365,7 @@ const en: Record<keyof typeof th, string> = {
   dash_uptime_30d: "Uptime 30 days",
   dash_ssl_cert: "SSL Certificate",
   dash_domain_expiry: "Domain Expiry",
+  dash_not_expired: "Not expired",
   dash_no_website: "No website info yet",
   dash_impersonate_notice: "You are impersonating a client session.",
   dash_return_admin: "Return to admin",

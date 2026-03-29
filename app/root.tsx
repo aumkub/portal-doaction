@@ -6,6 +6,7 @@ import {
 	Scripts,
 	ScrollRestoration,
 	useLoaderData,
+	useNavigation,
 } from "react-router";
 
 import type { Route } from "./+types/root";
@@ -24,6 +25,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 }
 
 export const links: Route.LinksFunction = () => [
+	{ rel: "icon", href: "/favicon.ico" },
 	{ rel: "preconnect", href: "https://fonts.googleapis.com" },
 	{
 		rel: "preconnect",
@@ -56,8 +58,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App() {
 	const { lang } = useLoaderData<typeof loader>();
+	const navigation = useNavigation();
+	const isNavigating = navigation.state !== "idle";
 	return (
 		<I18nProvider initialLang={lang}>
+			<div
+				aria-hidden="true"
+				className={`fixed top-0 left-0 z-[100] h-1 w-full bg-[#EED900] transition-all duration-300 ${
+					isNavigating ? "opacity-100" : "opacity-0"
+				}`}
+				style={{
+					transformOrigin: "left",
+					transform: isNavigating ? "scaleX(0.85)" : "scaleX(0)",
+				}}
+			/>
 			<Outlet />
 		</I18nProvider>
 	);

@@ -3,6 +3,7 @@ import type { Route } from "./+types/reports.$reportId";
 import { createDB } from "~/lib/db.server";
 import { getThaiMonth } from "~/lib/utils";
 import { verifyReportAccessToken } from "~/lib/report-access.server";
+import { getAuthenticatedUser } from "~/lib/auth.server";
 import { Input } from "~/components/ui/input";
 import ReportStats from "~/components/reports/ReportStats";
 import TaskList from "~/components/reports/TaskList";
@@ -29,6 +30,13 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const client = await db.getClientById(report.client_id);
   if (!client) throw new Response("Not Found", { status: 404 });
 
+  let canGoToReportList = false;
+  const viewer = await getAuthenticatedUser(request, env.DB, env.SESSIONPORTAL);
+  if (viewer?.role === "client") {
+    const viewerClient = await db.getClientByUserId(viewer.id);
+    canGoToReportList = Boolean(viewerClient && viewerClient.id === report.client_id);
+  }
+
   let loginEmail = "";
   const token = new URL(request.url).searchParams.get("t");
   if (token) {
@@ -41,54 +49,87 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 
   const tasks = await db.listTasksByReport(report.id);
   const loginRedirect = `/reports/${report.id}`;
-  return { report, tasks, loginEmail, loginRedirect };
+  return { report, tasks, loginEmail, loginRedirect, canGoToReportList };
 }
 
 export default function PublicReportPage({ loaderData }: Route.ComponentProps) {
-  const { report, tasks, loginEmail, loginRedirect } = loaderData as {
+  const { report, tasks, loginEmail, loginRedirect, canGoToReportList } = loaderData as {
     report: MonthlyReport;
     tasks: ReportTask[];
     loginEmail: string;
     loginRedirect: string;
+    canGoToReportList: boolean;
   };
 
   const heading = `รายงานประจำเดือน ${getThaiMonth(report.month)} ${report.year + 543}`;
+  const brandLogo = (
+    <div>
+      <div className="flex items-center gap-3 mb-1">
+        <img src="/logo-white.svg" alt="DoAction" className="w-[150px] mx-auto block dark:hidden" />
+        <img src="/logo-dark.svg" alt="DoAction" className="w-[150px] mx-auto hidden dark:block" />
+      </div>
+      <p className="block text-center text-[10px] text-black mt-1 tracking-widest font-bold">
+        CLIENT PORTAL
+      </p>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <main className="mx-auto max-w-4xl px-4 py-8 space-y-6">
-        <section className="bg-white rounded-xl border border-slate-200 p-5 sm:p-6 space-y-3">
+      <main className="mx-auto max-w-4xl px-4 py-4 space-y-6">
+        {canGoToReportList ? (
+          <div className="pb-1 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <a
+              href="/reports"
+              className="order-2 sm:order-1 inline-flex items-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 transition-colors shadow-sm"
+            >
+              <span className="mr-2 text-slate-500" aria-hidden="true">←</span>
+              ไปหน้ารายงานทั้งหมด
+            </a>
+            <div className="order-1 sm:order-2">{brandLogo}</div>
+          </div>
+        ) : (
+          <div>{brandLogo}</div>
+        )}
+        <section className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 space-y-4 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+              Monthly Service Report
+            </div>
+          </div>
           <h1 className="text-xl sm:text-2xl font-semibold text-slate-900">{heading}</h1>
           {report.summary && (
             <p className="text-sm text-slate-600 leading-relaxed">{report.summary}</p>
           )}
-          <div className="rounded-lg border border-violet-200 bg-violet-50 p-4 space-y-3">
-            <p className="text-sm text-violet-900">
-              ต้องการเข้าระบบเพื่อดูรายงานทั้งหมดหรือหน้าอื่นในพอร์ทัล?
-            </p>
-            <Form method="post" action={`/login?redirect=${encodeURIComponent(loginRedirect)}`}>
-              <input type="hidden" name="mode" value="magic" />
-              <Input
-                name="email"
-                type="email"
-                required
-                defaultValue={loginEmail}
-                placeholder="you@example.com"
-                className="mb-2 h-10 bg-white"
-              />
-              <button
-                type="submit"
-                className="inline-flex items-center rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 transition-colors"
-              >
-                ส่ง Magic Link เพื่อเข้าสู่ระบบ
-              </button>
-            </Form>
-          </div>
+          {!canGoToReportList && (
+            <div className="rounded-xl border border-violet-200 bg-violet-50/80 p-4 space-y-3">
+              <p className="text-sm text-violet-900">
+                เข้าสู่ระบบ เพื่อดูรายงานทั้งหมดหรือหน้าอื่นในพอร์ทัล
+              </p>
+              <Form method="post" action={`/login?redirect=${encodeURIComponent(loginRedirect)}`}>
+                <input type="hidden" name="mode" value="magic" />
+                <Input
+                  name="email"
+                  type="email"
+                  required
+                  defaultValue={loginEmail}
+                  placeholder="you@example.com"
+                  className="mb-2 h-10 !bg-white"
+                />
+                <button
+                  type="submit"
+                  className="inline-flex items-center rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 transition-colors mt-2 shadow-sm"
+                >
+                  ส่ง Magic Link เพื่อเข้าสู่ระบบ
+                </button>
+              </Form>
+            </div>
+          )}
         </section>
 
         <ReportStats report={report} />
 
-        <section className="bg-white rounded-xl border border-slate-200 p-6">
+        <section className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
           <h2 className="text-sm font-semibold text-slate-900 mb-5">
             งานที่ดำเนินการ ({tasks.length} รายการ)
           </h2>

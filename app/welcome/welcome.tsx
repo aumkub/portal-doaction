@@ -1,6 +1,3 @@
-import logoDark from "./logo-dark.svg";
-import logoLight from "./logo-light.svg";
-
 export function Welcome({ message }: { message: string }) {
 	return (
 		<main className="flex items-center justify-center pt-16 pb-4">
@@ -8,12 +5,12 @@ export function Welcome({ message }: { message: string }) {
 				<header className="flex flex-col items-center gap-9">
 					<div className="w-[500px] max-w-[100vw] p-4">
 						<img
-							src={logoLight}
+							src="/logo-white.svg"
 							alt="React Router"
 							className="block w-full dark:hidden"
 						/>
 						<img
-							src={logoDark}
+							src="/logo-dark.svg"
 							alt="React Router"
 							className="hidden w-full dark:block"
 						/>

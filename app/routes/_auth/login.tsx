@@ -112,15 +112,21 @@ export default function LoginPage() {
     <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-10">
       {/* Logo */}
       <div className="mb-8">
-        <div className="flex items-center gap-2 mb-1">
-          <div className="w-8 h-8 bg-[#F0D800] rounded-lg flex items-center justify-center shadow-sm">
-            <span className="text-slate-900 font-bold text-sm leading-none">D</span>
-          </div>
-          <span className="font-bold text-2xl text-slate-900 tracking-tight">
-            DoAction
-          </span>
+        <div className="flex items-center gap-3">
+          <img
+            src="/logo-white.svg"
+            alt="DoAction"
+            className="w-[200px] mx-auto block dark:hidden"
+          />
+          <img
+            src="/logo-dark.svg"
+            alt="DoAction"
+            className="w-[200px] mx-auto hidden dark:block"
+          />
         </div>
-        <p className="text-sm text-slate-500 ml-10">Client Portal</p>
+        <p className="block text-center text-sm text-black mt-0 tracking-widest font-bold">
+          CLIENT PORTAL
+        </p>
       </div>
 
       {/* Heading */}

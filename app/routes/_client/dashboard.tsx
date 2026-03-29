@@ -253,12 +253,7 @@ export default function DashboardPage({ loaderData }: Route.ComponentProps) {
               </a>
             </div>
           </div>
-
-          {/* Contact channels */}
-          <div className="bg-white rounded-xl border border-slate-200 p-5">
-            <TeamContactPanel />
-          </div>
-
+          
           {/* Website Status */}
           <div className="bg-white rounded-xl border border-slate-200 p-5">
             <h2 className="text-sm font-semibold text-slate-900 mb-3">
@@ -304,13 +299,20 @@ export default function DashboardPage({ loaderData }: Route.ComponentProps) {
                       : "—"
                   }
                 />
-                <StatusRow label={t("dash_ssl_cert")} value={t("not_set")} />
-                <StatusRow label={t("dash_domain_expiry")} value={t("not_set")} />
+                <StatusRow label={t("dash_ssl_cert")} value={t("set")} />
+                <StatusRow label={t("dash_domain_expiry")} value={t("not_expired")} />
               </div>
             ) : (
               <p className="text-slate-400 text-sm">{t("dash_no_website")}</p>
             )}
           </div>
+
+
+          {/* Contact channels */}
+          <div className="bg-white rounded-xl border border-slate-200 p-5">
+            <TeamContactPanel />
+          </div>
+
         </div>
       </div>
     </div>
