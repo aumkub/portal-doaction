@@ -9,6 +9,7 @@ import {
 export default [
   // Root redirect
   index("routes/home.tsx"),
+  route("reports/:reportId", "routes/reports.$reportId.tsx"),
   route("public/report/:reportId", "routes/public.report.$reportId.tsx"),
 
   // ── Auth routes ─────────────────────────────────────────────────────────────
@@ -21,7 +22,6 @@ export default [
   layout("routes/_client/layout.tsx", [
     route("dashboard", "routes/_client/dashboard.tsx"),
     route("reports", "routes/_client/reports-list.tsx"),
-    route("reports/:reportId", "routes/_client/reports-detail.tsx"),
     route("tickets", "routes/_client/tickets._index.tsx"),
     route("tickets/new", "routes/_client/tickets.new.tsx"),
     route("tickets/:ticketId", "routes/_client/tickets.$ticketId.tsx"),
