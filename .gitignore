@@ -204,3 +204,4 @@ dist
 
 *.history
 *.claude
+.claude/worktrees/
