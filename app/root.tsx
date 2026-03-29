@@ -5,11 +5,23 @@ import {
 	Outlet,
 	Scripts,
 	ScrollRestoration,
+	useLoaderData,
 } from "react-router";
 
 import type { Route } from "./+types/root";
 import "./app.css";
-import { I18nProvider } from "~/lib/i18n";
+import { getAuthenticatedUser } from "~/lib/auth.server";
+import { getLanguageFromCookieHeader, I18nProvider, resolveLanguage } from "~/lib/i18n";
+export async function loader({ request, context }: Route.LoaderArgs) {
+	const env = context.cloudflare.env;
+	const cookieLang = getLanguageFromCookieHeader(request.headers.get("Cookie"));
+	if (cookieLang) return { lang: cookieLang };
+
+	const user = await getAuthenticatedUser(request, env.DB, env.SESSIONPORTAL);
+	if (user?.language) return { lang: resolveLanguage(user.language) };
+
+	return { lang: "th" as const };
+}
 
 export const links: Route.LinksFunction = () => [
 	{ rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -43,8 +55,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+	const { lang } = useLoaderData<typeof loader>();
 	return (
-		<I18nProvider>
+		<I18nProvider initialLang={lang}>
 			<Outlet />
 		</I18nProvider>
 	);

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import PageHeader from "~/components/layout/PageHeader";
+import { useT } from "~/lib/i18n";
 
 export function meta() {
   return [{ title: "Settings — Admin" }];
@@ -43,6 +44,7 @@ export async function action({ request, context }: any) {
 export default function AdminSettingsPage({ loaderData, actionData }: any) {
   const { admin, adminUsers, uptimeKey } = loaderData;
   const errors = actionData?.errors;
+  const { t } = useT();
 
   const maskedKey =
     uptimeKey.length > 12
@@ -52,19 +54,26 @@ export default function AdminSettingsPage({ loaderData, actionData }: any) {
   return (
     <div className="space-y-6 max-w-3xl">
       <PageHeader
-        title="Settings"
-        subtitle="ตั้งค่าระบบและบัญชีผู้ดูแล"
-        breadcrumbs={[{ label: "Admin" }, { label: "Settings" }]}
+        title={t("admin_settings_title")}
+        subtitle={t("admin_settings_subtitle")}
+        breadcrumbs={[
+          { label: t("admin_breadcrumb_admin") },
+          { label: t("admin_settings_title") },
+        ]}
       />
 
       {/* Profile */}
       <section className="bg-white rounded-xl border border-slate-200 p-6 space-y-5">
-        <h2 className="text-sm font-semibold text-slate-900">บัญชีของฉัน</h2>
+        <h2 className="text-sm font-semibold text-slate-900">
+          {t("admin_settings_my_account")}
+        </h2>
         <Form method="post" className="space-y-4">
           <input type="hidden" name="intent" value="profile" />
           <div className="grid sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-slate-600">ชื่อ</label>
+              <label className="text-xs font-medium text-slate-600">
+                {t("admin_settings_name")}
+              </label>
               <input
                 name="name"
                 defaultValue={admin.name}
@@ -76,7 +85,9 @@ export default function AdminSettingsPage({ loaderData, actionData }: any) {
               )}
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-slate-600">อีเมล</label>
+              <label className="text-xs font-medium text-slate-600">
+                {t("admin_settings_email")}
+              </label>
               <input
                 value={admin.email}
                 readOnly
@@ -89,7 +100,7 @@ export default function AdminSettingsPage({ loaderData, actionData }: any) {
               type="submit"
               className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 transition-colors"
             >
-              บันทึก
+              {t("save")}
             </button>
           </div>
         </Form>
@@ -98,7 +109,7 @@ export default function AdminSettingsPage({ loaderData, actionData }: any) {
       {/* Admin team */}
       <section className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
         <h2 className="text-sm font-semibold text-slate-900">
-          ทีม Admin ({adminUsers.length})
+          {t("admin_settings_team")} ({adminUsers.length})
         </h2>
         <ul className="divide-y divide-slate-100">
           {adminUsers.map((u: any) => (
@@ -108,7 +119,7 @@ export default function AdminSettingsPage({ loaderData, actionData }: any) {
                 <p className="text-xs text-slate-400">{u.email}</p>
               </div>
               {u.id === admin.id && (
-                <span className="text-xs text-slate-400">(คุณ)</span>
+                <span className="text-xs text-slate-400">{t("admin_settings_you")}</span>
               )}
             </li>
           ))}
@@ -117,34 +128,48 @@ export default function AdminSettingsPage({ loaderData, actionData }: any) {
 
       {/* Integrations */}
       <section className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
-        <h2 className="text-sm font-semibold text-slate-900">Integrations</h2>
+        <h2 className="text-sm font-semibold text-slate-900">
+          {t("admin_settings_integrations")}
+        </h2>
         <div className="rounded-lg border border-slate-100 bg-slate-50 p-4 space-y-2">
           <div className="flex items-center gap-2">
             <span className="text-base">🟢</span>
-            <p className="text-sm font-medium text-slate-800">UptimeRobot</p>
+            <p className="text-sm font-medium text-slate-800">
+              {t("admin_settings_uptime")}
+            </p>
             <span className="ml-auto text-xs text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full font-medium">
-              Connected
+              {t("admin_settings_connected")}
             </span>
           </div>
           <p className="text-xs text-slate-500">
-            ดึงข้อมูล Uptime อัตโนมัติโดยจับคู่กับ domain ของลูกค้า
+            {t("admin_settings_uptime_desc")}
           </p>
           <div className="flex items-center gap-2 mt-2">
             <span className="text-xs text-slate-400 font-mono bg-white border border-slate-200 rounded px-2 py-1 select-all">
               {maskedKey}
             </span>
-            <span className="text-xs text-slate-400">Read-only API key</span>
+            <span className="text-xs text-slate-400">
+              {t("admin_settings_api_key_note")}
+            </span>
           </div>
         </div>
       </section>
 
       {/* Portal info */}
       <section className="bg-white rounded-xl border border-slate-200 p-6 space-y-3">
-        <h2 className="text-sm font-semibold text-slate-900">Portal Info</h2>
+        <h2 className="text-sm font-semibold text-slate-900">
+          {t("admin_settings_portal_info")}
+        </h2>
         <div className="grid sm:grid-cols-2 gap-3">
-          <InfoRow label="Platform" value="Cloudflare Workers + D1" />
-          <InfoRow label="Support Email" value="support@doaction.co.th" />
-          <InfoRow label="Portal Version" value="1.0.0" />
+          <InfoRow
+            label={t("admin_settings_platform")}
+            value="Cloudflare Workers + D1"
+          />
+          <InfoRow
+            label={t("admin_settings_support_email")}
+            value="support@doaction.co.th"
+          />
+          <InfoRow label={t("admin_settings_version")} value="1.0.0" />
         </div>
       </section>
     </div>

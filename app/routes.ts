@@ -25,6 +25,7 @@ export default [
     route("tickets/new", "routes/_client/tickets.new.tsx"),
     route("tickets/:ticketId", "routes/_client/tickets.$ticketId.tsx"),
     route("documents", "routes/_client/documents.tsx"),
+    route("contact", "routes/_client/contact.tsx"),
     route("settings", "routes/_client/settings.tsx"),
   ]),
 
@@ -48,6 +49,9 @@ export default [
   route("logout", "routes/api/logout.ts"),
   route("api/send-magic-link", "routes/api/send-magic-link.ts"),
   route("api/notifications/read", "routes/api/notifications-read.ts"),
+  route("api/language", "routes/api/language.ts"),
+  route("api/report-email-preview", "routes/api/report-email-preview.ts"),
+  route("api/report-notify", "routes/api/report-notify.ts"),
   route("api/impersonation/stop", "routes/api/impersonation-stop.ts"),
   route("api/uptime", "routes/api/uptime.ts"),
 ] satisfies RouteConfig;

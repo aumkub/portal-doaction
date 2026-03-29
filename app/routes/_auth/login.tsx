@@ -172,7 +172,7 @@ export default function LoginPage() {
               name="email"
               type="email"
               required
-              placeholder="admin@doaction.co.th"
+              placeholder="admin@demo.co.th"
               className="h-11"
             />
             <Input

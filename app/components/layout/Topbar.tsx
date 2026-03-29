@@ -152,6 +152,8 @@ export default function Topbar({
     .join("")
     .toUpperCase();
 
+  const settingsHref = role === "admin" ? "/admin/settings" : "/settings";
+
   return (
     <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 lg:px-6 shrink-0">
       {/* Left */}
@@ -202,7 +204,7 @@ export default function Topbar({
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
-              <a href="/settings">
+              <a href={settingsHref}>
                 <span className="mr-2">⚙️</span> {t("topbar_account_settings")}
               </a>
             </DropdownMenuItem>

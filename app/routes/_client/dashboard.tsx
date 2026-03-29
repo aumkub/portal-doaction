@@ -4,6 +4,7 @@ import { requireUser } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { formatRelativeTime } from "~/lib/utils";
 import { useT } from "~/lib/i18n";
+import TeamContactPanel from "~/components/contact/TeamContactPanel";
 import StatsCard from "~/components/dashboard/StatsCard";
 import PageHeader from "~/components/layout/PageHeader";
 import type { SupportTicket, ReportTask } from "~/types";
@@ -244,13 +245,18 @@ export default function DashboardPage({ loaderData }: Route.ComponentProps) {
                 <ArrowRight className="w-4 h-4 opacity-40 group-hover:translate-x-0.5 transition-transform" />
               </a>
               <a
-                href="mailto:support@doaction.co.th"
+                href="/contact"
                 className="flex items-center justify-between w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors group"
               >
                 <span>{t("dash_contact_team")}</span>
                 <ArrowRight className="w-4 h-4 opacity-40 group-hover:translate-x-0.5 transition-transform" />
               </a>
             </div>
+          </div>
+
+          {/* Contact channels */}
+          <div className="bg-white rounded-xl border border-slate-200 p-5">
+            <TeamContactPanel />
           </div>
 
           {/* Website Status */}

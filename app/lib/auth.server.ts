@@ -1,7 +1,7 @@
 import { Lucia, TimeSpan } from "lucia";
 import { generateId } from "~/lib/utils";
 import { createDB } from "~/lib/db.server";
-import type { User, UserRole } from "~/types";
+import type { User, UserLanguage, UserRole } from "~/types";
 
 // ─── KV-based Lucia Adapter ──────────────────────────────────────────────────
 // Sessions are stored in Cloudflare KV (fast reads, auto-TTL).
@@ -116,6 +116,7 @@ function createKVAdapter(kv: KVNamespace, db: ReturnType<typeof createDB>) {
             name: user.name,
             role: user.role,
             avatar_url: user.avatar_url,
+            language: user.language ?? "th",
             created_at: user.created_at,
             updated_at: user.updated_at,
           },
@@ -195,6 +196,7 @@ export function createAuth(d1: D1Database, kv: KVNamespace) {
         name: attrs.name as string,
         role: attrs.role as UserRole,
         avatar_url: attrs.avatar_url as string | null,
+        language: attrs.language as UserLanguage,
         created_at: attrs.created_at as number,
         updated_at: attrs.updated_at as number,
       };

@@ -121,9 +121,10 @@ export default function ClientSettingsPage({ loaderData, actionData }: any) {
                 </a>
               </div>
             )}
-            {client.contract_end && (
-              <InfoRow label={t("settings_contract_end")} value={client.contract_end} />
-            )}
+            <InfoRow
+              label={t("settings_contract_end")}
+              value={client.contract_end ?? t("settings_contract_no_expiry")}
+            />
           </div>
           <p className="text-xs text-slate-400 pt-2 border-t border-slate-100">
             {t("settings_company_edit_note")}
@@ -140,12 +141,6 @@ export default function ClientSettingsPage({ loaderData, actionData }: any) {
             className="inline-flex items-center gap-2 text-sm text-violet-600 hover:text-violet-700 font-medium"
           >
             {t("settings_help_ticket")}
-          </a>
-          <a
-            href="mailto:support@doaction.co.th"
-            className="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900"
-          >
-            📧 support@doaction.co.th
           </a>
         </div>
       </section>

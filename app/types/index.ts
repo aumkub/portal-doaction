@@ -2,12 +2,15 @@
 
 export type UserRole = "admin" | "client";
 
+export type UserLanguage = "th" | "en";
+
 export interface User {
   id: string;
   email: string;
   name: string;
   role: UserRole;
   avatar_url: string | null;
+  language?: UserLanguage | null;
   created_at: number;
   updated_at: number;
 }
@@ -66,6 +69,10 @@ export interface MonthlyReport {
   status: ReportStatus;
   published_at: number | null;
   created_at: number;
+  /** When admin emailed the client about this published report */
+  client_notified_at?: number | null;
+  client_notification_subject?: string | null;
+  client_notification_html?: string | null;
 }
 
 export interface ReportTask {

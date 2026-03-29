@@ -43,7 +43,11 @@ export default function ReportCard({ report }: ReportCardProps) {
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-3 gap-2 mb-4">
+      <div
+        className={`grid gap-2 mb-4 ${
+          report.speed_score != null ? "grid-cols-3" : "grid-cols-2"
+        }`}
+      >
         <div className="text-center p-2 bg-slate-50 rounded-lg">
           <p className="text-lg font-semibold text-slate-900">
             {report.total_tasks}
@@ -58,12 +62,14 @@ export default function ReportCard({ report }: ReportCardProps) {
           </p>
           <p className="text-[10px] text-slate-400">อัพไทม์</p>
         </div>
-        <div className="text-center p-2 bg-slate-50 rounded-lg">
-          <p className="text-lg font-semibold text-slate-900">
-            {report.speed_score ?? "—"}
-          </p>
-          <p className="text-[10px] text-slate-400">สปีด</p>
-        </div>
+        {report.speed_score != null ? (
+          <div className="text-center p-2 bg-slate-50 rounded-lg">
+            <p className="text-lg font-semibold text-slate-900">
+              {report.speed_score}
+            </p>
+            <p className="text-[10px] text-slate-400">สปีด</p>
+          </div>
+        ) : null}
       </div>
 
       {/* Footer */}

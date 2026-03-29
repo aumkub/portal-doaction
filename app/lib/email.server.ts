@@ -24,7 +24,7 @@ export async function sendEmail({
     body: JSON.stringify({
       api_key: apiKey,
       to: [toName ? `${toName} <${to}>` : to],
-      sender: "DoAction Portal <noreply@doaction.co.th>",
+      sender: "do action portal <aum@doaction.co.th>",
       subject,
       html_body: html,
       text_body: text,
@@ -159,7 +159,7 @@ function magicLinkHtml({
                 หากคุณไม่ได้ขอลิ้งก์นี้ กรุณาเพิกเฉยต่ออีเมลฉบับนี้
               </p>
               <p style="margin:16px 0 0;font-size:12px;color:#cbd5e1;">
-                DoAction Co., Ltd. &nbsp;|&nbsp; support@doaction.co.th
+                DoAction Co., Ltd. &nbsp;|&nbsp; aum@doaction.co.th
               </p>
             </td>
           </tr>

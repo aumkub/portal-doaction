@@ -1,4 +1,4 @@
-import { Form, Link, redirect } from "react-router";
+import { Form, redirect } from "react-router";
 import { z } from "zod";
 import { requireAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
@@ -8,6 +8,8 @@ import StatusBadge from "~/components/tickets/StatusBadge";
 import PriorityBadge from "~/components/tickets/PriorityBadge";
 import MessageBubble from "~/components/tickets/MessageBubble";
 import PageHeader from "~/components/layout/PageHeader";
+import { useT } from "~/lib/i18n";
+import type { TranslationKey } from "~/lib/translations";
 
 const ReplySchema = z.object({
   message: z.string().default(""),
@@ -42,12 +44,26 @@ export async function loader({ request, context, params }: any) {
 }
 
 const STATUSES = [
-  { value: "open", label: "เปิด" },
-  { value: "in_progress", label: "กำลังดำเนิน" },
-  { value: "waiting", label: "รอข้อมูล" },
-  { value: "resolved", label: "เสร็จสิ้น" },
-  { value: "closed", label: "ปิด" },
+  "open",
+  "in_progress",
+  "waiting",
+  "resolved",
+  "closed",
 ] as const;
+
+function statusToKey(status: (typeof STATUSES)[number]): TranslationKey {
+  if (status === "closed") return "status_closed_short";
+  return `status_${status}` as TranslationKey;
+}
+
+/** Thai labels for server-side notifications to clients */
+const STATUS_LABEL_TH: Record<string, string> = {
+  open: "เปิด",
+  in_progress: "กำลังดำเนิน",
+  waiting: "รอข้อมูล",
+  resolved: "เสร็จสิ้น",
+  closed: "ปิด",
+};
 
 export async function action({ request, context, params }: any) {
   const env = context.cloudflare.env;
@@ -80,7 +96,7 @@ export async function action({ request, context, params }: any) {
     // Notify client of status change
     const client = await db.getClientById(ticket.client_id);
     if (client) {
-      const statusLabel = STATUSES.find((s) => s.value === status)?.label ?? status;
+      const statusLabel = status ? STATUS_LABEL_TH[status] ?? status : "";
       await db.createNotification({
         id: generateId(),
         user_id: client.user_id,
@@ -136,6 +152,7 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
     client: Client | null;
   };
   const errors = actionData?.errors;
+  const { t, lang } = useT();
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -143,8 +160,8 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
         title={ticket.title}
         subtitle={client?.company_name ?? undefined}
         breadcrumbs={[
-          { label: "Admin" },
-          { label: "Tickets", href: "/admin/tickets" },
+          { label: t("admin_breadcrumb_admin") },
+          { label: t("admin_breadcrumb_tickets"), href: "/admin/tickets" },
           { label: `#${ticket.id.slice(0, 8)}` },
         ]}
       />
@@ -152,42 +169,44 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
       {/* Meta row */}
       <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-4">
         <div>
-          <p className="text-xs text-slate-500 mb-1">สถานะ</p>
+          <p className="text-xs text-slate-500 mb-1">{t("admin_ticket_meta_status")}</p>
           <StatusBadge status={ticket.status} />
         </div>
         <div>
-          <p className="text-xs text-slate-500 mb-1">Priority</p>
+          <p className="text-xs text-slate-500 mb-1">{t("admin_ticket_meta_priority")}</p>
           <PriorityBadge priority={ticket.priority} />
         </div>
         <div>
-          <p className="text-xs text-slate-500 mb-1">ลูกค้า</p>
+          <p className="text-xs text-slate-500 mb-1">{t("admin_ticket_meta_client")}</p>
           <p className="text-sm font-medium text-slate-700">{client?.company_name ?? "—"}</p>
         </div>
         <div>
-          <p className="text-xs text-slate-500 mb-1">เปิดเมื่อ</p>
-          <p className="text-sm text-slate-700">{formatDate(ticket.created_at)}</p>
+          <p className="text-xs text-slate-500 mb-1">{t("admin_ticket_meta_opened")}</p>
+          <p className="text-sm text-slate-700">{formatDate(ticket.created_at, lang)}</p>
         </div>
       </div>
 
       {/* Status change */}
       <div className="rounded-xl border border-slate-200 bg-white p-4">
-        <p className="text-xs font-medium text-slate-600 mb-3">เปลี่ยนสถานะ</p>
+        <p className="text-xs font-medium text-slate-600 mb-3">
+          {t("admin_ticket_change_status")}
+        </p>
         <Form method="post" className="flex flex-wrap gap-2">
           <input type="hidden" name="intent" value="status" />
           {STATUSES.map((s) => (
             <button
-              key={s.value}
+              key={s}
               type="submit"
               name="status"
-              value={s.value}
-              disabled={ticket.status === s.value}
+              value={s}
+              disabled={ticket.status === s}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
-                ticket.status === s.value
+                ticket.status === s
                   ? "bg-slate-900 text-white border-slate-900 cursor-default"
                   : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
               }`}
             >
-              {s.label}
+              {t(statusToKey(s))}
             </button>
           ))}
         </Form>
@@ -211,13 +230,15 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
       <div className="rounded-2xl border border-slate-200 bg-white p-4">
         <Form method="post" className="space-y-3">
           <input type="hidden" name="intent" value="reply" />
-          <label className="block text-sm font-medium text-slate-700">ตอบกลับ</label>
+          <label className="block text-sm font-medium text-slate-700">
+            {t("admin_ticket_reply_label")}
+          </label>
           <textarea
             name="message"
             rows={4}
             required
             className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-            placeholder="พิมพ์ข้อความ..."
+            placeholder={t("admin_ticket_ph_reply")}
           />
           {errors?.message && (
             <p className="text-xs text-rose-600">{errors.message[0]}</p>
@@ -230,13 +251,13 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
                 value="1"
                 className="rounded border-slate-300 text-violet-600 focus:ring-violet-500"
               />
-              Internal note (ไม่แสดงให้ลูกค้าเห็น)
+              {t("admin_ticket_internal_note")}
             </label>
             <button
               type="submit"
               className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 transition-colors"
             >
-              ส่งข้อความ
+              {t("admin_ticket_send")}
             </button>
           </div>
         </Form>

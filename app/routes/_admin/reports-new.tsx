@@ -6,6 +6,7 @@ import { createDB } from "~/lib/db.server";
 import { generateId, getThaiMonth } from "~/lib/utils";
 import PageHeader from "~/components/layout/PageHeader";
 import ReportEditor from "~/routes/_admin/reports-editor";
+import { useT } from "~/lib/i18n";
 import type { TaskCategory } from "~/types";
 
 export function meta() {
@@ -119,14 +120,15 @@ export async function action({ request, context }: Route.ActionArgs) {
 
 export default function AdminReportNewPage({ loaderData }: Route.ComponentProps) {
   const { clients } = loaderData;
+  const { t } = useT();
   return (
     <div className="space-y-6 max-w-4xl">
       <PageHeader
-        title="สร้าง Report ใหม่"
+        title={t("admin_report_new_title")}
         breadcrumbs={[
-          { label: "Admin", href: "/admin/clients" },
-          { label: "Reports", href: "/admin/reports" },
-          { label: "ใหม่" },
+          { label: t("admin_breadcrumb_admin"), href: "/admin/clients" },
+          { label: t("admin_breadcrumb_reports"), href: "/admin/reports" },
+          { label: t("admin_breadcrumb_new") },
         ]}
       />
       <ReportEditor clients={clients} isNew={true} />

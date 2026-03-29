@@ -2,7 +2,9 @@ import { Form } from "react-router";
 import type { Route } from "./+types/clients";
 import { requireAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
-import type { Client, User } from "~/types";
+import type { Client } from "~/types";
+import { useT } from "~/lib/i18n";
+import type { TranslationKey } from "~/lib/translations";
 
 export function meta() {
   return [{ title: "จัดการลูกค้า — Admin" }];
@@ -15,7 +17,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   return { clients };
 }
 
-const packageLabels = { basic: "Basic", standard: "Standard", premium: "Premium" };
+const packageKeys: Record<Client["package"], TranslationKey> = {
+  basic: "admin_pkg_basic",
+  standard: "admin_pkg_standard",
+  premium: "admin_pkg_premium",
+};
 const packageColors = {
   basic: "bg-slate-100 text-slate-600",
   standard: "bg-blue-50 text-blue-600",
@@ -24,23 +30,24 @@ const packageColors = {
 
 export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
   const { clients } = loaderData as { clients: Client[] };
+  const { t } = useT();
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">
-            จัดการลูกค้า
+            {t("admin_clients_title")}
           </h1>
           <p className="text-slate-500 text-sm mt-1">
-            {clients.length} ลูกค้าทั้งหมด
+            {t("admin_clients_subtitle").replace("{count}", String(clients.length))}
           </p>
         </div>
         <a
           href="/admin/clients/new"
           className="flex items-center gap-2 bg-[#F0D800] text-slate-900 rounded-lg px-4 py-2 text-sm font-medium hover:bg-yellow-400 transition-colors"
         >
-          + เพิ่มลูกค้าใหม่
+          {t("admin_clients_add")}
         </a>
       </div>
 
@@ -49,16 +56,16 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
           <thead>
             <tr className="border-b border-slate-100">
               <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">
-                ลูกค้า
+                {t("admin_col_client")}
               </th>
               <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">
-                เว็บไซต์
+                {t("admin_col_website")}
               </th>
               <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">
-                แพ็กเกจ
+                {t("admin_col_package")}
               </th>
               <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">
-                สัญญา
+                {t("admin_col_contract")}
               </th>
               <th className="px-5 py-3" />
               <th className="px-5 py-3" />
@@ -71,7 +78,7 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
                   colSpan={5}
                   className="px-5 py-12 text-center text-slate-400"
                 >
-                  ยังไม่มีลูกค้า
+                  {t("admin_clients_empty")}
                 </td>
               </tr>
             ) : (
@@ -101,18 +108,18 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
                     <span
                       className={`text-xs font-medium px-2 py-1 rounded-full ${packageColors[client.package]}`}
                     >
-                      {packageLabels[client.package]}
+                      {t(packageKeys[client.package])}
                     </span>
                   </td>
                   <td className="px-5 py-4 text-slate-500">
-                    {client.contract_end ?? "—"}
+                    {client.contract_end ?? t("settings_contract_no_expiry")}
                   </td>
                   <td className="px-5 py-4 text-right">
                     <a
                       href={`/admin/clients/${client.id}`}
                       className="text-xs text-slate-500 hover:text-slate-900 transition-colors"
                     >
-                      ดูรายละเอียด →
+                      {t("admin_view_details")}
                     </a>
                   </td>
                   <td className="px-5 py-4 text-right">
@@ -120,16 +127,21 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
                       method="post"
                       action={`/admin/clients/${client.id}`}
                       onSubmit={(e) => {
-                        if (!confirm(`เข้าระบบในมุมมองของ ${client.company_name}?`)) {
+                        if (
+                          !confirm(
+                            `${t("admin_impersonate_confirm")} ${client.company_name}?`
+                          )
+                        ) {
                           e.preventDefault();
                         }
                       }}
                     >
+                      <input type="hidden" name="intent" value="impersonate" />
                       <button
                         type="submit"
                         className="text-xs text-amber-600 hover:text-amber-700 font-medium transition-colors border border-amber-200 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg"
                       >
-                        👁 Impersonate
+                        {t("admin_impersonate")}
                       </button>
                     </Form>
                   </td>

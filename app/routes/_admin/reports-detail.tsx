@@ -3,9 +3,10 @@ import { z } from "zod";
 import type { Route } from "./+types/reports-detail";
 import { requireAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
-import { generateId, getThaiMonth } from "~/lib/utils";
+import { generateId, getMonthName, getThaiMonth } from "~/lib/utils";
 import PageHeader from "~/components/layout/PageHeader";
 import ReportEditor from "~/routes/_admin/reports-editor";
+import { useT } from "~/lib/i18n";
 import type { TaskCategory } from "~/types";
 
 export function meta() {
@@ -131,20 +132,26 @@ export default function AdminReportDetailPage({
   loaderData,
 }: Route.ComponentProps) {
   const { report, tasks, clients } = loaderData;
+  const { t, lang } = useT();
+
+  const periodTitle =
+    lang === "en"
+      ? `${getMonthName(report.month, "en")} ${report.year}`
+      : `${getThaiMonth(report.month)} ${report.year + 543}`;
 
   return (
     <div className="space-y-6 max-w-4xl">
       <PageHeader
-        title={`${getThaiMonth(report.month)} ${report.year + 543}`}
+        title={periodTitle}
         subtitle={
           report.status === "published"
-            ? "เผยแพร่แล้ว — แก้ไขจะอัปเดทหน้าลูกค้าทันที"
-            : "Draft — ลูกค้าจะเห็น Report นี้หลังจาก Publish"
+            ? t("admin_report_subtitle_published")
+            : t("admin_report_subtitle_draft")
         }
         breadcrumbs={[
-          { label: "Admin", href: "/admin/clients" },
-          { label: "Reports", href: "/admin/reports" },
-          { label: `${getThaiMonth(report.month)} ${report.year + 543}` },
+          { label: t("admin_breadcrumb_admin"), href: "/admin/clients" },
+          { label: t("admin_breadcrumb_reports"), href: "/admin/reports" },
+          { label: periodTitle },
         ]}
       />
       <ReportEditor

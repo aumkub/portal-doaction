@@ -74,6 +74,29 @@ function LogoBlock({ companyName }: { companyName?: string | null }) {
   );
 }
 
+/** Above logout — full contact page with LINE / phone / social / email. */
+function ClientContactNavLink() {
+  const { t } = useT();
+  return (
+    <div className="px-3 pt-2 pb-1 border-t !border-gray-700 shrink-0">
+      <NavLink
+        to="/contact"
+        className={({ isActive }) =>
+          cn(
+            "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+            isActive
+              ? "bg-[#EED900] text-black"
+              : "text-slate-400 hover:text-white hover:bg-white/5"
+          )
+        }
+      >
+        <span className="text-base leading-none">💬</span>
+        {t("nav_contact_team")}
+      </NavLink>
+    </div>
+  );
+}
+
 function LogoutButton() {
   const { t } = useT();
   return (
@@ -92,6 +115,7 @@ function LogoutButton() {
 }
 
 function SidebarContent({ role, companyName }: SidebarProps) {
+  const { t } = useT();
   const nav = role === "admin" ? adminNav : clientNav;
   return (
     <div className={`flex h-full flex-col ${role === "admin" ? "bg-black/90" : "bg-black/90"}`}>
@@ -99,13 +123,14 @@ function SidebarContent({ role, companyName }: SidebarProps) {
       {role === "admin" ? (
         <div className="px-5 pt-3">
           <span className="inline-flex rounded-full bg-violet-600/20 px-2.5 py-1 text-[11px] font-semibold text-violet-300">
-            Admin
+            {t("nav_badge_admin")}
           </span>
         </div>
       ) : null}
       <ScrollArea className="flex-1">
         <NavItems nav={nav} />
       </ScrollArea>
+      {role === "client" ? <ClientContactNavLink /> : null}
       <LogoutButton />
     </div>
   );
