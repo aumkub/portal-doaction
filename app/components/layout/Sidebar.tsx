@@ -12,7 +12,6 @@ const clientNav: NavItem[] = [
   { labelKey: "nav_dashboard", href: "/dashboard", icon: "📊", end: true },
   { labelKey: "nav_reports", href: "/reports", icon: "📋" },
   { labelKey: "nav_tickets", href: "/tickets", icon: "🎫" },
-  { labelKey: "topbar_notifications", href: "/notifications", icon: "🔔" },
   { labelKey: "nav_documents", href: "/documents", icon: "📄" },
   { labelKey: "nav_settings", href: "/settings", icon: `⚙️` },
 ];
@@ -24,7 +23,6 @@ const adminNav: NavItem[] = [
   { labelKey: "nav_all_tickets", href: "/admin/tickets", icon: "🎫" },
   { labelKey: "nav_attachments", href: "/admin/attachments", icon: "📎" },
   { labelKey: "nav_email_logs", href: "/admin/email-logs", icon: "📧" },
-  { labelKey: "topbar_notifications", href: "/admin/notifications", icon: "🔔" },
   { labelKey: "nav_settings", href: "/admin/settings", icon: `⚙️` },
 ];
 
