@@ -306,15 +306,8 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
           ))}
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-4">
-        <Form
-          method="post"
-          className="space-y-3"
-          ref={formRef}
-          onSubmit={() => {
-            isSubmittingReplyRef.current = true;
-          }}
-        >
+      <div key={messages.length} className="rounded-2xl border border-slate-200 bg-white p-4">
+        <Form method="post" className="space-y-3">
           <input type="hidden" name="attachments_json" value={JSON.stringify(uploadedFiles)} />
           <label className="block text-sm font-medium text-slate-700">
             {t("ticket_reply_label")}
