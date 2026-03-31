@@ -423,6 +423,31 @@ export function createDB(d1: D1Database) {
         )
         .run();
     },
+
+    // ── App Settings ──────────────────────────────────────────────────────────
+
+    async getAppSetting(key: string): Promise<string | null> {
+      const row = await d1
+        .prepare("SELECT value FROM app_settings WHERE key = ?")
+        .bind(key)
+        .first<{ value: string }>();
+      return row?.value ?? null;
+    },
+
+    async setAppSetting(key: string, value: string): Promise<void> {
+      await d1
+        .prepare(
+          `INSERT INTO app_settings (key, value, updated_at)
+           VALUES (?, ?, unixepoch())
+           ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = unixepoch()`
+        )
+        .bind(key, value)
+        .run();
+    },
+
+    async deleteAppSetting(key: string): Promise<void> {
+      await d1.prepare("DELETE FROM app_settings WHERE key = ?").bind(key).run();
+    },
   };
 }
 

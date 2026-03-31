@@ -4,6 +4,7 @@ import type { Route } from "./+types/reports-new";
 import { requireAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { generateId, getThaiMonth } from "~/lib/utils";
+import { sendTelegramNotification } from "~/lib/telegram.server";
 import PageHeader from "~/components/layout/PageHeader";
 import ReportEditor from "~/routes/_admin/reports-editor";
 import { useT } from "~/lib/i18n";
@@ -103,7 +104,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   if (isPublish) {
     const client = await db.getClientById(client_id);
     if (client) {
-      await db.createNotification({
+      const notification = {
         id: generateId(),
         user_id: client.user_id,
         type: "report_published",
@@ -111,6 +112,12 @@ export async function action({ request, context }: Route.ActionArgs) {
         body: "ทีม DoAction ได้เผยแพร่รายงานสรุปงานสำหรับเดือนนี้แล้ว",
         link: `/reports/${reportId}`,
         read: 0,
+      } as const;
+      await db.createNotification(notification);
+      await sendTelegramNotification({
+        db,
+        appUrl: env.APP_URL,
+        notification,
       });
     }
   }

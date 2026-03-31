@@ -4,6 +4,7 @@ import { requireUser } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { generateId } from "~/lib/utils";
 import { useT } from "~/lib/i18n";
+import { sendTelegramNotification } from "~/lib/telegram.server";
 
 const TicketSchema = z.object({
   title: z.string().min(1, "กรุณากรอกหัวข้อ"),
@@ -45,19 +46,29 @@ export async function action({ request, context }: any) {
   });
 
   const admins = await db.listAdminUsers();
+  const notificationTitle = `New ticket from ${client.company_name}`;
   await Promise.all(
     admins.map((admin) =>
       db.createNotification({
         id: generateId(),
         user_id: admin.id,
         type: "ticket",
-        title: `New ticket from ${client.company_name}`,
+        title: notificationTitle,
         body: parsed.data.title,
         link: `/admin/tickets`,
         read: 0,
       })
     )
   );
+  await sendTelegramNotification({
+    db,
+    appUrl: context.cloudflare.env.APP_URL,
+    notification: {
+      title: notificationTitle,
+      body: parsed.data.title,
+      link: "/admin/tickets",
+    },
+  });
 
   return redirect(`/tickets/${ticketId}`);
 }

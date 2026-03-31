@@ -57,7 +57,7 @@ function NavItems({ nav }: { nav: NavItem[] }) {
 
 function LogoBlock({ companyName }: { companyName?: string | null }) {
   return (
-    <div className="py-3 pb-4 pt-1 flex flex-col justify-center px-5 border-b !border-gray-700 shrink-0">
+    <div className="py-3 pb-2 pt-1 flex flex-col justify-center px-5 border-b !border-gray-700 shrink-0">
 
       <div>
         <div className="flex items-center gap-3">
@@ -68,7 +68,7 @@ function LogoBlock({ companyName }: { companyName?: string | null }) {
           />
           {/* <span className="font-bold text-2xl text-slate-900 tracking-tight">DoAction</span> */}
         </div>
-        {/* <p className="block text-center text-[10px] text-black mt-2 tracking-widest font-bold">CLIENT PORTAL</p> */}
+        <p className="block text-center text-[10px] text-white mt-0 tracking-widest font-bold">CLIENT PORTAL</p>
       </div>
       {companyName && (
         <p className="text-white text-xs mt-1.5 truncate text-center">{companyName}</p>

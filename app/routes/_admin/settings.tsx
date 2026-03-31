@@ -4,6 +4,7 @@ import { requireAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import PageHeader from "~/components/layout/PageHeader";
 import { useT } from "~/lib/i18n";
+import { sendTelegramNotification } from "~/lib/telegram.server";
 
 export function meta() {
   return [{ title: "Settings — Admin" }];
@@ -14,14 +15,20 @@ const ProfileSchema = z.object({
   intent: z.literal("profile"),
 });
 
+const TelegramSchema = z.object({
+  telegram_bot_token: z.string().optional().default(""),
+  intent: z.literal("telegram"),
+});
+
 export async function loader({ request, context }: any) {
   const env = context.cloudflare.env;
   const admin = await requireAdmin(request, env.DB, env.SESSIONPORTAL);
   const db = createDB(env.DB);
   const adminUsers = await db.listAdminUsers();
+  const telegramBotToken = await db.getAppSetting("telegram_bot_token");
   const uptimeKey =
     (env as any).UPTIMEROBOT_API_KEY ?? "ur2618139-5281beb51ff9820a629669c2";
-  return { admin, adminUsers, uptimeKey };
+  return { admin, adminUsers, uptimeKey, telegramBotToken };
 }
 
 export async function action({ request, context }: any) {
@@ -31,8 +38,44 @@ export async function action({ request, context }: any) {
 
   const formData = await request.formData();
   const raw = Object.fromEntries(formData);
-  const parsed = ProfileSchema.safeParse(raw);
+  const intent = formData.get("intent");
 
+  if (intent === "telegram") {
+    const parsed = TelegramSchema.safeParse(raw);
+    if (!parsed.success) {
+      return { errors: parsed.error.flatten().fieldErrors };
+    }
+
+    const token = parsed.data.telegram_bot_token.trim();
+    if (token) {
+      await db.setAppSetting("telegram_bot_token", token);
+    } else {
+      await db.deleteAppSetting("telegram_bot_token");
+    }
+
+    return redirect("/admin/settings");
+  }
+
+  if (intent === "telegram_test") {
+    const token = await db.getAppSetting("telegram_bot_token");
+    if (!token) {
+      return { errors: { telegram_bot_token: ["Please set Telegram bot token first"] } };
+    }
+
+    await sendTelegramNotification({
+      db,
+      appUrl: env.APP_URL,
+      notification: {
+        title: "Test notification from do action portal",
+        body: `Admin ${admin.name} sent a Telegram test message.`,
+        link: "/admin/settings",
+      },
+    });
+
+    return { success: { telegram: true } };
+  }
+
+  const parsed = ProfileSchema.safeParse(raw);
   if (!parsed.success) {
     return { errors: parsed.error.flatten().fieldErrors };
   }
@@ -42,14 +85,20 @@ export async function action({ request, context }: any) {
 }
 
 export default function AdminSettingsPage({ loaderData, actionData }: any) {
-  const { admin, adminUsers, uptimeKey } = loaderData;
+  const { admin, adminUsers, uptimeKey, telegramBotToken } = loaderData;
   const errors = actionData?.errors;
+  const telegramTestSuccess = Boolean(actionData?.success?.telegram);
   const { t } = useT();
 
   const maskedKey =
     uptimeKey.length > 12
       ? `${uptimeKey.slice(0, 6)}${"•".repeat(uptimeKey.length - 12)}${uptimeKey.slice(-6)}`
       : "•".repeat(uptimeKey.length);
+  const maskedTelegramToken = telegramBotToken
+    ? telegramBotToken.length > 12
+      ? `${telegramBotToken.slice(0, 6)}${"•".repeat(telegramBotToken.length - 12)}${telegramBotToken.slice(-6)}`
+      : "•".repeat(telegramBotToken.length)
+    : "";
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -153,6 +202,60 @@ export default function AdminSettingsPage({ loaderData, actionData }: any) {
             </span>
           </div>
         </div>
+        <Form method="post" className="rounded-lg border border-slate-100 bg-slate-50 p-4 space-y-3">
+          <input type="hidden" name="intent" value="telegram" />
+          <div className="flex items-center gap-2">
+            <span className="text-base">📨</span>
+            <p className="text-sm font-medium text-slate-800">
+              {t("admin_settings_telegram")}
+            </p>
+            {telegramBotToken ? (
+              <span className="ml-auto text-xs text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full font-medium">
+                {t("admin_settings_connected")}
+              </span>
+            ) : null}
+          </div>
+          <p className="text-xs text-slate-500">
+            {t("admin_settings_telegram_desc")}
+          </p>
+          <input
+            name="telegram_bot_token"
+            type="text"
+            defaultValue={telegramBotToken ?? ""}
+            placeholder="123456789:AA..."
+            className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-slate-900"
+          />
+          {maskedTelegramToken ? (
+            <p className="text-xs text-slate-400">
+              {t("admin_settings_saved_token")}: <span className="font-mono">{maskedTelegramToken}</span>
+            </p>
+          ) : null}
+          {errors?.telegram_bot_token ? (
+            <p className="text-xs text-rose-600">{errors.telegram_bot_token[0]}</p>
+          ) : null}
+          {telegramTestSuccess ? (
+            <p className="text-xs text-emerald-600">
+              {t("admin_settings_telegram_test_sent")}
+            </p>
+          ) : null}
+          <div className="flex justify-end gap-2">
+            <Form method="post">
+              <input type="hidden" name="intent" value="telegram_test" />
+              <button
+                type="submit"
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 transition-colors"
+              >
+                {t("admin_settings_telegram_test")}
+              </button>
+            </Form>
+            <button
+              type="submit"
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 transition-colors"
+            >
+              {t("save")}
+            </button>
+          </div>
+        </Form>
       </section>
 
       {/* Portal info */}
@@ -167,7 +270,7 @@ export default function AdminSettingsPage({ loaderData, actionData }: any) {
           />
           <InfoRow
             label={t("admin_settings_support_email")}
-            value="support@doaction.co.th"
+            value="aum@doaction.co.th"
           />
           <InfoRow label={t("admin_settings_version")} value="1.0.0" />
         </div>

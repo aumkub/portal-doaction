@@ -49,16 +49,24 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 
   const tasks = await db.listTasksByReport(report.id);
   const loginRedirect = `/reports/${report.id}`;
-  return { report, tasks, loginEmail, loginRedirect, canGoToReportList };
+  return {
+    report,
+    tasks,
+    loginEmail,
+    loginRedirect,
+    canGoToReportList,
+    websiteUrl: client.website_url,
+  };
 }
 
 export default function PublicReportPage({ loaderData }: Route.ComponentProps) {
-  const { report, tasks, loginEmail, loginRedirect, canGoToReportList } = loaderData as {
+  const { report, tasks, loginEmail, loginRedirect, canGoToReportList, websiteUrl } = loaderData as {
     report: MonthlyReport;
     tasks: ReportTask[];
     loginEmail: string;
     loginRedirect: string;
     canGoToReportList: boolean;
+    websiteUrl: string | null;
   };
 
   const heading = `รายงานประจำเดือน ${getThaiMonth(report.month)} ${report.year + 543}`;
@@ -77,27 +85,40 @@ export default function PublicReportPage({ loaderData }: Route.ComponentProps) {
   return (
     <div className="min-h-screen bg-slate-50">
       <main className="mx-auto max-w-4xl px-4 py-4 space-y-6">
-        {canGoToReportList ? (
-          <div className="pb-1 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <a
-              href="/reports"
-              className="order-2 sm:order-1 inline-flex items-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 transition-colors shadow-sm"
-            >
-              <span className="mr-2 text-slate-500" aria-hidden="true">←</span>
-              ไปหน้ารายงานทั้งหมด
-            </a>
-            <div className="order-1 sm:order-2">{brandLogo}</div>
-          </div>
-        ) : (
-          <div>{brandLogo}</div>
-        )}
+        <div className="print:hidden">
+          {canGoToReportList ? (
+            <div className="pb-1 flex flex-col sm:flex-row items-center justify-between gap-3 no-print">
+              <a
+                href="/reports"
+                className="order-2 sm:order-1 inline-flex items-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 transition-colors shadow-sm"
+              >
+                <span className="mr-2 text-slate-500" aria-hidden="true">←</span>
+                ไปหน้ารายงานทั้งหมด
+              </a>
+              <div className="order-1 sm:order-2">{brandLogo}</div>
+            </div>
+          ) : (
+            <div className="no-print">{brandLogo}</div>
+          )}
+        </div>
         <section className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 space-y-4 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
             <div className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
               Monthly Service Report
             </div>
+            {websiteUrl && (
+              <a
+                href={websiteUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex w-fit items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-200 transition-colors"
+              >
+                {websiteUrl.replace(/^https?:\/\//, "")}
+              </a>
+            )}
           </div>
           <h1 className="text-xl sm:text-2xl font-semibold text-slate-900">{heading}</h1>
+
           {report.summary && (
             <p className="text-sm text-slate-600 leading-relaxed">{report.summary}</p>
           )}

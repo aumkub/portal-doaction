@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { formatDate, generateId } from "~/lib/utils";
+import { sendTelegramNotification } from "~/lib/telegram.server";
 import type { SupportTicket, TicketMessage, User, Client } from "~/types";
 import StatusBadge from "~/components/tickets/StatusBadge";
 import PriorityBadge from "~/components/tickets/PriorityBadge";
@@ -97,7 +98,7 @@ export async function action({ request, context, params }: any) {
     const client = await db.getClientById(ticket.client_id);
     if (client) {
       const statusLabel = status ? STATUS_LABEL_TH[status] ?? status : "";
-      await db.createNotification({
+      const notification = {
         id: generateId(),
         user_id: client.user_id,
         type: "ticket_update",
@@ -105,6 +106,12 @@ export async function action({ request, context, params }: any) {
         body: `สถานะเปลี่ยนเป็น ${statusLabel}`,
         link: `/tickets/${ticket.id}`,
         read: 0,
+      } as const;
+      await db.createNotification(notification);
+      await sendTelegramNotification({
+        db,
+        appUrl: env.APP_URL,
+        notification,
       });
     }
     return redirect(`/admin/tickets/${ticket.id}`);
@@ -129,7 +136,7 @@ export async function action({ request, context, params }: any) {
     // Notify client
     const client = await db.getClientById(ticket.client_id);
     if (client) {
-      await db.createNotification({
+      const notification = {
         id: generateId(),
         user_id: client.user_id,
         type: "ticket_reply",
@@ -137,6 +144,12 @@ export async function action({ request, context, params }: any) {
         body: message.slice(0, 100),
         link: `/tickets/${ticket.id}`,
         read: 0,
+      } as const;
+      await db.createNotification(notification);
+      await sendTelegramNotification({
+        db,
+        appUrl: env.APP_URL,
+        notification,
       });
     }
   }

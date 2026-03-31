@@ -207,6 +207,12 @@ const th = {
   admin_settings_uptime_desc:
     "ดึงข้อมูล Uptime อัตโนมัติโดยจับคู่กับ domain ของลูกค้า",
   admin_settings_api_key_note: "Read-only API key",
+  admin_settings_telegram: "Telegram Bot",
+  admin_settings_telegram_desc:
+    "ใส่ Bot Token เพื่อส่งแจ้งเตือนจากระบบไปยัง Telegram",
+  admin_settings_saved_token: "Token ที่บันทึกไว้",
+  admin_settings_telegram_test: "ทดสอบส่งข้อความ",
+  admin_settings_telegram_test_sent: "ส่งข้อความทดสอบไป Telegram แล้ว",
   admin_settings_portal_info: "ข้อมูลพอร์ทัล",
   admin_settings_platform: "แพลตฟอร์ม",
   admin_settings_support_email: "อีเมลซัพพอร์ต",
@@ -509,6 +515,12 @@ const en: Record<keyof typeof th, string> = {
   admin_settings_uptime_desc:
     "Automatically fetch uptime matched to each client domain",
   admin_settings_api_key_note: "Read-only API key",
+  admin_settings_telegram: "Telegram Bot",
+  admin_settings_telegram_desc:
+    "Set bot token to forward system notifications to Telegram",
+  admin_settings_saved_token: "Saved token",
+  admin_settings_telegram_test: "Send test message",
+  admin_settings_telegram_test_sent: "Test Telegram message sent",
   admin_settings_portal_info: "Portal info",
   admin_settings_platform: "Platform",
   admin_settings_support_email: "Support email",
