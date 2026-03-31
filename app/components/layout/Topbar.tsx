@@ -58,7 +58,8 @@ function NotificationDropdown({ notifications }: { notifications: Notification[]
             />
           </svg>
           {unread.length > 0 && (
-            <span className="absolute top-1 right-1 w-4 h-4 bg-violet-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center leading-none">
+            <span className={`absolute top-1 right-1 w-4 h-4 bg-violet-600 text-white font-bold rounded-full flex items-center justify-center leading-none
+              ${unread.length > 9 ? "text-[8px]" : "text-[10px]"}`}>
               {unread.length > 9 ? "9+" : unread.length}
             </span>
           )}
@@ -205,7 +206,7 @@ export default function Topbar({
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
               <a href={settingsHref}>
-                <span className="mr-2">⚙️</span> {t("topbar_account_settings")}
+                <span className="">⚙️</span> {t("topbar_account_settings")}
               </a>
             </DropdownMenuItem>
             <DropdownMenuSeparator />

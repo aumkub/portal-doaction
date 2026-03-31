@@ -275,17 +275,17 @@ export default function DashboardPage({ loaderData }: Route.ComponentProps) {
                   value={
                     isOnline === null ? (
                       <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full">
-                        <span className="w-1.5 h-1.5 bg-slate-300 rounded-full" />
+                        <span className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-[ping_1.2s_cubic-bezier(0,0,0.2,1)_infinite,signal-blink_1.2s_cubic-bezier(0.5,0,1,1)_infinite]" style={{ animationName: "ping, signal-blink" }} />
                         {t("dash_unknown")}
                       </span>
                     ) : isOnline ? (
                       <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
-                        <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                        <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-[ping_1s_cubic-bezier(0,0,0.2,1)_infinite,signal-blink_1s_cubic-bezier(0.5,0,1,1)_infinite]" style={{ animationName: "ping, signal-blink" }} />
                         Online
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1.5 text-xs font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
-                        <span className="w-1.5 h-1.5 bg-red-500 rounded-full" />
+                        <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-[ping_1s_cubic-bezier(0,0,0.2,1)_infinite,signal-blink_1s_cubic-bezier(0.5,0,1,1)_infinite]" style={{ animationName: "ping, signal-blink" }} />
                         Offline
                       </span>
                     )
