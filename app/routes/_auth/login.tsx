@@ -114,14 +114,9 @@ export default function LoginPage() {
       <div className="mb-8">
         <div className="flex items-center gap-3">
           <img
-            src="/logo-white.svg"
-            alt="DoAction"
-            className="w-[200px] mx-auto block dark:hidden"
-          />
-          <img
             src="/logo-dark.svg"
             alt="DoAction"
-            className="w-[200px] mx-auto hidden dark:block"
+            className="w-[200px] mx-auto"
           />
         </div>
         <p className="block text-center text-sm text-black mt-0 tracking-widest font-bold">

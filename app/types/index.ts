@@ -121,6 +121,18 @@ export interface TicketMessage {
   created_at: number;
 }
 
+export interface TicketAttachment {
+  id: string;
+  ticket_id: string;
+  message_id: string;
+  uploader_user_id: string;
+  file_key: string;
+  file_name: string;
+  mime_type: string;
+  size_bytes: number;
+  created_at: number;
+}
+
 export type TicketWithMessages = SupportTicket & { messages: TicketMessage[] };
 
 // ─── Notification ────────────────────────────────────────────────────────────

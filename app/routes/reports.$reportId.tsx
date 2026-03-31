@@ -23,7 +23,9 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const env = context.cloudflare.env;
   const db = createDB(env.DB);
   const report = await db.getReport(params.reportId);
-  if (!report || report.status !== "published") {
+  const viewer = await getAuthenticatedUser(request, env.DB, env.SESSIONPORTAL);
+  const isAdminPreview = viewer?.role === "admin";
+  if (!report || (report.status !== "published" && !isAdminPreview)) {
     throw new Response("Not Found", { status: 404 });
   }
 
@@ -31,7 +33,6 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   if (!client) throw new Response("Not Found", { status: 404 });
 
   let canGoToReportList = false;
-  const viewer = await getAuthenticatedUser(request, env.DB, env.SESSIONPORTAL);
   if (viewer?.role === "client") {
     const viewerClient = await db.getClientByUserId(viewer.id);
     canGoToReportList = Boolean(viewerClient && viewerClient.id === report.client_id);
@@ -55,17 +56,19 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     loginEmail,
     loginRedirect,
     canGoToReportList,
+    isAdminPreview,
     websiteUrl: client.website_url,
   };
 }
 
 export default function PublicReportPage({ loaderData }: Route.ComponentProps) {
-  const { report, tasks, loginEmail, loginRedirect, canGoToReportList, websiteUrl } = loaderData as {
+  const { report, tasks, loginEmail, loginRedirect, canGoToReportList, isAdminPreview, websiteUrl } = loaderData as {
     report: MonthlyReport;
     tasks: ReportTask[];
     loginEmail: string;
     loginRedirect: string;
     canGoToReportList: boolean;
+    isAdminPreview: boolean;
     websiteUrl: string | null;
   };
 
@@ -73,8 +76,7 @@ export default function PublicReportPage({ loaderData }: Route.ComponentProps) {
   const brandLogo = (
     <div>
       <div className="flex items-center gap-3 mb-1">
-        <img src="/logo-white.svg" alt="DoAction" className="w-[150px] mx-auto block dark:hidden" />
-        <img src="/logo-dark.svg" alt="DoAction" className="w-[150px] mx-auto hidden dark:block" />
+        <img src="/logo-dark.svg" alt="DoAction" className="w-[150px] mx-auto"/>
       </div>
       <p className="block text-center text-[10px] text-black mt-1 tracking-widest font-bold">
         CLIENT PORTAL
@@ -86,7 +88,18 @@ export default function PublicReportPage({ loaderData }: Route.ComponentProps) {
     <div className="min-h-screen bg-slate-50">
       <main className="mx-auto max-w-4xl px-4 py-4 space-y-6">
         <div className="print:hidden">
-          {canGoToReportList ? (
+          {isAdminPreview ? (
+            <div className="pb-1 flex items-center justify-between gap-3 no-print">
+              <a
+                href="/admin/reports"
+                className="inline-flex items-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 transition-colors shadow-sm"
+              >
+                <span className="mr-2 text-slate-500" aria-hidden="true">←</span>
+                กลับไปหน้ารายงาน (Admin)
+              </a>
+              <div>{brandLogo}</div>
+            </div>
+          ) : canGoToReportList ? (
             <div className="pb-1 flex flex-col sm:flex-row items-center justify-between gap-3 no-print">
               <a
                 href="/reports"
@@ -122,7 +135,7 @@ export default function PublicReportPage({ loaderData }: Route.ComponentProps) {
           {report.summary && (
             <p className="text-sm text-slate-600 leading-relaxed">{report.summary}</p>
           )}
-          {!canGoToReportList && (
+          {!canGoToReportList && !isAdminPreview && (
             <div className="rounded-xl border border-violet-200 bg-violet-50/80 p-4 space-y-3">
               <p className="text-sm text-violet-900">
                 เข้าสู่ระบบ เพื่อดูรายงานทั้งหมดหรือหน้าอื่นในพอร์ทัล

@@ -104,7 +104,7 @@ export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[720px]">
+          <table className="w-full text-sm min-w-[850px]">
             <thead>
               <tr className="border-b border-slate-100">
                 <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">
@@ -235,6 +235,14 @@ export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
                             className="inline-flex items-center justify-center rounded-lg border border-transparent text-xs text-slate-500 hover:text-slate-900 transition-colors p-2"
                           >
                             {t("admin_reports_edit")}
+                          </a>
+                          <a
+                            href={`/reports/${report.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-xs text-slate-600 hover:bg-slate-50 transition-colors px-3 py-2"
+                          >
+                            {t("admin_reports_preview")}
                           </a>
                         </div>
                       </td>

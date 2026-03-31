@@ -12,6 +12,7 @@ const th = {
   nav_clients: "ลูกค้า",
   nav_admin_reports: "รายงาน",
   nav_all_tickets: "Tickets ทั้งหมด",
+  nav_attachments: "ไฟล์แนบ",
   nav_logout: "ออกจากระบบ",
 
   // ─── Topbar ────────────────────────────────────────────
@@ -224,6 +225,7 @@ const th = {
   admin_reports_col_tasks_short: "งาน",
   admin_reports_col_status: "สถานะ",
   admin_reports_col_actions: "ดำเนินการ",
+  admin_reports_preview: "พรีวิวรายงาน",
   admin_reports_empty: "ยังไม่มี Report",
   admin_report_status_published: "เผยแพร่แล้ว",
   admin_report_status_draft: "Draft",
@@ -330,6 +332,7 @@ const en: Record<keyof typeof th, string> = {
   nav_clients: "Clients",
   nav_admin_reports: "Reports",
   nav_all_tickets: "All Tickets",
+  nav_attachments: "Attachments",
   nav_logout: "Logout",
 
   // ─── Topbar ────────────────────────────────────────────
@@ -542,6 +545,7 @@ const en: Record<keyof typeof th, string> = {
   admin_reports_col_tasks_short: "Tasks",
   admin_reports_col_status: "Status",
   admin_reports_col_actions: "Actions",
+  admin_reports_preview: "Preview report",
   admin_reports_empty: "No reports yet",
   admin_report_status_published: "Published",
   admin_report_status_draft: "Draft",

@@ -161,6 +161,16 @@ export default function AdminReportDetailPage({
           { label: periodTitle },
         ]}
       />
+      <div className="flex justify-end">
+        <a
+          href={`/reports/${report.id}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+        >
+          {t("admin_reports_preview")}
+        </a>
+      </div>
       <ReportEditor
         report={report}
         tasks={tasks}

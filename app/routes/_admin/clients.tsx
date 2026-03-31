@@ -64,8 +64,8 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
         </a>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden overflow-x-auto">
+        <table className="w-full text-sm min-w-[800px]">
           <thead>
             <tr className="border-b border-slate-100">
               <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">
@@ -149,7 +149,7 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
                     <div className="flex items-center gap-2">
                       <a
                         href={`/admin/clients/${client.id}`}
-                        className="inline-block text-xs font-medium text-violet-700 bg-violet-50 hover:bg-violet-100 hover:text-violet-900 border border-violet-200 px-3 py-1 rounded-lg transition-colors"
+                        className="inline-block text-center text-xs font-medium text-violet-700 bg-violet-50 hover:bg-violet-100 hover:text-violet-900 border border-violet-200 px-3 py-1 rounded-lg transition-colors"
                       >
                         {t("admin_view_details")}
                       </a>

@@ -8,6 +8,7 @@ import type {
   TicketMessage,
   Notification,
   MagicLinkToken,
+  TicketAttachment,
 } from "~/types";
 
 // ─── DB wrapper ───────────────────────────────────────────────────────────────
@@ -380,6 +381,88 @@ export function createDB(d1: D1Database) {
         )
         .bind(msg.id, msg.ticket_id, msg.user_id, msg.message, msg.is_internal)
         .run();
+    },
+
+    async createTicketAttachment(
+      attachment: Omit<TicketAttachment, "created_at">
+    ): Promise<void> {
+      await d1
+        .prepare(
+          `INSERT INTO ticket_attachments
+            (id, ticket_id, message_id, uploader_user_id, file_key, file_name, mime_type, size_bytes)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .bind(
+          attachment.id,
+          attachment.ticket_id,
+          attachment.message_id,
+          attachment.uploader_user_id,
+          attachment.file_key,
+          attachment.file_name,
+          attachment.mime_type,
+          attachment.size_bytes
+        )
+        .run();
+    },
+
+    async listAttachmentsByTicket(ticket_id: string): Promise<TicketAttachment[]> {
+      const result = await d1
+        .prepare(
+          "SELECT * FROM ticket_attachments WHERE ticket_id = ? ORDER BY created_at ASC"
+        )
+        .bind(ticket_id)
+        .all<TicketAttachment>();
+      return result.results;
+    },
+
+    async getTicketAttachmentByKey(file_key: string): Promise<TicketAttachment | null> {
+      return d1
+        .prepare("SELECT * FROM ticket_attachments WHERE file_key = ?")
+        .bind(file_key)
+        .first<TicketAttachment>();
+    },
+
+    async getTicketAttachmentById(id: string): Promise<TicketAttachment | null> {
+      return d1
+        .prepare("SELECT * FROM ticket_attachments WHERE id = ?")
+        .bind(id)
+        .first<TicketAttachment>();
+    },
+
+    async deleteTicketAttachment(id: string): Promise<void> {
+      await d1.prepare("DELETE FROM ticket_attachments WHERE id = ?").bind(id).run();
+    },
+
+    async listAllTicketAttachments(): Promise<
+      Array<
+        TicketAttachment & {
+          ticket_title: string;
+          message_text: string;
+          uploader_name: string;
+        }
+      >
+    > {
+      const result = await d1
+        .prepare(
+          `SELECT
+             a.*,
+             t.title AS ticket_title,
+             m.message AS message_text,
+             u.name AS uploader_name
+           FROM ticket_attachments a
+           JOIN support_tickets t ON t.id = a.ticket_id
+           JOIN ticket_messages m ON m.id = a.message_id
+           JOIN users u ON u.id = a.uploader_user_id
+           ORDER BY a.created_at DESC`
+        )
+        .all<
+          TicketAttachment & {
+            ticket_title: string;
+            message_text: string;
+            uploader_name: string;
+          }
+        >();
+      return result.results;
     },
 
     // ── Notifications ─────────────────────────────────────────────────────────

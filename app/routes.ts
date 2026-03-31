@@ -39,6 +39,7 @@ export default [
       route("clients/:clientId", "routes/_admin/client-detail.tsx"),
       route("tickets", "routes/_admin/tickets.tsx"),
       route("tickets/:ticketId", "routes/_admin/tickets.$ticketId.tsx"),
+      route("attachments", "routes/_admin/attachments.tsx"),
       route("reports", "routes/_admin/reports.tsx"),
       route("reports/new", "routes/_admin/reports-new.tsx"),
       route("reports/:reportId", "routes/_admin/reports-detail.tsx"),
@@ -55,4 +56,6 @@ export default [
   route("api/report-notify", "routes/api/report-notify.ts"),
   route("api/impersonation/stop", "routes/api/impersonation-stop.ts"),
   route("api/uptime", "routes/api/uptime.ts"),
+  route("api/attachments-upload", "routes/api/attachments-upload.ts"),
+  route("api/attachments/:key", "routes/api/attachments.$key.ts"),
 ] satisfies RouteConfig;

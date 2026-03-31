@@ -1,4 +1,5 @@
 import { NavLink, Form } from "react-router";
+import { useState } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "~/components/ui/sheet";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { cn } from "~/lib/utils";
@@ -20,6 +21,7 @@ const adminNav: NavItem[] = [
   { labelKey: "nav_clients", href: "/admin/clients", icon: "👥" },
   { labelKey: "nav_admin_reports", href: "/admin/reports", icon: "📋" },
   { labelKey: "nav_all_tickets", href: "/admin/tickets", icon: "🎫" },
+  { labelKey: "nav_attachments", href: "/admin/attachments", icon: "📎" },
   { labelKey: "nav_settings", href: "/admin/settings", icon: "⚙️" },
 ];
 
@@ -28,7 +30,7 @@ interface SidebarProps {
   companyName?: string | null;
 }
 
-function NavItems({ nav }: { nav: NavItem[] }) {
+function NavItems({ nav, onNavigate }: { nav: NavItem[]; onNavigate?: () => void }) {
   const { t } = useT();
   return (
     <nav className="flex-1 py-4 px-3 space-y-0.5">
@@ -38,6 +40,7 @@ function NavItems({ nav }: { nav: NavItem[] }) {
           to={item.href}
           end={item.end}
           prefetch="intent"
+          onClick={onNavigate}
           className={({ isActive }) =>
             cn(
               "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
@@ -78,12 +81,13 @@ function LogoBlock({ companyName }: { companyName?: string | null }) {
 }
 
 /** Above logout — full contact page with LINE / phone / social / email. */
-function ClientContactNavLink() {
+function ClientContactNavLink({ onNavigate }: { onNavigate?: () => void }) {
   const { t } = useT();
   return (
     <div className="px-3 pt-2 pb-1 border-t !border-gray-700 shrink-0">
       <NavLink
         to="/contact"
+        onClick={onNavigate}
         className={({ isActive }) =>
           cn(
             "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
@@ -117,7 +121,11 @@ function LogoutButton() {
   );
 }
 
-function SidebarContent({ role, companyName }: SidebarProps) {
+function SidebarContent({
+  role,
+  companyName,
+  onNavigate,
+}: SidebarProps & { onNavigate?: () => void }) {
   const { t } = useT();
   const nav = role === "admin" ? adminNav : clientNav;
   return (
@@ -131,9 +139,9 @@ function SidebarContent({ role, companyName }: SidebarProps) {
         </div>
       ) : null}
       <ScrollArea className="flex-1">
-        <NavItems nav={nav} />
+        <NavItems nav={nav} onNavigate={onNavigate} />
       </ScrollArea>
-      {role === "client" ? <ClientContactNavLink /> : null}
+      {role === "client" ? <ClientContactNavLink onNavigate={onNavigate} /> : null}
       <LogoutButton />
     </div>
   );
@@ -150,8 +158,10 @@ export function DesktopSidebar({ role, companyName }: SidebarProps) {
 
 /** Mobile sidebar trigger + Sheet. */
 export function MobileSidebarTrigger({ role, companyName }: SidebarProps) {
+  const [open, setOpen] = useState(false);
+
   return (
-    <Sheet>
+    <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
         <button
           className="lg:hidden p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors"
@@ -173,7 +183,11 @@ export function MobileSidebarTrigger({ role, companyName }: SidebarProps) {
         </button>
       </SheetTrigger>
       <SheetContent side="left" className="w-60 p-0 border-0">
-        <SidebarContent role={role} companyName={companyName} />
+        <SidebarContent
+          role={role}
+          companyName={companyName}
+          onNavigate={() => setOpen(false)}
+        />
       </SheetContent>
     </Sheet>
   );

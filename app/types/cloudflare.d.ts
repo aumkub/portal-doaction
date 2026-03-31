@@ -10,6 +10,8 @@ interface CloudflareEnv {
   APP_URL: string;
   // Secret used for HMAC signing (magic link tokens, etc.)
   SESSION_SECRET: string;
+  // File attachments bucket
+  ATTACHMENTS: R2Bucket;
   // Legacy var from Cloudflare template
   VALUE_FROM_CLOUDFLARE: string;
 }
