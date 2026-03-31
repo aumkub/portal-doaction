@@ -348,12 +348,12 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
 
       {/* Message thread */}
       <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-        <MessageBubble message={ticket.description} isClient={true} isInternal={false} />
+        <MessageBubble message={ticket.description} isClient={false} isInternal={false} />
         {messages.map((msg) => (
           <div key={msg.id} id={`msg-${msg.id}`}>
             <MessageBubble
               message={msg.message}
-              isClient={usersById[msg.user_id]?.role !== "admin"}
+              isClient={usersById[msg.user_id]?.role === "admin"}
               isInternal={msg.is_internal === 1}
               authorName={usersById[msg.user_id]?.name}
               attachments={(attachmentsByMessage[msg.id] ?? []).map((att) => ({
@@ -368,7 +368,7 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
       </div>
 
       {/* Reply form */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-4">
+      <div key={messages.length} className="rounded-2xl border border-slate-200 bg-white p-4">
         <Form method="post" className="space-y-3">
           <input type="hidden" name="intent" value="reply" />
           <input type="hidden" name="attachments_json" value={JSON.stringify(uploadedFiles)} />

@@ -437,7 +437,7 @@ export function createDB(d1: D1Database) {
       Array<
         TicketAttachment & {
           ticket_title: string;
-          message_text: string;
+          message_text: string | null;
           uploader_name: string;
         }
       >
@@ -451,14 +451,14 @@ export function createDB(d1: D1Database) {
              u.name AS uploader_name
            FROM ticket_attachments a
            JOIN support_tickets t ON t.id = a.ticket_id
-           JOIN ticket_messages m ON m.id = a.message_id
+           LEFT JOIN ticket_messages m ON m.id = a.message_id
            JOIN users u ON u.id = a.uploader_user_id
            ORDER BY a.created_at DESC`
         )
         .all<
           TicketAttachment & {
             ticket_title: string;
-            message_text: string;
+            message_text: string | null;
             uploader_name: string;
           }
         >();

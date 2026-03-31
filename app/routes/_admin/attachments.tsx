@@ -57,7 +57,7 @@ export default function AdminAttachmentsPage({ loaderData }: any) {
       size_bytes: number;
       created_at: number;
       ticket_title: string;
-      message_text: string;
+      message_text: string | null;
       uploader_name: string;
     }>;
   };
@@ -113,12 +113,16 @@ export default function AdminAttachmentsPage({ loaderData }: any) {
                     </td>
                     <td className="px-5 py-4 text-slate-700">{a.ticket_title}</td>
                     <td className="px-5 py-4">
-                      <a
-                        href={`/admin/tickets/${a.ticket_id}#msg-${a.message_id}`}
-                        className="text-violet-600 hover:text-violet-800 text-xs underline underline-offset-2"
-                      >
-                        {a.message_text.slice(0, 70)}
-                      </a>
+                      {a.message_text ? (
+                        <a
+                          href={`/admin/tickets/${a.ticket_id}#msg-${a.message_id}`}
+                          className="text-violet-600 hover:text-violet-800 text-xs underline underline-offset-2"
+                        >
+                          {a.message_text.slice(0, 70)}
+                        </a>
+                      ) : (
+                        <span className="text-xs text-slate-400 italic">(ไม่ได้ส่ง)</span>
+                      )}
                     </td>
                     <td className="px-5 py-4 text-slate-600">{a.uploader_name}</td>
                     <td className="px-5 py-4 text-slate-500">{formatDate(a.created_at, lang)}</td>
