@@ -1,5 +1,5 @@
-import { Form, redirect } from "react-router";
-import { useState } from "react";
+import { Form, redirect, useNavigation } from "react-router";
+import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { requireAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
@@ -13,6 +13,7 @@ import {
   isAllowedAttachment,
   isAttachmentTooLarge,
   prepareAttachmentForUpload,
+  cleanupOrphanAttachment,
   uploadAttachment,
 } from "~/lib/file-upload.client";
 import type {
@@ -236,15 +237,19 @@ export async function action({ request, context, params }: any) {
 }
 
 export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
-  const { ticket, messages, attachments, usersById, client } = loaderData as {
+  const { ticket, messages, attachments, usersById, client, admin } = loaderData as {
     ticket: SupportTicket;
     messages: TicketMessage[];
     attachments: TicketAttachment[];
     usersById: Record<string, User>;
     client: Client | null;
+    admin: User;
   };
   const errors = actionData?.errors;
   const { t, lang } = useT();
+  const navigation = useNavigation();
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const isSubmittingReplyRef = useRef(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState<string>("");
@@ -258,6 +263,36 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
     },
     {}
   );
+
+  useEffect(() => {
+    if (navigation.state !== "idle") return;
+    if (!isSubmittingReplyRef.current) return;
+    if (errors?.message) {
+      isSubmittingReplyRef.current = false;
+      return;
+    }
+
+    formRef.current?.reset();
+    setUploadedFiles([]);
+    setUploadError("");
+    isSubmittingReplyRef.current = false;
+  }, [navigation.state, errors?.message]);
+
+  useEffect(() => {
+    const cleanupPendingUploads = () => {
+      if (isSubmittingReplyRef.current || uploadedFiles.length === 0) return;
+      for (const f of uploadedFiles) {
+        void cleanupOrphanAttachment({ ticketId: ticket.id, fileKey: f.fileKey });
+      }
+    };
+
+    const onBeforeUnload = () => cleanupPendingUploads();
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      cleanupPendingUploads();
+    };
+  }, [ticket.id, uploadedFiles]);
 
   async function onAttachmentSelect(fileList: FileList | null) {
     if (!fileList || fileList.length === 0) return;
@@ -348,12 +383,13 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
 
       {/* Message thread */}
       <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-        <MessageBubble message={ticket.description} isClient={true} isInternal={false} />
+        <MessageBubble message={ticket.description} isClient={true} isInternal={false} alignRight={false} />
         {messages.map((msg) => (
           <div key={msg.id} id={`msg-${msg.id}`}>
             <MessageBubble
               message={msg.message}
               isClient={usersById[msg.user_id]?.role !== "admin"}
+              alignRight={usersById[msg.user_id]?.role === "admin"}
               isInternal={msg.is_internal === 1}
               authorName={usersById[msg.user_id]?.name}
               attachments={(attachmentsByMessage[msg.id] ?? []).map((att) => ({
@@ -369,7 +405,14 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
 
       {/* Reply form */}
       <div className="rounded-2xl border border-slate-200 bg-white p-4">
-        <Form method="post" className="space-y-3">
+        <Form
+          method="post"
+          className="space-y-3"
+          ref={formRef}
+          onSubmit={() => {
+            isSubmittingReplyRef.current = true;
+          }}
+        >
           <input type="hidden" name="intent" value="reply" />
           <input type="hidden" name="attachments_json" value={JSON.stringify(uploadedFiles)} />
           <label className="block text-sm font-medium text-slate-700">
@@ -409,19 +452,23 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
             ) : null}
             {uploadError ? <p className="text-xs text-rose-600">{uploadError}</p> : null}
             {uploadedFiles.length > 0 ? (
-              <ul className="text-xs text-slate-600 space-y-2 mt-2 max-w-[500px]">
+              <ul className="text-xs text-slate-600 space-y-2 mt-2 max-w-[500px] bg-slate-100 rounded-lg p-2">
                 {uploadedFiles.map((f) => (
-                  <li key={f.fileKey} className="flex items-center justify-between gap-2">
+                  <li
+                    key={f.fileKey}
+                    className="flex items-center justify-between gap-2 bg-slate-50 rounded px-2 py-1"
+                  >
                     <span>
                       {getAttachmentIcon(f.fileName, f.mimeType)} {f.fileName}
                     </span>
                     <button
                       type="button"
-                      onClick={() =>
+                      onClick={() => {
                         setUploadedFiles((prev) =>
                           prev.filter((item) => item.fileKey !== f.fileKey)
-                        )
-                      }
+                        );
+                        void cleanupOrphanAttachment({ ticketId: ticket.id, fileKey: f.fileKey });
+                      }}
                       className="rounded border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-500 hover:bg-slate-50"
                     >
                       Remove

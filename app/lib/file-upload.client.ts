@@ -104,3 +104,18 @@ export async function uploadAttachment(params: {
     xhr.send(formData);
   });
 }
+
+export async function cleanupOrphanAttachment(params: {
+  ticketId: string;
+  fileKey: string;
+}): Promise<void> {
+  const formData = new FormData();
+  formData.append("intent", "cleanup_orphan");
+  formData.append("ticketId", params.ticketId);
+  formData.append("fileKey", params.fileKey);
+  await fetch("/api/attachments-upload", {
+    method: "POST",
+    body: formData,
+    credentials: "same-origin",
+  });
+}

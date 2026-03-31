@@ -17,6 +17,38 @@ export async function action({ request, context }: any) {
   const db = createDB(env.DB);
 
   const formData = await request.formData();
+  const intent = formData.get("intent");
+  if (intent === "cleanup_orphan") {
+    const ticketId = formData.get("ticketId");
+    const fileKey = formData.get("fileKey");
+    if (
+      typeof ticketId !== "string" ||
+      !ticketId ||
+      typeof fileKey !== "string" ||
+      !fileKey
+    ) {
+      return Response.json({ error: "invalid_payload" }, { status: 400 });
+    }
+
+    const ticket = await db.getTicket(ticketId);
+    if (!ticket) return Response.json({ error: "ticket_not_found" }, { status: 404 });
+
+    if (user.role === "client") {
+      const client = await db.getClientByUserId(user.id);
+      if (!client || client.id !== ticket.client_id) {
+        return Response.json({ error: "forbidden" }, { status: 403 });
+      }
+    }
+
+    const linkedAttachment = await db.getTicketAttachmentByKey(fileKey);
+    if (linkedAttachment) {
+      return Response.json({ ok: true, skipped: "linked" });
+    }
+
+    await env.ATTACHMENTS.delete(fileKey);
+    return Response.json({ ok: true });
+  }
+
   const ticketId = formData.get("ticketId");
   const file = formData.get("file");
   if (typeof ticketId !== "string" || !ticketId || !(file instanceof File)) {

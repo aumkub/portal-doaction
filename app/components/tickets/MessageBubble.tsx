@@ -4,19 +4,22 @@ export default function MessageBubble({
   isInternal,
   authorName,
   attachments = [],
+  alignRight,
 }: {
   message: string;
   isClient: boolean;
   isInternal: boolean;
   authorName?: string;
   attachments?: Array<{ id: string; name: string; href: string; icon?: string }>;
+  alignRight?: boolean;
 }) {
+  const shouldAlignRight = alignRight ?? isClient;
   const attachmentClass = isClient
     ? "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
     : "border-white/30 bg-white/10 text-white hover:bg-white/20";
 
   return (
-    <div className={`flex ${isClient ? "justify-end" : "justify-start"}`}>
+    <div className={`flex ${shouldAlignRight ? "justify-end" : "justify-start"}`}>
       <div
         className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm shadow-sm ${
           isClient
