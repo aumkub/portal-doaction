@@ -34,6 +34,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
   // Redirect based on role
   const user = await db.getUserById(record.user_id);
+  if (user?.first_login_at == null) {
+    await db.updateUser(record.user_id, {
+      first_login_at: Math.floor(Date.now() / 1000),
+    });
+  }
   const destination = user?.role === "admin" ? "/admin/clients" : "/dashboard";
 
   return redirect(destination, {

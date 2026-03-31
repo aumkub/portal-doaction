@@ -118,6 +118,11 @@ export default function ReportEditor({
   );
   const [uptimeFetching, setUptimeFetching] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState(report?.client_id ?? "");
+  const [selectedClientIds, setSelectedClientIds] = useState<string[]>(
+    report?.client_id ? [report.client_id] : []
+  );
+  const [uptimeOverrides, setUptimeOverrides] = useState<Record<string, string>>({});
+  const [uptimeFetchingByClient, setUptimeFetchingByClient] = useState<Record<string, boolean>>({});
 
   const presetTasks = lang === "en" ? PRESET_TASKS_EN : PRESET_TASKS_TH;
 
@@ -174,6 +179,31 @@ export default function ReportEditor({
     }
   }, []);
 
+  const handleToggleClient = useCallback(async (clientId: string, checked: boolean) => {
+    setSelectedClientIds((prev) =>
+      checked ? [...prev, clientId] : prev.filter((id) => id !== clientId)
+    );
+
+    if (!checked || uptimeOverrides[clientId] != null) return;
+    setUptimeFetchingByClient((prev) => ({ ...prev, [clientId]: true }));
+    try {
+      const resp = await fetch(`/api/uptime?clientId=${clientId}`);
+      if (resp.ok) {
+        const data = (await resp.json()) as { uptimeRatio: number | null };
+        if (data.uptimeRatio != null) {
+          setUptimeOverrides((prev) => ({
+            ...prev,
+            [clientId]: data.uptimeRatio!.toFixed(2),
+          }));
+        }
+      }
+    } catch {
+      // ignore
+    } finally {
+      setUptimeFetchingByClient((prev) => ({ ...prev, [clientId]: false }));
+    }
+  }, [uptimeOverrides]);
+
   const addTask = () => {
     setTaskDrafts((prev) => [
       ...prev,
@@ -215,6 +245,20 @@ export default function ReportEditor({
           taskDrafts.map(({ id: _id, ...t }) => t)
         )}
       />
+      {isNew && (
+        <>
+          <input
+            type="hidden"
+            name="client_ids_json"
+            value={JSON.stringify(selectedClientIds)}
+          />
+          <input
+            type="hidden"
+            name="uptime_overrides_json"
+            value={JSON.stringify(uptimeOverrides)}
+          />
+        </>
+      )}
 
       {/* ── Basic Info ─────────────────────────────────────────────────────── */}
       <section className="bg-white rounded-xl border border-slate-200 p-6 space-y-5">
@@ -223,30 +267,58 @@ export default function ReportEditor({
         </h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {/* Client */}
-          <div className="space-y-1.5">
-            <Label htmlFor="client_id">{t("admin_col_client")}</Label>
-            <select
-              id="client_id"
-              name="client_id"
-              value={selectedClientId}
-              onChange={(e) => handleClientChange(e.target.value)}
-              required
-              className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
-            >
-              <option value="" disabled>
-                {t("admin_editor_select_client")}
-              </option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.company_name}
+          {/* Client(s) */}
+          {isNew ? (
+            <div className="space-y-2 sm:col-span-2">
+              <Label>{t("admin_editor_select_clients")}</Label>
+              <div className="max-h-44 overflow-y-auto rounded-lg border border-slate-200 bg-white p-3 grid sm:grid-cols-2 gap-2">
+                {clients.map((c) => {
+                  const checked = selectedClientIds.includes(c.id);
+                  return (
+                    <label
+                      key={c.id}
+                      className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-slate-50 text-sm text-slate-700 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => handleToggleClient(c.id, e.target.checked)}
+                        className="rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+                      />
+                      <span>{c.company_name}</span>
+                    </label>
+                  );
+                })}
+              </div>
+              {errors?.client_ids_json && (
+                <p className="text-red-500 text-xs">{errors.client_ids_json[0]}</p>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <Label htmlFor="client_id">{t("admin_col_client")}</Label>
+              <select
+                id="client_id"
+                name="client_id"
+                value={selectedClientId}
+                onChange={(e) => handleClientChange(e.target.value)}
+                required
+                className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
+              >
+                <option value="" disabled>
+                  {t("admin_editor_select_client")}
                 </option>
-              ))}
-            </select>
-            {errors?.client_id && (
-              <p className="text-red-500 text-xs">{errors.client_id[0]}</p>
-            )}
-          </div>
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.company_name}
+                  </option>
+                ))}
+              </select>
+              {errors?.client_id && (
+                <p className="text-red-500 text-xs">{errors.client_id[0]}</p>
+              )}
+            </div>
+          )}
 
           {/* Year */}
           <div className="space-y-1.5">
@@ -310,29 +382,76 @@ export default function ReportEditor({
           />
         </div>
 
-        {/* Uptime only */}
-        <div className="space-y-1.5 max-w-xs">
-          <Label htmlFor="uptime_percent" className="flex items-center gap-2">
-            {t("admin_editor_uptime_pct")}
-            {uptimeFetching && (
-              <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />
+        {/* Uptime */}
+        {isNew ? (
+          <div className="space-y-2">
+            <Label>{t("admin_editor_uptime_per_client")}</Label>
+            {selectedClientIds.length === 0 ? (
+              <p className="text-xs text-slate-400">{t("admin_editor_uptime_select_client_first")}</p>
+            ) : (
+              <div className="space-y-2">
+                {selectedClientIds.map((clientId) => {
+                  const client = clients.find((c) => c.id === clientId);
+                  if (!client) return null;
+                  const isLoading = uptimeFetchingByClient[clientId];
+                  return (
+                    <div key={clientId} className="grid grid-cols-1 sm:grid-cols-[1fr_180px] gap-2 items-center rounded-lg border border-slate-200 bg-slate-50 p-3">
+                      <div className="text-sm">
+                        <p className="font-medium text-slate-800">{client.company_name}</p>
+                        <p className="text-xs text-slate-500">
+                          {client.website_url?.replace(/^https?:\/\//, "") ?? t("admin_editor_no_domain")}
+                        </p>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-slate-500">{t("admin_editor_uptime_pct")}</span>
+                          {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" /> : null}
+                        </div>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min={0}
+                          max={100}
+                          value={uptimeOverrides[clientId] ?? ""}
+                          onChange={(e) =>
+                            setUptimeOverrides((prev) => ({
+                              ...prev,
+                              [clientId]: e.target.value,
+                            }))
+                          }
+                          placeholder="99.95"
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
-          </Label>
-          <Input
-            id="uptime_percent"
-            name="uptime_percent"
-            type="number"
-            step="0.01"
-            min={0}
-            max={100}
-            value={uptimePercent}
-            onChange={(e) => setUptimePercent(e.target.value)}
-            placeholder="99.95"
-          />
-          {uptimePercent === "" && !uptimeFetching && selectedClientId && (
-            <p className="text-xs text-slate-400">{t("admin_editor_uptime_hint")}</p>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="space-y-1.5 max-w-xs">
+            <Label htmlFor="uptime_percent" className="flex items-center gap-2">
+              {t("admin_editor_uptime_pct")}
+              {uptimeFetching && (
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />
+              )}
+            </Label>
+            <Input
+              id="uptime_percent"
+              name="uptime_percent"
+              type="number"
+              step="0.01"
+              min={0}
+              max={100}
+              value={uptimePercent}
+              onChange={(e) => setUptimePercent(e.target.value)}
+              placeholder="99.95"
+            />
+            {uptimePercent === "" && !uptimeFetching && selectedClientId && (
+              <p className="text-xs text-slate-400">{t("admin_editor_uptime_hint")}</p>
+            )}
+          </div>
+        )}
       </section>
 
       {/* ── Tasks ──────────────────────────────────────────────────────────── */}
@@ -459,6 +578,7 @@ export default function ReportEditor({
           name="intent"
           value="draft"
           variant="outline"
+          disabled={isNew && selectedClientIds.length === 0}
         >
           {t("admin_editor_save_draft")}
         </Button>
@@ -467,6 +587,7 @@ export default function ReportEditor({
           name="intent"
           value="publish"
           className="bg-violet-600 hover:bg-violet-700 text-white"
+          disabled={isNew && selectedClientIds.length === 0}
         >
           {isNew ? t("admin_editor_publish_new") : t("admin_editor_publish")}
         </Button>

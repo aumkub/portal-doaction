@@ -31,7 +31,18 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   }
   allReports.sort((a, b) => b.created_at - a.created_at);
 
-  return { reports: allReports.slice(0, 20), clients };
+  const url = new URL(request.url);
+  const bulkCreated = Number(url.searchParams.get("bulkCreated") ?? "0");
+  const bulkFailed = Number(url.searchParams.get("bulkFailed") ?? "0");
+
+  return {
+    reports: allReports.slice(0, 20),
+    clients,
+    bulkResult: {
+      created: Number.isNaN(bulkCreated) ? 0 : bulkCreated,
+      failed: Number.isNaN(bulkFailed) ? 0 : bulkFailed,
+    },
+  };
 }
 
 const statusStyle = {
@@ -40,8 +51,9 @@ const statusStyle = {
 };
 
 export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
-  const { reports } = loaderData as {
+  const { reports, bulkResult } = loaderData as {
     reports: ReportRowForEmail[];
+    bulkResult: { created: number; failed: number };
   };
   const { t, lang } = useT();
 
@@ -83,6 +95,12 @@ export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
         }}
         mode={emailDialog?.mode ?? "send"}
       />
+
+      {(bulkResult.created > 0 || bulkResult.failed > 0) && (
+        <div className="rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-900">
+          {`${t("admin_reports_bulk_result_prefix")} ${bulkResult.created} ${t("admin_reports_bulk_result_created")} · ${bulkResult.failed} ${t("admin_reports_bulk_result_failed")}`}
+        </div>
+      )}
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">

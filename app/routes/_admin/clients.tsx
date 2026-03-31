@@ -1,7 +1,9 @@
 import { Form } from "react-router";
+import type { FormEvent } from "react";
 import type { Route } from "./+types/clients";
 import { requireAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
+import { formatRelativeTime } from "~/lib/utils";
 import type { Client } from "~/types";
 import { useT } from "~/lib/i18n";
 import type { TranslationKey } from "~/lib/translations";
@@ -14,7 +16,16 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   await requireAdmin(request, context.cloudflare.env.DB, context.cloudflare.env.SESSIONPORTAL);
   const db = createDB(context.cloudflare.env.DB);
   const clients = await db.listClients();
-  return { clients };
+  const clientsWithStatus = await Promise.all(
+    clients.map(async (client) => {
+      const user = await db.getUserById(client.user_id);
+      return {
+        ...client,
+        first_login_at: user?.first_login_at ?? null,
+      };
+    })
+  );
+  return { clients: clientsWithStatus };
 }
 
 const packageKeys: Record<Client["package"], TranslationKey> = {
@@ -29,8 +40,10 @@ const packageColors = {
 };
 
 export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
-  const { clients } = loaderData as { clients: Client[] };
-  const { t } = useT();
+  const { clients } = loaderData as {
+    clients: Array<Client & { first_login_at: number | null }>;
+  };
+  const { t, lang } = useT();
 
   return (
     <div className="space-y-6">
@@ -67,7 +80,9 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
               <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">
                 {t("admin_col_contract")}
               </th>
-              <th className="px-5 py-3" />
+              <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">
+                {t("admin_col_login_status")}
+              </th>
               <th className="px-5 py-3" />
             </tr>
           </thead>
@@ -75,7 +90,7 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
             {clients.length === 0 ? (
               <tr>
                 <td
-                  colSpan={5}
+                  colSpan={6}
                   className="px-5 py-12 text-center text-slate-400"
                 >
                   {t("admin_clients_empty")}
@@ -114,36 +129,52 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
                   <td className="px-5 py-4 text-slate-500">
                     {client.contract_end ?? t("settings_contract_no_expiry")}
                   </td>
-                  <td className="px-5 py-4 text-right">
-                    <a
-                      href={`/admin/clients/${client.id}`}
-                      className="text-xs text-slate-500 hover:text-slate-900 transition-colors"
-                    >
-                      {t("admin_view_details")}
-                    </a>
+                  <td className="px-5 py-4">
+                    {client.first_login_at ? (
+                      <div className="space-y-1">
+                        <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">
+                          {t("admin_login_status_activated")}
+                        </span>
+                        <p className="text-[11px] text-slate-500">
+                          {formatRelativeTime(client.first_login_at, lang)}
+                        </p>
+                      </div>
+                    ) : (
+                      <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
+                        {t("admin_login_status_pending")}
+                      </span>
+                    )}
                   </td>
                   <td className="px-5 py-4 text-right">
-                    <Form
-                      method="post"
-                      action={`/admin/clients/${client.id}`}
-                      onSubmit={(e) => {
-                        if (
-                          !confirm(
-                            `${t("admin_impersonate_confirm")} ${client.company_name}?`
-                          )
-                        ) {
-                          e.preventDefault();
-                        }
-                      }}
-                    >
-                      <input type="hidden" name="intent" value="impersonate" />
-                      <button
-                        type="submit"
-                        className="text-xs text-amber-600 hover:text-amber-700 font-medium transition-colors border border-amber-200 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg"
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={`/admin/clients/${client.id}`}
+                        className="inline-block text-xs font-medium text-violet-700 bg-violet-50 hover:bg-violet-100 hover:text-violet-900 border border-violet-200 px-3 py-1 rounded-lg transition-colors"
                       >
-                        {t("admin_impersonate")}
-                      </button>
-                    </Form>
+                        {t("admin_view_details")}
+                      </a>
+                      <Form
+                        method="post"
+                        action={`/admin/clients/${client.id}`}
+                        onSubmit={(e: FormEvent<HTMLFormElement>) => {
+                          if (
+                            !confirm(
+                              `${t("admin_impersonate_confirm")} ${client.company_name}?`
+                            )
+                          ) {
+                            e.preventDefault();
+                          }
+                        }}
+                      >
+                        <input type="hidden" name="intent" value="impersonate" />
+                        <button
+                          type="submit"
+                          className="text-xs text-amber-600 hover:text-amber-700 font-medium transition-colors border border-amber-200 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg"
+                        >
+                          {t("admin_impersonate")}
+                        </button>
+                      </Form>
+                    </div>
                   </td>
                 </tr>
               ))

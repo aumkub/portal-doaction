@@ -35,15 +35,22 @@ export function createDB(d1: D1Database) {
     ): Promise<void> {
       await d1
         .prepare(
-          "INSERT INTO users (id, email, name, role, avatar_url) VALUES (?, ?, ?, ?, ?)"
+          "INSERT INTO users (id, email, name, role, avatar_url, first_login_at) VALUES (?, ?, ?, ?, ?, ?)"
         )
-        .bind(user.id, user.email, user.name, user.role, user.avatar_url)
+        .bind(
+          user.id,
+          user.email,
+          user.name,
+          user.role,
+          user.avatar_url,
+          user.first_login_at ?? null
+        )
         .run();
     },
 
     async updateUser(
       id: string,
-      data: Partial<Pick<User, "name" | "avatar_url" | "language">>
+      data: Partial<Pick<User, "name" | "avatar_url" | "language" | "first_login_at">>
     ): Promise<void> {
       const fields = Object.keys(data)
         .map((k) => `${k} = ?`)

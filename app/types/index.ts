@@ -11,6 +11,7 @@ export interface User {
   role: UserRole;
   avatar_url: string | null;
   language?: UserLanguage | null;
+  first_login_at?: number | null;
   created_at: number;
   updated_at: number;
 }
