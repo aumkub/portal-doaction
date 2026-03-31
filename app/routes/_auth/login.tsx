@@ -62,6 +62,8 @@ export async function action({ request, context }: Route.ActionArgs) {
         toName: user.name,
         magicUrl,
         apiKey: env.SMTP2GO_API_KEY,
+        db,
+        source: "login_magic_link",
       });
     } catch (err) {
       console.error("[magic-link] send failed:", err);

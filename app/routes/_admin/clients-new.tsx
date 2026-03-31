@@ -78,6 +78,8 @@ export async function action({ request, context }: Route.ActionArgs) {
         toName: name,
         magicUrl: `${origin}/magic-link?token=${token}`,
         apiKey: env.SMTP2GO_API_KEY,
+        db,
+        source: "admin_client_invite",
       });
     } catch (err) {
       console.error("[clients-new] invite email failed:", err);

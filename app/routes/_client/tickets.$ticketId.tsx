@@ -151,6 +151,7 @@ export async function action({ request, context, params }: any) {
           message: parsed.data.message,
           ticketUrl,
           apiKey: env.SMTP2GO_API_KEY,
+          db,
         });
       }
     })

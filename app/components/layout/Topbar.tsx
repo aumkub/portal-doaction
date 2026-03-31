@@ -33,9 +33,16 @@ function usePolling(intervalMs: number) {
 }
 
 // ─── Bell + Notification Dropdown ────────────────────────────────────────────
-function NotificationDropdown({ notifications }: { notifications: Notification[] }) {
+function NotificationDropdown({
+  notifications,
+  role,
+}: {
+  notifications: Notification[];
+  role: "client" | "admin";
+}) {
   const { t, lang } = useT();
   const unread = notifications.filter((n) => !n.read);
+  const allHref = role === "admin" ? "/admin/notifications" : "/notifications";
 
   return (
     <DropdownMenu>
@@ -129,6 +136,11 @@ function NotificationDropdown({ notifications }: { notifications: Notification[]
             ))}
           </div>
         )}
+        <div className="border-t border-slate-100 px-3 py-2">
+          <a href={allHref} className="text-xs text-violet-600 hover:text-violet-700">
+            {t("view_all")}
+          </a>
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -170,7 +182,7 @@ export default function Topbar({
       {/* Right */}
       <div className="flex items-center gap-1">
         <LanguageSwitcher />
-        <NotificationDropdown notifications={notifications} />
+        <NotificationDropdown notifications={notifications} role={role} />
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

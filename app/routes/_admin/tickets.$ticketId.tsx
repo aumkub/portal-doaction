@@ -150,6 +150,7 @@ export async function action({ request, context, params }: any) {
           ticketTitle: ticket.title,
           ticketUrl,
           apiKey: env.SMTP2GO_API_KEY,
+          db,
         });
       }
     }
@@ -228,6 +229,7 @@ export async function action({ request, context, params }: any) {
           message,
           ticketUrl,
           apiKey: env.SMTP2GO_API_KEY,
+          db,
         });
       }
     }

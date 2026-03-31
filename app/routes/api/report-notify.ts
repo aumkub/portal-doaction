@@ -64,6 +64,8 @@ export async function action({ request, context }: Route.ActionArgs) {
       html,
       text,
       apiKey,
+      db,
+      source: "report_notify",
     });
   } catch (e) {
     console.error("[report-notify]", e);

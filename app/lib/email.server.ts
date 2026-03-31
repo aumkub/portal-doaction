@@ -1,6 +1,9 @@
 // ─── SMTP2GO REST API email sender ───────────────────────────────────────────
 // Docs: https://apidoc.smtp2go.com/documentation/#/POST%20/email/send
 
+import { generateId } from "~/lib/utils";
+import type { DB } from "~/lib/db.server";
+
 interface SendEmailOptions {
   to: string;
   toName?: string;
@@ -8,6 +11,8 @@ interface SendEmailOptions {
   html: string;
   text: string;
   apiKey: string;
+  db?: DB;
+  source?: string;
 }
 
 export async function sendEmail({
@@ -17,28 +22,60 @@ export async function sendEmail({
   html,
   text,
   apiKey,
+  db,
+  source,
 }: SendEmailOptions): Promise<void> {
-  const res = await fetch("https://api.smtp2go.com/v3/email/send", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      api_key: apiKey,
-      to: [toName ? `${toName} <${to}>` : to],
-      sender: "do action portal <aum@doaction.co.th>",
-      subject,
-      html_body: html,
-      text_body: text,
-    }),
-  });
+  try {
+    const res = await fetch("https://api.smtp2go.com/v3/email/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        api_key: apiKey,
+        to: [toName ? `${toName} <${to}>` : to],
+        sender: "do action portal <aum@doaction.co.th>",
+        subject,
+        html_body: html,
+        text_body: text,
+      }),
+    });
 
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`SMTP2GO error ${res.status}: ${body}`);
-  }
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`SMTP2GO error ${res.status}: ${body}`);
+    }
 
-  const data = (await res.json()) as { data?: { succeeded: number } };
-  if (!data.data?.succeeded) {
-    throw new Error("SMTP2GO: email was not delivered");
+    const data = (await res.json()) as { data?: { succeeded: number } };
+    if (!data.data?.succeeded) {
+      throw new Error("SMTP2GO: email was not delivered");
+    }
+
+    if (db) {
+      await db.createEmailLog({
+        id: generateId(),
+        to_email: to,
+        to_name: toName ?? null,
+        subject,
+        html_body: html,
+        text_body: text,
+        source: source ?? "unknown",
+        status: "sent",
+      });
+    }
+  } catch (error) {
+    if (db) {
+      await db.createEmailLog({
+        id: generateId(),
+        to_email: to,
+        to_name: toName ?? null,
+        subject,
+        html_body: html,
+        text_body: text,
+        source: source ?? "unknown",
+        status: "failed",
+        error_message: error instanceof Error ? error.message : String(error),
+      });
+    }
+    throw error;
   }
 }
 
@@ -49,11 +86,15 @@ export async function sendMagicLinkEmail({
   toName,
   magicUrl,
   apiKey,
+  db,
+  source,
 }: {
   to: string;
   toName?: string;
   magicUrl: string;
   apiKey: string;
+  db?: DB;
+  source?: string;
 }): Promise<void> {
   const displayName = toName ?? to;
 
@@ -62,6 +103,8 @@ export async function sendMagicLinkEmail({
     toName,
     subject: "ลิ้งก์เข้าสู่ระบบ do action portal",
     apiKey,
+    db,
+    source: source ?? "magic_link",
     text: `สวัสดีคุณ ${displayName}\n\nคลิกลิ้งก์ด้านล่างเพื่อเข้าสู่ระบบ (หมดอายุใน 15 นาที)\n\n${magicUrl}\n\nหากคุณไม่ได้ขอลิ้งก์นี้ กรุณาเพิกเฉย\n\n— ทีม DoAction`,
     html: magicLinkHtml({ displayName, magicUrl }),
   });

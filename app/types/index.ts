@@ -43,6 +43,7 @@ export interface Client {
   contract_start: string | null;
   contract_end: string | null;
   notes: string | null;
+  deleted_at?: number | null;
   created_at: number;
 }
 
@@ -145,6 +146,19 @@ export interface Notification {
   body: string | null;
   link: string | null;
   read: number;
+  created_at: number;
+}
+
+export interface EmailLog {
+  id: string;
+  to_email: string;
+  to_name: string | null;
+  subject: string;
+  html_body: string;
+  text_body: string;
+  source: string | null;
+  status: "sent" | "failed";
+  error_message: string | null;
   created_at: number;
 }
 

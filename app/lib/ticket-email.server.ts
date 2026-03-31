@@ -1,4 +1,5 @@
 import { sendEmail } from "~/lib/email.server";
+import type { DB } from "~/lib/db.server";
 
 function escapeHtml(s: string): string {
   return s
@@ -32,8 +33,9 @@ export async function sendTicketEmailToClient(params: {
   message: string;
   ticketUrl: string;
   apiKey: string;
+  db?: DB;
 }) {
-  const { to, toName, ticketTitle, message, ticketUrl, apiKey } = params;
+  const { to, toName, ticketTitle, message, ticketUrl, apiKey, db } = params;
   const subject = `มีข้อความใหม่ใน Ticket: ${ticketTitle}`;
   const text = [
     `สวัสดีคุณ ${toName ?? to}`,
@@ -54,7 +56,7 @@ export async function sendTicketEmailToClient(params: {
     <p><a href="${ticketUrl}">เปิด Ticket ในระบบ</a></p>
     <p style="color:#64748b;">— DoAction</p>
   </body></html>`;
-  await sendEmail({ to, toName, subject, html, text, apiKey });
+  await sendEmail({ to, toName, subject, html, text, apiKey, db, source: "ticket_reply_to_client" });
 }
 
 export async function sendTicketEmailToAdmin(params: {
@@ -65,8 +67,9 @@ export async function sendTicketEmailToAdmin(params: {
   message: string;
   ticketUrl: string;
   apiKey: string;
+  db?: DB;
 }) {
-  const { to, toName, clientName, ticketTitle, message, ticketUrl, apiKey } = params;
+  const { to, toName, clientName, ticketTitle, message, ticketUrl, apiKey, db } = params;
   const subject = `ลูกค้าตอบ Ticket: ${ticketTitle}`;
   const text = [
     `สวัสดีคุณ ${toName ?? to}`,
@@ -87,7 +90,7 @@ export async function sendTicketEmailToAdmin(params: {
     <p><a href="${ticketUrl}">เปิด Ticket ในระบบ</a></p>
     <p style="color:#64748b;">— DoAction</p>
   </body></html>`;
-  await sendEmail({ to, toName, subject, html, text, apiKey });
+  await sendEmail({ to, toName, subject, html, text, apiKey, db, source: "ticket_reply_to_admin" });
 }
 
 export async function sendTicketClosedEmailToClient(params: {
@@ -96,8 +99,9 @@ export async function sendTicketClosedEmailToClient(params: {
   ticketTitle: string;
   ticketUrl: string;
   apiKey: string;
+  db?: DB;
 }) {
-  const { to, toName, ticketTitle, ticketUrl, apiKey } = params;
+  const { to, toName, ticketTitle, ticketUrl, apiKey, db } = params;
   const subject = `Ticket ถูกปิดแล้ว: ${ticketTitle}`;
   const text = [
     `สวัสดีคุณ ${toName ?? to}`,
@@ -117,5 +121,5 @@ export async function sendTicketClosedEmailToClient(params: {
     <p><a href="${ticketUrl}">ดูรายละเอียด Ticket</a></p>
     <p style="color:#64748b;">— DoAction</p>
   </body></html>`;
-  await sendEmail({ to, toName, subject, html, text, apiKey });
+  await sendEmail({ to, toName, subject, html, text, apiKey, db, source: "ticket_closed_to_client" });
 }

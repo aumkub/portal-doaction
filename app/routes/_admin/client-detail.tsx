@@ -1,6 +1,6 @@
 import { Form, redirect, useActionData } from "react-router";
 import { z } from "zod";
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { requireAdmin, startImpersonation } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { useT } from "~/lib/i18n";
@@ -99,6 +99,11 @@ export async function action({ request, params, context }: any) {
     return redirect("/dashboard", {
       headers: { "Set-Cookie": sessionCookie.serialize() },
     });
+  }
+
+  if (intent === "delete_client") {
+    await db.softDeleteClient(client.id);
+    return redirect("/admin/clients");
   }
 
   throw new Response("Bad Request", { status: 400 });
@@ -273,6 +278,28 @@ export default function AdminClientDetailPage({ loaderData }: any) {
             className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600"
           >
             {t("admin_impersonate_btn")}
+          </button>
+        </Form>
+      </div>
+
+      <div className="bg-rose-50 border border-rose-200 rounded-xl p-5">
+        <p className="text-sm text-rose-900 font-medium">{t("admin_client_delete_title")}</p>
+        <p className="text-xs text-rose-800 mt-1">
+          {t("admin_client_delete_desc")}
+        </p>
+        <Form
+          method="post"
+          className="mt-3"
+          onSubmit={(e: FormEvent<HTMLFormElement>) => {
+            if (!confirm(t("admin_client_delete_confirm"))) e.preventDefault();
+          }}
+        >
+          <input type="hidden" name="intent" value="delete_client" />
+          <button
+            type="submit"
+            className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700"
+          >
+            {t("admin_client_delete_btn")}
           </button>
         </Form>
       </div>

@@ -20,15 +20,39 @@ const TelegramSchema = z.object({
   intent: z.literal("telegram"),
 });
 
+const ContractWarningSchema = z.object({
+  intent: z.literal("contract_warning"),
+  first_days: z.coerce.number().int().min(0).default(14),
+  second_days: z.coerce.number().int().min(0).default(7),
+  third_days: z.coerce.number().int().min(0).default(1),
+});
+
 export async function loader({ request, context }: any) {
   const env = context.cloudflare.env;
   const admin = await requireAdmin(request, env.DB, env.SESSIONPORTAL);
   const db = createDB(env.DB);
   const adminUsers = await db.listAdminUsers();
   const telegramBotToken = await db.getAppSetting("telegram_bot_token");
+  const contractWarningFirstDays = Number(
+    (await db.getAppSetting("contract_warning_first_days")) ?? "14"
+  );
+  const contractWarningSecondDays = Number(
+    (await db.getAppSetting("contract_warning_second_days")) ?? "7"
+  );
+  const contractWarningThirdDays = Number(
+    (await db.getAppSetting("contract_warning_third_days")) ?? "1"
+  );
   const uptimeKey =
     (env as any).UPTIMEROBOT_API_KEY ?? "ur2618139-5281beb51ff9820a629669c2";
-  return { admin, adminUsers, uptimeKey, telegramBotToken };
+  return {
+    admin,
+    adminUsers,
+    uptimeKey,
+    telegramBotToken,
+    contractWarningFirstDays,
+    contractWarningSecondDays,
+    contractWarningThirdDays,
+  };
 }
 
 export async function action({ request, context }: any) {
@@ -53,6 +77,17 @@ export async function action({ request, context }: any) {
       await db.deleteAppSetting("telegram_bot_token");
     }
 
+    return redirect("/admin/settings");
+  }
+
+  if (intent === "contract_warning") {
+    const parsed = ContractWarningSchema.safeParse(raw);
+    if (!parsed.success) {
+      return { errors: parsed.error.flatten().fieldErrors };
+    }
+    await db.setAppSetting("contract_warning_first_days", String(parsed.data.first_days));
+    await db.setAppSetting("contract_warning_second_days", String(parsed.data.second_days));
+    await db.setAppSetting("contract_warning_third_days", String(parsed.data.third_days));
     return redirect("/admin/settings");
   }
 
@@ -85,7 +120,15 @@ export async function action({ request, context }: any) {
 }
 
 export default function AdminSettingsPage({ loaderData, actionData }: any) {
-  const { admin, adminUsers, uptimeKey, telegramBotToken } = loaderData;
+  const {
+    admin,
+    adminUsers,
+    uptimeKey,
+    telegramBotToken,
+    contractWarningFirstDays,
+    contractWarningSecondDays,
+    contractWarningThirdDays,
+  } = loaderData;
   const errors = actionData?.errors;
   const telegramTestSuccess = Boolean(actionData?.success?.telegram);
   const { t } = useT();
@@ -248,6 +291,52 @@ export default function AdminSettingsPage({ loaderData, actionData }: any) {
                 {t("admin_settings_telegram_test")}
               </button>
             </Form>
+            <button
+              type="submit"
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 transition-colors"
+            >
+              {t("save")}
+            </button>
+          </div>
+        </Form>
+      </section>
+
+      <section className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
+        <h2 className="text-sm font-semibold text-slate-900">{t("admin_contract_warning_title")}</h2>
+        <p className="text-xs text-slate-500">{t("admin_contract_warning_desc")}</p>
+        <Form method="post" className="grid sm:grid-cols-3 gap-3">
+          <input type="hidden" name="intent" value="contract_warning" />
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-slate-600">{t("admin_contract_warning_first")}</label>
+            <input
+              name="first_days"
+              type="number"
+              min={0}
+              defaultValue={contractWarningFirstDays}
+              className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-slate-600">{t("admin_contract_warning_second")}</label>
+            <input
+              name="second_days"
+              type="number"
+              min={0}
+              defaultValue={contractWarningSecondDays}
+              className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-slate-600">{t("admin_contract_warning_third")}</label>
+            <input
+              name="third_days"
+              type="number"
+              min={0}
+              defaultValue={contractWarningThirdDays}
+              className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+            />
+          </div>
+          <div className="sm:col-span-3 flex justify-end">
             <button
               type="submit"
               className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 transition-colors"
