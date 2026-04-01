@@ -54,6 +54,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     month: report.month,
     summary: report.summary,
     reportUrl,
+    lang: user.language === "en" ? "en" : "th",
   });
 
   try {

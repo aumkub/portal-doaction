@@ -44,6 +44,7 @@ export async function action({ request, context }: Route.ActionArgs) {
         apiKey: env.SMTP2GO_API_KEY,
         db,
         source: "api_send_magic_link",
+        lang: user.language === "en" ? "en" : "th",
       });
     } catch (err) {
       // Log but don't leak SMTP errors to the client

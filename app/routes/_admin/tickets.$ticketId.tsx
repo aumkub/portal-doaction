@@ -151,6 +151,7 @@ export async function action({ request, context, params }: any) {
           ticketUrl,
           apiKey: env.SMTP2GO_API_KEY,
           db,
+          lang: clientUser.language === "en" ? "en" : "th",
         });
       }
     }
@@ -230,6 +231,7 @@ export async function action({ request, context, params }: any) {
           ticketUrl,
           apiKey: env.SMTP2GO_API_KEY,
           db,
+          lang: clientUser.language === "en" ? "en" : "th",
         });
       }
     }

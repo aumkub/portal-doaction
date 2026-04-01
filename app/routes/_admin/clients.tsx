@@ -169,7 +169,7 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
                         <input type="hidden" name="intent" value="impersonate" />
                         <button
                           type="submit"
-                          className="text-xs text-amber-600 hover:text-amber-700 font-medium transition-colors border border-amber-200 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg"
+                          className="text-xs text-amber-600 hover:text-amber-700 font-medium transition-colors border border-amber-200 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg cursor-pointer"
                         >
                           {t("admin_impersonate")}
                         </button>

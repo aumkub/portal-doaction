@@ -4,6 +4,8 @@
 import { generateId } from "~/lib/utils";
 import type { DB } from "~/lib/db.server";
 
+export type EmailLanguage = "th" | "en";
+
 interface SendEmailOptions {
   to: string;
   toName?: string;
@@ -81,6 +83,33 @@ export async function sendEmail({
 
 // ─── Magic Link Template ──────────────────────────────────────────────────────
 
+const magicLinkStrings = {
+  th: {
+    subject: "ลิ้งก์เข้าสู่ระบบ do action portal",
+    title: "เข้าสู่ระบบ do action portal",
+    greeting: (name: string) => `สวัสดีคุณ ${name}`,
+    body: "ทีม DoAction ได้รับคำขอเข้าสู่ระบบจากอีเมลของคุณ<br>คลิกปุ่มด้านล่างเพื่อเข้าสู่ระบบ Client Portal",
+    cta: "เข้าสู่ระบบ &rarr;",
+    fallback: "หากปุ่มด้านบนไม่ทำงาน ให้คัดลอก URL นี้ไปวางในเบราว์เซอร์:",
+    expiry: "ลิ้งก์นี้จะหมดอายุใน <strong style=\"color:#64748b;\">15 นาที</strong>",
+    ignore: "หากคุณไม่ได้ขอลิ้งก์นี้ กรุณาเพิกเฉยต่ออีเมลฉบับนี้",
+    textBody: (name: string, url: string) =>
+      `สวัสดีคุณ ${name}\n\nคลิกลิ้งก์ด้านล่างเพื่อเข้าสู่ระบบ (หมดอายุใน 15 นาที)\n\n${url}\n\nหากคุณไม่ได้ขอลิ้งก์นี้ กรุณาเพิกเฉย\n\n— ทีม DoAction`,
+  },
+  en: {
+    subject: "Your login link for do action portal",
+    title: "Sign in to do action portal",
+    greeting: (name: string) => `Hello ${name}`,
+    body: "DoAction received a sign-in request for your email address.<br>Click the button below to access your Client Portal.",
+    cta: "Sign in &rarr;",
+    fallback: "If the button above doesn't work, copy and paste this URL into your browser:",
+    expiry: "This link expires in <strong style=\"color:#64748b;\">15 minutes</strong>",
+    ignore: "If you didn't request this link, you can safely ignore this email.",
+    textBody: (name: string, url: string) =>
+      `Hello ${name}\n\nClick the link below to sign in (expires in 15 minutes)\n\n${url}\n\nIf you didn't request this, please ignore it.\n\n— DoAction Team`,
+  },
+} as const;
+
 export async function sendMagicLinkEmail({
   to,
   toName,
@@ -88,6 +117,7 @@ export async function sendMagicLinkEmail({
   apiKey,
   db,
   source,
+  lang = "th",
 }: {
   to: string;
   toName?: string;
@@ -95,34 +125,38 @@ export async function sendMagicLinkEmail({
   apiKey: string;
   db?: DB;
   source?: string;
+  lang?: EmailLanguage;
 }): Promise<void> {
   const displayName = toName ?? to;
+  const s = magicLinkStrings[lang];
 
   await sendEmail({
     to,
     toName,
-    subject: "ลิ้งก์เข้าสู่ระบบ do action portal",
+    subject: s.subject,
     apiKey,
     db,
     source: source ?? "magic_link",
-    text: `สวัสดีคุณ ${displayName}\n\nคลิกลิ้งก์ด้านล่างเพื่อเข้าสู่ระบบ (หมดอายุใน 15 นาที)\n\n${magicUrl}\n\nหากคุณไม่ได้ขอลิ้งก์นี้ กรุณาเพิกเฉย\n\n— ทีม DoAction`,
-    html: magicLinkHtml({ displayName, magicUrl }),
+    text: s.textBody(displayName, magicUrl),
+    html: magicLinkHtml({ displayName, magicUrl, s }),
   });
 }
 
 function magicLinkHtml({
   displayName,
   magicUrl,
+  s,
 }: {
   displayName: string;
   magicUrl: string;
+  s: (typeof magicLinkStrings)["th"] | (typeof magicLinkStrings)["en"];
 }): string {
   return /* html */ `<!DOCTYPE html>
-<html lang="th">
+<html>
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>เข้าสู่ระบบ do action portal</title>
+  <title>${s.title}</title>
 </head>
 <body style="margin:0;padding:0;background:#f8fafc;font-family:'Inter',ui-sans-serif,system-ui,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;padding:40px 16px;">
@@ -156,11 +190,10 @@ function magicLinkHtml({
           <tr>
             <td style="padding:32px 40px;">
               <p style="margin:0 0 8px;font-size:22px;font-weight:600;color:#0f172a;">
-                สวัสดีคุณ ${displayName}
+                ${s.greeting(displayName)}
               </p>
               <p style="margin:0 0 28px;font-size:14px;color:#475569;line-height:1.7;">
-                ทีม DoAction ได้รับคำขอเข้าสู่ระบบจากอีเมลของคุณ<br>
-                คลิกปุ่มด้านล่างเพื่อเข้าสู่ระบบ Client Portal
+                ${s.body}
               </p>
 
               <!-- CTA Button -->
@@ -169,7 +202,7 @@ function magicLinkHtml({
                   <td style="border-radius:8px;background:#7c3aed;">
                     <a href="${magicUrl}"
                        style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:8px;letter-spacing:0.1px;">
-                      เข้าสู่ระบบ &rarr;
+                      ${s.cta}
                     </a>
                   </td>
                 </tr>
@@ -177,7 +210,7 @@ function magicLinkHtml({
 
               <!-- Fallback URL -->
               <p style="margin:0 0 4px;font-size:12px;color:#94a3b8;">
-                หากปุ่มด้านบนไม่ทำงาน ให้คัดลอก URL นี้ไปวางในเบราว์เซอร์:
+                ${s.fallback}
               </p>
               <p style="margin:0;font-size:12px;word-break:break-all;">
                 <a href="${magicUrl}" style="color:#7c3aed;">${magicUrl}</a>
@@ -196,10 +229,10 @@ function magicLinkHtml({
           <tr>
             <td style="padding:24px 40px 32px;">
               <p style="margin:0 0 4px;font-size:12px;color:#94a3b8;">
-                ⏱ ลิ้งก์นี้จะหมดอายุใน <strong style="color:#64748b;">15 นาที</strong>
+                ⏱ ${s.expiry}
               </p>
               <p style="margin:0;font-size:12px;color:#94a3b8;">
-                หากคุณไม่ได้ขอลิ้งก์นี้ กรุณาเพิกเฉยต่ออีเมลฉบับนี้
+                ${s.ignore}
               </p>
               <p style="margin:16px 0 0;font-size:12px;color:#cbd5e1;">
                 DoAction Co., Ltd. &nbsp;|&nbsp; aum@doaction.co.th
