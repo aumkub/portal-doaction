@@ -51,7 +51,7 @@
 	"scripts": {
 		"db:init:remote": "wrangler d1 execute portal --remote --file=./migrations/0001_init.sql",
 		"db:init:local": "wrangler d1 execute portal --local --file=./migrations/0001_init.sql",
-		"build": "react-router build",
+		"build": "NODE_OPTIONS=--no-deprecation react-router build",
 		"cf-typegen": "wrangler types && react-router typegen",
 		"check": "tsc && react-router build && wrangler deploy --dry-run",
 		"deploy": "wrangler deploy",

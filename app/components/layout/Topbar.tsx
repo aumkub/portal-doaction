@@ -11,6 +11,7 @@ import {
 } from "~/components/ui/dropdown-menu";
 import { MobileSidebarTrigger } from "~/components/layout/Sidebar";
 import { formatRelativeTime } from "~/lib/utils";
+import { useT, LanguageSwitcher } from "~/lib/i18n";
 import type { User, Notification } from "~/types";
 
 interface TopbarProps {
@@ -32,15 +33,23 @@ function usePolling(intervalMs: number) {
 }
 
 // ─── Bell + Notification Dropdown ────────────────────────────────────────────
-function NotificationDropdown({ notifications }: { notifications: Notification[] }) {
+function NotificationDropdown({
+  notifications,
+  role,
+}: {
+  notifications: Notification[];
+  role: "client" | "admin";
+}) {
+  const { t, lang } = useT();
   const unread = notifications.filter((n) => !n.read);
+  const allHref = role === "admin" ? "/admin/notifications" : "/notifications";
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
           className="relative p-2 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors focus:outline-none"
-          aria-label="Notifications"
+          aria-label={t("topbar_notifications")}
         >
           <svg
             className="w-5 h-5"
@@ -56,7 +65,8 @@ function NotificationDropdown({ notifications }: { notifications: Notification[]
             />
           </svg>
           {unread.length > 0 && (
-            <span className="absolute top-1 right-1 w-4 h-4 bg-violet-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center leading-none">
+            <span className={`absolute top-1 right-1 w-4 h-4 bg-violet-600 text-white font-bold rounded-full flex items-center justify-center leading-none
+              ${unread.length > 9 ? "text-[8px]" : "text-[10px]"}`}>
               {unread.length > 9 ? "9+" : unread.length}
             </span>
           )}
@@ -66,7 +76,7 @@ function NotificationDropdown({ notifications }: { notifications: Notification[]
       <DropdownMenuContent align="end" className="w-80">
         <div className="flex items-center justify-between px-3 py-2 border-b border-slate-100">
           <span className="text-sm font-semibold text-slate-900">
-            การแจ้งเตือน
+            {t("topbar_notifications")}
           </span>
           {unread.length > 0 && (
             <Form method="post" action="/api/notifications/read">
@@ -74,7 +84,7 @@ function NotificationDropdown({ notifications }: { notifications: Notification[]
                 type="submit"
                 className="text-xs text-violet-600 hover:text-violet-700 transition-colors"
               >
-                อ่านทั้งหมด
+                {t("topbar_mark_all_read")}
               </button>
             </Form>
           )}
@@ -83,7 +93,7 @@ function NotificationDropdown({ notifications }: { notifications: Notification[]
         {notifications.length === 0 ? (
           <div className="px-3 py-8 text-center">
             <p className="text-2xl mb-1">🔔</p>
-            <p className="text-sm text-slate-400">ไม่มีการแจ้งเตือน</p>
+            <p className="text-sm text-slate-400">{t("topbar_no_notifications")}</p>
           </div>
         ) : (
           <div className="max-h-80 overflow-y-auto">
@@ -114,7 +124,7 @@ function NotificationDropdown({ notifications }: { notifications: Notification[]
                         </p>
                       )}
                       <p className="text-[11px] text-slate-400 mt-1">
-                        {formatRelativeTime(n.created_at)}
+                        {formatRelativeTime(n.created_at, lang)}
                       </p>
                     </div>
                     {!n.read && (
@@ -126,6 +136,11 @@ function NotificationDropdown({ notifications }: { notifications: Notification[]
             ))}
           </div>
         )}
+        <div className="border-t border-slate-100 px-3 py-2">
+          <a href={allHref} className="text-xs text-violet-600 hover:text-violet-700">
+            {t("view_all")}
+          </a>
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -138,6 +153,8 @@ export default function Topbar({
   notifications = [],
   role = "client",
 }: TopbarProps) {
+  const { t } = useT();
+
   // Poll every 30 s so notification count stays fresh
   usePolling(30_000);
 
@@ -147,6 +164,8 @@ export default function Topbar({
     .slice(0, 2)
     .join("")
     .toUpperCase();
+
+  const settingsHref = role === "admin" ? "/admin/settings" : "/settings";
 
   return (
     <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 lg:px-6 shrink-0">
@@ -162,7 +181,8 @@ export default function Topbar({
 
       {/* Right */}
       <div className="flex items-center gap-1">
-        <NotificationDropdown notifications={notifications} />
+        <LanguageSwitcher />
+        <NotificationDropdown notifications={notifications} role={role} />
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -197,15 +217,15 @@ export default function Topbar({
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
-              <a href="/settings">
-                <span className="mr-2">⚙️</span> ตั้งค่าบัญชี
+              <a href={settingsHref}>
+                <span className="">⚙️</span> {t("topbar_account_settings")}
               </a>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
               <Form method="post" action="/logout" className="w-full">
                 <button type="submit" className="flex items-center gap-2 w-full text-red-500 text-sm">
-                  <span>🚪</span> ออกจากระบบ
+                  <span>🚪</span> {t("topbar_logout")}
                 </button>
               </Form>
             </DropdownMenuItem>

@@ -2,12 +2,16 @@
 
 export type UserRole = "admin" | "client";
 
+export type UserLanguage = "th" | "en";
+
 export interface User {
   id: string;
   email: string;
   name: string;
   role: UserRole;
   avatar_url: string | null;
+  language?: UserLanguage | null;
+  first_login_at?: number | null;
   created_at: number;
   updated_at: number;
 }
@@ -39,6 +43,7 @@ export interface Client {
   contract_start: string | null;
   contract_end: string | null;
   notes: string | null;
+  deleted_at?: number | null;
   created_at: number;
 }
 
@@ -66,6 +71,10 @@ export interface MonthlyReport {
   status: ReportStatus;
   published_at: number | null;
   created_at: number;
+  /** When admin emailed the client about this published report */
+  client_notified_at?: number | null;
+  client_notification_subject?: string | null;
+  client_notification_html?: string | null;
 }
 
 export interface ReportTask {
@@ -113,6 +122,18 @@ export interface TicketMessage {
   created_at: number;
 }
 
+export interface TicketAttachment {
+  id: string;
+  ticket_id: string;
+  message_id: string;
+  uploader_user_id: string;
+  file_key: string;
+  file_name: string;
+  mime_type: string;
+  size_bytes: number;
+  created_at: number;
+}
+
 export type TicketWithMessages = SupportTicket & { messages: TicketMessage[] };
 
 // ─── Notification ────────────────────────────────────────────────────────────
@@ -125,6 +146,19 @@ export interface Notification {
   body: string | null;
   link: string | null;
   read: number;
+  created_at: number;
+}
+
+export interface EmailLog {
+  id: string;
+  to_email: string;
+  to_name: string | null;
+  subject: string;
+  html_body: string;
+  text_body: string;
+  source: string | null;
+  status: "sent" | "failed";
+  error_message: string | null;
   created_at: number;
 }
 

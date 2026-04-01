@@ -12,7 +12,7 @@ const statusConfig = {
     className: "bg-emerald-50 text-emerald-600",
   },
   draft: {
-    label: "Draft",
+    label: "แบบร่าง",
     className: "bg-slate-100 text-slate-500",
   },
 };
@@ -43,7 +43,11 @@ export default function ReportCard({ report }: ReportCardProps) {
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-3 gap-2 mb-4">
+      <div
+        className={`grid gap-2 mb-4 ${
+          report.speed_score != null ? "grid-cols-3" : "grid-cols-2"
+        }`}
+      >
         <div className="text-center p-2 bg-slate-50 rounded-lg">
           <p className="text-lg font-semibold text-slate-900">
             {report.total_tasks}
@@ -56,14 +60,16 @@ export default function ReportCard({ report }: ReportCardProps) {
               ? `${report.uptime_percent.toFixed(1)}%`
               : "—"}
           </p>
-          <p className="text-[10px] text-slate-400">Uptime</p>
+          <p className="text-[10px] text-slate-400">อัพไทม์</p>
         </div>
-        <div className="text-center p-2 bg-slate-50 rounded-lg">
-          <p className="text-lg font-semibold text-slate-900">
-            {report.speed_score ?? "—"}
-          </p>
-          <p className="text-[10px] text-slate-400">Speed</p>
-        </div>
+        {report.speed_score != null ? (
+          <div className="text-center p-2 bg-slate-50 rounded-lg">
+            <p className="text-lg font-semibold text-slate-900">
+              {report.speed_score}
+            </p>
+            <p className="text-[10px] text-slate-400">สปีด</p>
+          </div>
+        ) : null}
       </div>
 
       {/* Footer */}

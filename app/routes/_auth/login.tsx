@@ -3,10 +3,13 @@ import type { Route } from "./+types/login";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
+import { createDB } from "~/lib/db.server";
+import { verifyPassword, createAuth, generateMagicToken } from "~/lib/auth.server";
+import { sendMagicLinkEmail } from "~/lib/email.server";
 import { z } from "zod";
 
 export function meta() {
-  return [{ title: "เข้าสู่ระบบ — DoAction Portal" }];
+  return [{ title: "เข้าสู่ระบบ — do action portal" }];
 }
 
 const Schema = z.object({
@@ -26,7 +29,6 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   const { email, mode, password } = parsed.data;
-  const { createDB } = await import("~/lib/db.server");
   const db = createDB(env.DB);
   const user = await db.getUserByEmail(email);
 
@@ -35,7 +37,6 @@ export async function action({ request, context }: Route.ActionArgs) {
     if (!password || !user || user.role !== "admin") {
       return { errors: { email: ["อีเมลหรือรหัสผ่านไม่ถูกต้อง"] }, sent: false };
     }
-    const { verifyPassword, createAuth } = await import("~/lib/auth.server");
     const storedHash = await env.SESSIONPORTAL.get(`pw:${user.id}`);
     if (!storedHash || !(await verifyPassword(password, storedHash))) {
       return { errors: { email: ["อีเมลหรือรหัสผ่านไม่ถูกต้อง"] }, sent: false };
@@ -49,8 +50,6 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   // ── Magic link (default) ───────────────────────────────────────────────────
   if (user) {
-    const { generateMagicToken } = await import("~/lib/auth.server");
-    const { sendMagicLinkEmail } = await import("~/lib/email.server");
     const { id, token, expires_at } = generateMagicToken();
     await db.createMagicLinkToken({ id, user_id: user.id, token, expires_at, used: 0 });
 
@@ -63,6 +62,8 @@ export async function action({ request, context }: Route.ActionArgs) {
         toName: user.name,
         magicUrl,
         apiKey: env.SMTP2GO_API_KEY,
+        db,
+        source: "login_magic_link",
       });
     } catch (err) {
       console.error("[magic-link] send failed:", err);
@@ -78,6 +79,9 @@ export default function LoginPage() {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
+  const submittingMode = navigation.formData?.get("mode");
+  const isSubmittingMagic = isSubmitting && submittingMode === "magic";
+  const isSubmittingAdmin = isSubmitting && submittingMode === "password";
 
   if (actionData?.sent) {
     return (
@@ -110,15 +114,16 @@ export default function LoginPage() {
     <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-10">
       {/* Logo */}
       <div className="mb-8">
-        <div className="flex items-center gap-2 mb-1">
-          <div className="w-8 h-8 bg-[#F0D800] rounded-lg flex items-center justify-center shadow-sm">
-            <span className="text-slate-900 font-bold text-sm leading-none">D</span>
-          </div>
-          <span className="font-bold text-2xl text-slate-900 tracking-tight">
-            DoAction
-          </span>
+        <div className="flex items-center gap-3">
+          <img
+            src="/logo-dark.svg"
+            alt="DoAction"
+            className="w-[200px] mx-auto"
+          />
         </div>
-        <p className="text-sm text-slate-500 ml-10">Client Portal</p>
+        <p className="block text-center text-sm text-black mt-0 tracking-widest font-bold">
+          CLIENT PORTAL
+        </p>
       </div>
 
       {/* Heading */}
@@ -150,10 +155,10 @@ export default function LoginPage() {
 
         <Button
           type="submit"
-          disabled={isSubmitting}
+          disabled={isSubmittingMagic}
           className="w-full h-11 bg-violet-600 hover:bg-violet-700 text-white"
         >
-          {isSubmitting ? "กำลังส่ง…" : "ส่ง Magic Link"}
+          {isSubmittingMagic ? "กำลังส่ง…" : "ส่ง Magic Link"}
         </Button>
       </Form>
 
@@ -169,7 +174,7 @@ export default function LoginPage() {
               name="email"
               type="email"
               required
-              placeholder="admin@doaction.co.th"
+              placeholder="admin@demo.co.th"
               className="h-11"
             />
             <Input
@@ -183,9 +188,9 @@ export default function LoginPage() {
               type="submit"
               variant="outline"
               className="w-full h-11"
-              disabled={isSubmitting}
+              disabled={isSubmittingAdmin}
             >
-              เข้าสู่ระบบ (Admin)
+              {isSubmittingAdmin ? "กำลังเข้าสู่ระบบ…" : "เข้าสู่ระบบ (Admin)"}
             </Button>
           </Form>
         </details>

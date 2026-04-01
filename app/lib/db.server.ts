@@ -8,6 +8,8 @@ import type {
   TicketMessage,
   Notification,
   MagicLinkToken,
+  TicketAttachment,
+  EmailLog,
 } from "~/types";
 
 // ─── DB wrapper ───────────────────────────────────────────────────────────────
@@ -35,15 +37,22 @@ export function createDB(d1: D1Database) {
     ): Promise<void> {
       await d1
         .prepare(
-          "INSERT INTO users (id, email, name, role, avatar_url) VALUES (?, ?, ?, ?, ?)"
+          "INSERT INTO users (id, email, name, role, avatar_url, first_login_at) VALUES (?, ?, ?, ?, ?, ?)"
         )
-        .bind(user.id, user.email, user.name, user.role, user.avatar_url)
+        .bind(
+          user.id,
+          user.email,
+          user.name,
+          user.role,
+          user.avatar_url,
+          user.first_login_at ?? null
+        )
         .run();
     },
 
     async updateUser(
       id: string,
-      data: Partial<Pick<User, "name" | "avatar_url">>
+      data: Partial<Pick<User, "name" | "avatar_url" | "language" | "first_login_at">>
     ): Promise<void> {
       const fields = Object.keys(data)
         .map((k) => `${k} = ?`)
@@ -130,21 +139,21 @@ export function createDB(d1: D1Database) {
 
     async getClientByUserId(user_id: string): Promise<Client | null> {
       return d1
-        .prepare("SELECT * FROM clients WHERE user_id = ?")
+        .prepare("SELECT * FROM clients WHERE user_id = ? AND deleted_at IS NULL")
         .bind(user_id)
         .first<Client>();
     },
 
     async getClientById(id: string): Promise<Client | null> {
       return d1
-        .prepare("SELECT * FROM clients WHERE id = ?")
+        .prepare("SELECT * FROM clients WHERE id = ? AND deleted_at IS NULL")
         .bind(id)
         .first<Client>();
     },
 
     async listClients(): Promise<Client[]> {
       const result = await d1
-        .prepare("SELECT * FROM clients ORDER BY company_name")
+        .prepare("SELECT * FROM clients WHERE deleted_at IS NULL ORDER BY company_name")
         .all<Client>();
       return result.results;
     },
@@ -181,6 +190,13 @@ export function createDB(d1: D1Database) {
       await d1
         .prepare(`UPDATE clients SET ${fields} WHERE id = ?`)
         .bind(...values, id)
+        .run();
+    },
+
+    async softDeleteClient(id: string): Promise<void> {
+      await d1
+        .prepare("UPDATE clients SET deleted_at = unixepoch() WHERE id = ?")
+        .bind(id)
         .run();
     },
 
@@ -375,6 +391,88 @@ export function createDB(d1: D1Database) {
         .run();
     },
 
+    async createTicketAttachment(
+      attachment: Omit<TicketAttachment, "created_at">
+    ): Promise<void> {
+      await d1
+        .prepare(
+          `INSERT INTO ticket_attachments
+            (id, ticket_id, message_id, uploader_user_id, file_key, file_name, mime_type, size_bytes)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .bind(
+          attachment.id,
+          attachment.ticket_id,
+          attachment.message_id,
+          attachment.uploader_user_id,
+          attachment.file_key,
+          attachment.file_name,
+          attachment.mime_type,
+          attachment.size_bytes
+        )
+        .run();
+    },
+
+    async listAttachmentsByTicket(ticket_id: string): Promise<TicketAttachment[]> {
+      const result = await d1
+        .prepare(
+          "SELECT * FROM ticket_attachments WHERE ticket_id = ? ORDER BY created_at ASC"
+        )
+        .bind(ticket_id)
+        .all<TicketAttachment>();
+      return result.results;
+    },
+
+    async getTicketAttachmentByKey(file_key: string): Promise<TicketAttachment | null> {
+      return d1
+        .prepare("SELECT * FROM ticket_attachments WHERE file_key = ?")
+        .bind(file_key)
+        .first<TicketAttachment>();
+    },
+
+    async getTicketAttachmentById(id: string): Promise<TicketAttachment | null> {
+      return d1
+        .prepare("SELECT * FROM ticket_attachments WHERE id = ?")
+        .bind(id)
+        .first<TicketAttachment>();
+    },
+
+    async deleteTicketAttachment(id: string): Promise<void> {
+      await d1.prepare("DELETE FROM ticket_attachments WHERE id = ?").bind(id).run();
+    },
+
+    async listAllTicketAttachments(): Promise<
+      Array<
+        TicketAttachment & {
+          ticket_title: string;
+          message_text: string | null;
+          uploader_name: string;
+        }
+      >
+    > {
+      const result = await d1
+        .prepare(
+          `SELECT
+             a.*,
+             t.title AS ticket_title,
+             m.message AS message_text,
+             u.name AS uploader_name
+           FROM ticket_attachments a
+           JOIN support_tickets t ON t.id = a.ticket_id
+           LEFT JOIN ticket_messages m ON m.id = a.message_id
+           JOIN users u ON u.id = a.uploader_user_id
+           ORDER BY a.created_at DESC`
+        )
+        .all<
+          TicketAttachment & {
+            ticket_title: string;
+            message_text: string | null;
+            uploader_name: string;
+          }
+        >();
+      return result.results;
+    },
+
     // ── Notifications ─────────────────────────────────────────────────────────
 
     async listNotifications(
@@ -386,6 +484,14 @@ export function createDB(d1: D1Database) {
         : "SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 50";
       const result = await d1
         .prepare(query)
+        .bind(user_id)
+        .all<Notification>();
+      return result.results;
+    },
+
+    async listNotificationsAll(user_id: string): Promise<Notification[]> {
+      const result = await d1
+        .prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC")
         .bind(user_id)
         .all<Notification>();
       return result.results;
@@ -405,6 +511,13 @@ export function createDB(d1: D1Database) {
         .run();
     },
 
+    async getNotificationById(id: string): Promise<Notification | null> {
+      return d1
+        .prepare("SELECT * FROM notifications WHERE id = ?")
+        .bind(id)
+        .first<Notification>();
+    },
+
     async createNotification(
       notif: Omit<Notification, "created_at">
     ): Promise<void> {
@@ -421,6 +534,100 @@ export function createDB(d1: D1Database) {
           notif.link,
           notif.read
         )
+        .run();
+    },
+
+    // ── App Settings ──────────────────────────────────────────────────────────
+
+    async getAppSetting(key: string): Promise<string | null> {
+      const row = await d1
+        .prepare("SELECT value FROM app_settings WHERE key = ?")
+        .bind(key)
+        .first<{ value: string }>();
+      return row?.value ?? null;
+    },
+
+    async setAppSetting(key: string, value: string): Promise<void> {
+      await d1
+        .prepare(
+          `INSERT INTO app_settings (key, value, updated_at)
+           VALUES (?, ?, unixepoch())
+           ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = unixepoch()`
+        )
+        .bind(key, value)
+        .run();
+    },
+
+    async deleteAppSetting(key: string): Promise<void> {
+      await d1.prepare("DELETE FROM app_settings WHERE key = ?").bind(key).run();
+    },
+
+    async createEmailLog(log: {
+      id: string;
+      to_email: string;
+      to_name?: string | null;
+      subject: string;
+      html_body: string;
+      text_body: string;
+      source?: string | null;
+      status?: "sent" | "failed";
+      error_message?: string | null;
+    }): Promise<void> {
+      await d1
+        .prepare(
+          `INSERT INTO email_logs
+            (id, to_email, to_name, subject, html_body, text_body, source, status, error_message)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .bind(
+          log.id,
+          log.to_email,
+          log.to_name ?? null,
+          log.subject,
+          log.html_body,
+          log.text_body,
+          log.source ?? null,
+          log.status ?? "sent",
+          log.error_message ?? null
+        )
+        .run();
+    },
+
+    async listEmailLogs(limit = 200): Promise<EmailLog[]> {
+      const result = await d1
+        .prepare("SELECT * FROM email_logs ORDER BY created_at DESC LIMIT ?")
+        .bind(limit)
+        .all<EmailLog>();
+      return result.results;
+    },
+
+    async hasContractWarningLog(
+      client_id: string,
+      warning_stage: "first" | "second" | "third",
+      contract_end: string
+    ): Promise<boolean> {
+      const row = await d1
+        .prepare(
+          "SELECT id FROM contract_warning_logs WHERE client_id = ? AND warning_stage = ? AND contract_end = ?"
+        )
+        .bind(client_id, warning_stage, contract_end)
+        .first<{ id: string }>();
+      return Boolean(row?.id);
+    },
+
+    async createContractWarningLog(params: {
+      id: string;
+      client_id: string;
+      warning_stage: "first" | "second" | "third";
+      contract_end: string;
+    }): Promise<void> {
+      await d1
+        .prepare(
+          `INSERT INTO contract_warning_logs
+            (id, client_id, warning_stage, contract_end)
+           VALUES (?, ?, ?, ?)`
+        )
+        .bind(params.id, params.client_id, params.warning_stage, params.contract_end)
         .run();
     },
   };

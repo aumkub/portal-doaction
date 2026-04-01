@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 import { requireAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
+import { useT } from "~/lib/i18n";
 
 type DashboardTicket = {
   id: string;
@@ -11,7 +12,7 @@ type DashboardTicket = {
 };
 
 export function meta() {
-  return [{ title: "Admin Overview — DoAction Portal" }];
+  return [{ title: "Admin Overview — do action portal" }];
 }
 
 export async function loader({ request, context }: any) {
@@ -52,31 +53,34 @@ export async function loader({ request, context }: any) {
 
 export default function AdminOverviewPage({ loaderData }: any) {
   const data = loaderData;
+  const { t } = useT();
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Admin Overview</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">
+          {t("admin_overview_title")}
+        </h1>
         <p className="mt-1 text-sm text-slate-500">
-          สรุปภาพรวมลูกค้า รายงาน และ tickets ที่ต้องดูแล
+          {t("admin_overview_subtitle")}
         </p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-xl border border-slate-200 bg-white p-5">
-          <p className="text-sm text-slate-500">Total clients</p>
+          <p className="text-sm text-slate-500">{t("admin_stat_total_clients")}</p>
           <p className="mt-2 text-3xl font-semibold text-slate-900">
             {data.totalClients}
           </p>
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-5">
-          <p className="text-sm text-slate-500">Open tickets</p>
+          <p className="text-sm text-slate-500">{t("admin_stat_open_tickets")}</p>
           <p className="mt-2 text-3xl font-semibold text-slate-900">
             {data.openTickets}
           </p>
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-5">
-          <p className="text-sm text-slate-500">Reports due this month</p>
+          <p className="text-sm text-slate-500">{t("admin_stat_reports_due")}</p>
           <p className="mt-2 text-3xl font-semibold text-slate-900">
             {data.reportsDueThisMonth}
           </p>
@@ -86,9 +90,11 @@ export default function AdminOverviewPage({ loaderData }: any) {
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-xl border border-slate-200 bg-white p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold text-slate-900">Clients</h2>
+            <h2 className="font-semibold text-slate-900">
+              {t("admin_section_clients")}
+            </h2>
             <Link to="/admin/clients" className="text-xs text-violet-600">
-              View all
+              {t("admin_view_all")}
             </Link>
           </div>
           <div className="space-y-2">
@@ -105,9 +111,11 @@ export default function AdminOverviewPage({ loaderData }: any) {
 
         <div className="rounded-xl border border-slate-200 bg-white p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold text-slate-900">Need quick reply</h2>
+            <h2 className="font-semibold text-slate-900">
+              {t("admin_section_quick_reply")}
+            </h2>
             <Link to="/admin/tickets" className="text-xs text-violet-600">
-              Open tickets
+              {t("admin_open_tickets_link")}
             </Link>
           </div>
           <div className="space-y-2">
@@ -122,7 +130,7 @@ export default function AdminOverviewPage({ loaderData }: any) {
                 </div>
               ))
             ) : (
-              <p className="text-sm text-slate-400">No urgent replies right now.</p>
+              <p className="text-sm text-slate-400">{t("admin_no_urgent")}</p>
             )}
           </div>
         </div>

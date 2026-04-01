@@ -10,10 +10,10 @@ import type { MonthlyReport, ReportTask } from "~/types";
 
 export function meta({ data }: Route.MetaArgs) {
   const report = (data as { report: MonthlyReport } | null)?.report;
-  if (!report) return [{ title: "Report — DoAction Portal" }];
+  if (!report) return [{ title: "Report — do action portal" }];
   return [
     {
-      title: `รายงาน ${getThaiMonth(report.month)} ${report.year + 543} — DoAction Portal`,
+      title: `รายงาน ${getThaiMonth(report.month)} ${report.year + 543} — do action portal`,
     },
   ];
 }
@@ -84,7 +84,7 @@ export default function ReportDetailPage({ loaderData }: Route.ComponentProps) {
               className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors print:hidden"
             >
               <Printer className="w-4 h-4" />
-              Export PDF
+              ส่งออก PDF
             </button>
           </div>
         }

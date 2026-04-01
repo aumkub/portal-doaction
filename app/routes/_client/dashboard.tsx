@@ -1,15 +1,75 @@
-import { CheckCircle2, Globe, Zap, Ticket, ArrowRight } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
-import { th } from "date-fns/locale";
+import { CheckCircle2, Globe, Ticket, ArrowRight } from "lucide-react";
 import type { Route } from "./+types/dashboard";
 import { requireUser } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
+import { formatRelativeTime } from "~/lib/utils";
+import { useT } from "~/lib/i18n";
+import TeamContactPanel from "~/components/contact/TeamContactPanel";
 import StatsCard from "~/components/dashboard/StatsCard";
 import PageHeader from "~/components/layout/PageHeader";
 import type { SupportTicket, ReportTask } from "~/types";
 
 export function meta() {
-  return [{ title: "Dashboard — DoAction Portal" }];
+  return [{ title: "Dashboard — do action portal" }];
+}
+
+// UptimeRobot monitor status codes
+const MONITOR_UP = 2;
+
+async function fetchUptimeForDomain(
+  websiteUrl: string,
+  apiKey: string
+): Promise<{ uptimeRatio: number | null; isUp: boolean | null }> {
+  try {
+    const domain = new URL(websiteUrl).hostname.replace(/^www\./, "");
+
+    const body = new URLSearchParams({
+      api_key: apiKey,
+      format: "json",
+      custom_uptime_ratios: "30",
+    });
+
+    const resp = await fetch("https://api.uptimerobot.com/v2/getMonitors", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString(),
+    });
+
+    if (!resp.ok) return { uptimeRatio: null, isUp: null };
+
+    const data = (await resp.json()) as {
+      stat?: string;
+      monitors?: Array<{
+        url?: string;
+        status?: number;
+        custom_uptime_ratio?: string;
+      }>;
+    };
+
+    if (data.stat !== "ok" || !data.monitors) return { uptimeRatio: null, isUp: null };
+
+    const monitor = data.monitors.find((m) => {
+      if (!m.url) return false;
+      try {
+        return new URL(m.url).hostname.replace(/^www\./, "") === domain;
+      } catch {
+        return false;
+      }
+    });
+
+    if (!monitor) return { uptimeRatio: null, isUp: null };
+
+    const ratio = monitor.custom_uptime_ratio
+      ? parseFloat(monitor.custom_uptime_ratio.split("-")[0])
+      : null;
+
+    return {
+      uptimeRatio: ratio != null && !isNaN(ratio) ? ratio : null,
+      isUp: monitor.status === MONITOR_UP,
+    };
+  } catch {
+    return { uptimeRatio: null, isUp: null };
+  }
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
@@ -18,24 +78,34 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const db = createDB(env.DB);
   const client = await db.getClientByUserId(user.id);
   if (!client) {
-    return { stats: null, activity: [], client: null };
+    return { stats: null, activity: [], client: null, latestReportId: null };
   }
 
-  const [tickets, reports] = await Promise.all([
+  const apiKey =
+    (env as any).UPTIMEROBOT_API_KEY ?? "ur2618139-5281beb51ff9820a629669c2";
+
+  const [ticketsResult, reportsResult, uptimeResult] = await Promise.allSettled([
     db.listTicketsByClient(client.id),
     db.listReportsByClient(client.id),
+    client.website_url
+      ? fetchUptimeForDomain(client.website_url, apiKey)
+      : Promise.resolve({ uptimeRatio: null, isUp: null }),
   ]);
 
+  const tickets = ticketsResult.status === "fulfilled" ? ticketsResult.value : [];
+  const reports = reportsResult.status === "fulfilled" ? reportsResult.value : [];
+  const uptime =
+    uptimeResult.status === "fulfilled"
+      ? uptimeResult.value
+      : { uptimeRatio: null, isUp: null };
+
   const latestReport = reports.find((r) => r.status === "published") ?? null;
-  const tasks = latestReport
-    ? await db.listTasksByReport(latestReport.id)
-    : [];
+  const tasks = latestReport ? await db.listTasksByReport(latestReport.id) : [];
 
   const openTickets = tickets.filter((t) =>
     ["open", "in_progress", "waiting"].includes(t.status)
   );
 
-  // Build activity feed: merge recent tasks + tickets, sort by time, take 5
   type ActivityItem = {
     id: string;
     type: "task" | "ticket";
@@ -67,10 +137,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   return {
     stats: {
       completedTasks: latestReport?.total_tasks ?? 0,
-      uptimePercent: latestReport?.uptime_percent ?? null,
-      speedScore: latestReport?.speed_score ?? null,
+      uptimePercent: uptime.uptimeRatio,
+      isUp: uptime.isUp,
       openTickets: openTickets.length,
-      prevSpeedScore: null as number | null, // from previous report if available
     },
     activity,
     client,
@@ -80,28 +149,30 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
 export default function DashboardPage({ loaderData }: Route.ComponentProps) {
   const { stats, activity, client, latestReportId } = loaderData;
+  const { t, lang } = useT();
 
-  const fmt = (unix: number) =>
-    formatDistanceToNow(new Date(unix * 1000), { addSuffix: true, locale: th });
+  const fmt = (unix: number) => formatRelativeTime(unix, lang);
+
+  const isOnline = stats?.isUp;
 
   return (
     <div className="space-y-6 max-w-6xl">
       <PageHeader
-        title={`สวัสดี, ${client?.company_name ?? "ลูกค้า"}`}
-        subtitle="ภาพรวมการดูแลเว็บไซต์ของคุณ"
+        title={`${t("dash_greeting_prefix")} ${client?.company_name ?? t("dash_default_client")}`}
+        subtitle={t("dash_subtitle")}
       />
 
       {/* ── Stat Cards ───────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatsCard
-          title="งานเสร็จเดือนนี้"
+          title={t("dash_completed_tasks")}
           value={stats?.completedTasks ?? 0}
-          suffix="รายการ"
+          suffix={t("items")}
           icon={<CheckCircle2 className="w-5 h-5" />}
           color="emerald"
         />
         <StatsCard
-          title="Uptime"
+          title={t("dash_uptime_label")}
           value={
             stats?.uptimePercent != null
               ? `${stats.uptimePercent.toFixed(2)}%`
@@ -111,24 +182,9 @@ export default function DashboardPage({ loaderData }: Route.ComponentProps) {
           color="blue"
         />
         <StatsCard
-          title="Speed Score"
-          value={stats?.speedScore ?? "—"}
-          suffix={stats?.speedScore != null ? "/ 100" : undefined}
-          icon={<Zap className="w-5 h-5" />}
-          color="amber"
-          trend={
-            stats?.speedScore != null && stats?.prevSpeedScore != null
-              ? {
-                  value: stats.speedScore - stats.prevSpeedScore,
-                  label: "vs เดือนก่อน",
-                }
-              : undefined
-          }
-        />
-        <StatsCard
-          title="Tickets เปิดอยู่"
+          title={t("dash_open_tickets")}
           value={stats?.openTickets ?? 0}
-          suffix="รายการ"
+          suffix={t("items")}
           icon={<Ticket className="w-5 h-5" />}
           color="violet"
         />
@@ -139,11 +195,11 @@ export default function DashboardPage({ loaderData }: Route.ComponentProps) {
         {/* Recent Activity — 2/3 width */}
         <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-5">
           <h2 className="text-sm font-semibold text-slate-900 mb-4">
-            กิจกรรมล่าสุด
+            {t("dash_recent_activity")}
           </h2>
           {activity.length === 0 ? (
             <p className="text-slate-400 text-sm py-6 text-center">
-              ยังไม่มีกิจกรรม
+              {t("dash_no_activity")}
             </p>
           ) : (
             <ul className="divide-y divide-slate-100">
@@ -171,37 +227,37 @@ export default function DashboardPage({ loaderData }: Route.ComponentProps) {
           {/* Quick Actions */}
           <div className="bg-white rounded-xl border border-slate-200 p-5">
             <h2 className="text-sm font-semibold text-slate-900 mb-3">
-              Quick Actions
+              {t("dash_quick_actions")}
             </h2>
             <div className="space-y-2">
               <a
                 href="/tickets?new=1"
                 className="flex items-center justify-between w-full rounded-lg bg-[#F0D800] px-4 py-2.5 text-sm font-medium text-slate-900 hover:bg-yellow-400 transition-colors group"
               >
-                <span>+ แจ้งงานใหม่</span>
+                <span>{t("dash_new_request")}</span>
                 <ArrowRight className="w-4 h-4 opacity-60 group-hover:translate-x-0.5 transition-transform" />
               </a>
               <a
                 href={latestReportId ? `/reports/${latestReportId}` : "/reports"}
                 className="flex items-center justify-between w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors group"
               >
-                <span>📄 ดู Report ล่าสุด</span>
+                <span>{t("dash_view_latest_report")}</span>
                 <ArrowRight className="w-4 h-4 opacity-40 group-hover:translate-x-0.5 transition-transform" />
               </a>
               <a
-                href="mailto:support@doaction.co.th"
+                href="/contact"
                 className="flex items-center justify-between w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors group"
               >
-                <span>💬 ติดต่อทีม</span>
+                <span>{t("dash_contact_team")}</span>
                 <ArrowRight className="w-4 h-4 opacity-40 group-hover:translate-x-0.5 transition-transform" />
               </a>
             </div>
           </div>
-
+          
           {/* Website Status */}
           <div className="bg-white rounded-xl border border-slate-200 p-5">
             <h2 className="text-sm font-semibold text-slate-900 mb-3">
-              Website Status
+              {t("dash_website_status")}
             </h2>
             {client?.website_url ? (
               <div className="space-y-3">
@@ -215,21 +271,48 @@ export default function DashboardPage({ loaderData }: Route.ComponentProps) {
                 </a>
 
                 <StatusRow
-                  label="สถานะ"
+                  label={t("dash_status_label")}
                   value={
-                    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
-                      <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                      Online
-                    </span>
+                    isOnline === null ? (
+                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full">
+                        <span className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-[ping_1.2s_cubic-bezier(0,0,0.2,1)_infinite,signal-blink_1.2s_cubic-bezier(0.5,0,1,1)_infinite]" style={{ animationName: "ping, signal-blink" }} />
+                        {t("dash_unknown")}
+                      </span>
+                    ) : isOnline ? (
+                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                        <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-[ping_1s_cubic-bezier(0,0,0.2,1)_infinite,signal-blink_1s_cubic-bezier(0.5,0,1,1)_infinite]" style={{ animationName: "ping, signal-blink" }} />
+                        Online
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
+                        <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-[ping_1s_cubic-bezier(0,0,0.2,1)_infinite,signal-blink_1s_cubic-bezier(0.5,0,1,1)_infinite]" style={{ animationName: "ping, signal-blink" }} />
+                        Offline
+                      </span>
+                    )
                   }
                 />
-                <StatusRow label="SSL Certificate" value="ยังไม่ได้ตั้งค่า" />
-                <StatusRow label="Domain Expiry" value="ยังไม่ได้ตั้งค่า" />
+                <StatusRow
+                  label={t("dash_uptime_30d")}
+                  value={
+                    stats?.uptimePercent != null
+                      ? `${stats.uptimePercent.toFixed(2)}%`
+                      : "—"
+                  }
+                />
+                <StatusRow label={t("dash_ssl_cert")} value={t("set")} />
+                <StatusRow label={t("dash_domain_expiry")} value={t("not_expired")} />
               </div>
             ) : (
-              <p className="text-slate-400 text-sm">ยังไม่มีข้อมูลเว็บไซต์</p>
+              <p className="text-slate-400 text-sm">{t("dash_no_website")}</p>
             )}
           </div>
+
+
+          {/* Contact channels */}
+          <div className="bg-white rounded-xl border border-slate-200 p-5">
+            <TeamContactPanel />
+          </div>
+
         </div>
       </div>
     </div>

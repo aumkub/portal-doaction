@@ -2,9 +2,9 @@
  * Shared component used by both /admin/reports/new and /admin/reports/:reportId
  * A client-side interactive form for creating/editing reports with dynamic tasks.
  */
-import { useState } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { Form } from "react-router";
-import { PlusCircle, Trash2, GripVertical } from "lucide-react";
+import { PlusCircle, Trash2, GripVertical, Loader2 } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
@@ -17,9 +17,31 @@ import {
   SelectValue,
 } from "~/components/ui/select";
 import type { MonthlyReport, ReportTask, Client, TaskCategory } from "~/types";
+import { useT } from "~/lib/i18n";
+import type { Lang } from "~/lib/translations";
+import { getMonthName } from "~/lib/utils";
+import type { TranslationKey } from "~/lib/translations";
+
+const categoryEmoji: Record<TaskCategory, string> = {
+  maintenance: "🔧",
+  development: "💻",
+  security: "🔒",
+  seo: "📈",
+  performance: "⚡",
+  other: "📌",
+};
+
+const categoryKey: Record<TaskCategory, TranslationKey> = {
+  maintenance: "cat_maintenance",
+  development: "cat_development",
+  security: "cat_security",
+  seo: "cat_seo",
+  performance: "cat_performance",
+  other: "cat_other",
+};
 
 interface TaskDraft {
-  id: string;      // temp ID for UI key
+  id: string;
   category: TaskCategory;
   title: string;
   description: string;
@@ -33,22 +55,37 @@ interface ReportEditorProps {
   errors?: Record<string, string[]>;
 }
 
-const categoryOptions: { value: TaskCategory; label: string }[] = [
-  { value: "maintenance", label: "🔧 Maintenance" },
-  { value: "development", label: "💻 Development" },
-  { value: "security", label: "🔒 Security" },
-  { value: "seo", label: "📈 SEO" },
-  { value: "performance", label: "⚡ Performance" },
-  { value: "other", label: "📌 อื่นๆ" },
+/** Common tasks — Thai (default) */
+const PRESET_TASKS_TH: { category: TaskCategory; title: string; description?: string }[] = [
+  { category: "maintenance", title: "อัพเดทปลั๊กอิน", description: "อัพเดทปลั๊กอินทั้งหมดให้เป็นเวอร์ชันล่าสุด" },
+  { category: "maintenance", title: "อัพเดทธีม", description: "อัพเดทธีมให้เป็นเวอร์ชันล่าสุด" },
+  { category: "maintenance", title: "ตรวจสอบการทำงานปกติของเว็บไซต์", description: "ตรวจสอบหน้าหลัก ฟอร์ม และระบบต่างๆ" },
+  { category: "maintenance", title: "Backup website", description: "สำรองข้อมูลเว็บไซต์และฐานข้อมูล" },
+  { category: "security", title: "ตรวจสอบความปลอดภัย", description: "สแกนและตรวจสอบช่องโหว่ความปลอดภัย" },
+  { category: "seo", title: "ตรวจสอบ SEO", description: "ตรวจสอบ sitemap, robots.txt และ meta tags" },
+  { category: "performance", title: "ตรวจสอบความเร็วเว็บไซต์", description: "วัดและบันทึกค่า Core Web Vitals" },
+  { category: "maintenance", title: "อัพเดท WordPress Core", description: "อัพเดท WordPress ให้เป็นเวอร์ชันล่าสุด" },
 ];
 
-const MONTHS = [
-  "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
-  "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม",
+const PRESET_TASKS_EN: { category: TaskCategory; title: string; description?: string }[] = [
+  { category: "maintenance", title: "Update plugins", description: "Update all plugins to the latest versions" },
+  { category: "maintenance", title: "Update theme", description: "Update the theme to the latest version" },
+  { category: "maintenance", title: "Site health check", description: "Check homepage, forms, and key flows" },
+  { category: "maintenance", title: "Website backup", description: "Back up site files and database" },
+  { category: "security", title: "Security review", description: "Scan and review common vulnerabilities" },
+  { category: "seo", title: "SEO check", description: "Review sitemap, robots.txt, and meta tags" },
+  { category: "performance", title: "Performance check", description: "Measure and record Core Web Vitals" },
+  { category: "maintenance", title: "Update WordPress core", description: "Update WordPress to the latest version" },
 ];
 
 function makeDraftId() {
   return `draft-${Math.random().toString(36).slice(2)}`;
+}
+
+function autoTitle(month: number, year: number, lang: Lang) {
+  const m = getMonthName(month, lang);
+  if (lang === "en") return `Monthly report ${m} ${year}`;
+  return `รายงานประจำเดือน ${m} ${year + 543}`;
 }
 
 export default function ReportEditor({
@@ -58,7 +95,45 @@ export default function ReportEditor({
   isNew,
   errors,
 }: ReportEditorProps) {
+  const { t, lang } = useT();
   const currentYear = new Date().getFullYear();
+  const currentMonth = new Date().getMonth() + 1;
+
+  const initMonth = report?.month ?? currentMonth;
+  const initYear = report?.year ?? currentYear;
+
+  const [month, setMonth] = useState(initMonth);
+  const [year, setYear] = useState(initYear);
+  const [title, setTitle] = useState(
+    report?.title && report.title !== ""
+      ? report.title
+      : autoTitle(initMonth, initYear, lang)
+  );
+  const [titleManuallyEdited, setTitleManuallyEdited] = useState(
+    !!(report?.title && report.title !== "")
+  );
+
+  const [uptimePercent, setUptimePercent] = useState<string>(
+    report?.uptime_percent != null ? String(report.uptime_percent) : ""
+  );
+  const [uptimeFetching, setUptimeFetching] = useState(false);
+  const [selectedClientId, setSelectedClientId] = useState(report?.client_id ?? "");
+  const [selectedClientIds, setSelectedClientIds] = useState<string[]>(
+    report?.client_id ? [report.client_id] : []
+  );
+  const [uptimeOverrides, setUptimeOverrides] = useState<Record<string, string>>({});
+  const [uptimeFetchingByClient, setUptimeFetchingByClient] = useState<Record<string, boolean>>({});
+
+  const presetTasks = lang === "en" ? PRESET_TASKS_EN : PRESET_TASKS_TH;
+
+  const categoryOptions = useMemo(
+    () =>
+      (Object.keys(categoryKey) as TaskCategory[]).map((value) => ({
+        value,
+        label: `${categoryEmoji[value]} ${t(categoryKey[value])}`,
+      })),
+    [t]
+  );
 
   const [taskDrafts, setTaskDrafts] = useState<TaskDraft[]>(
     tasks.length > 0
@@ -71,10 +146,82 @@ export default function ReportEditor({
       : [{ id: makeDraftId(), category: "maintenance", title: "", description: "" }]
   );
 
+  const handleMonthChange = (newMonth: number) => {
+    setMonth(newMonth);
+    if (!titleManuallyEdited) {
+      setTitle(autoTitle(newMonth, year, lang));
+    }
+  };
+
+  const handleYearChange = (newYear: number) => {
+    setYear(newYear);
+    if (!titleManuallyEdited) {
+      setTitle(autoTitle(month, newYear, lang));
+    }
+  };
+
+  const handleClientChange = useCallback(async (clientId: string) => {
+    setSelectedClientId(clientId);
+    if (!clientId) return;
+    setUptimeFetching(true);
+    try {
+      const resp = await fetch(`/api/uptime?clientId=${clientId}`);
+      if (resp.ok) {
+        const data = await resp.json() as { uptimeRatio: number | null };
+        if (data.uptimeRatio != null) {
+          setUptimePercent(data.uptimeRatio.toFixed(2));
+        }
+      }
+    } catch {
+      // ignore
+    } finally {
+      setUptimeFetching(false);
+    }
+  }, []);
+
+  const handleToggleClient = useCallback(async (clientId: string, checked: boolean) => {
+    setSelectedClientIds((prev) =>
+      checked ? [...prev, clientId] : prev.filter((id) => id !== clientId)
+    );
+
+    if (!checked || uptimeOverrides[clientId] != null) return;
+    setUptimeFetchingByClient((prev) => ({ ...prev, [clientId]: true }));
+    try {
+      const resp = await fetch(`/api/uptime?clientId=${clientId}`);
+      if (resp.ok) {
+        const data = (await resp.json()) as { uptimeRatio: number | null };
+        if (data.uptimeRatio != null) {
+          setUptimeOverrides((prev) => ({
+            ...prev,
+            [clientId]: data.uptimeRatio!.toFixed(2),
+          }));
+        }
+      }
+    } catch {
+      // ignore
+    } finally {
+      setUptimeFetchingByClient((prev) => ({ ...prev, [clientId]: false }));
+    }
+  }, [uptimeOverrides]);
+
   const addTask = () => {
     setTaskDrafts((prev) => [
       ...prev,
       { id: makeDraftId(), category: "maintenance", title: "", description: "" },
+    ]);
+  };
+
+  const addPresetTask = (preset: (typeof PRESET_TASKS_TH)[number]) => {
+    // Don't add duplicate titles
+    if (taskDrafts.some((t) => t.title === preset.title)) return;
+    setTaskDrafts((prev) => [
+      ...prev,
+      {
+        id: makeDraftId(),
+        category: preset.category,
+        title: preset.title,
+        description: preset.description ?? "",
+      },
     ]);
   };
 
@@ -98,42 +245,90 @@ export default function ReportEditor({
           taskDrafts.map(({ id: _id, ...t }) => t)
         )}
       />
+      {isNew && (
+        <>
+          <input
+            type="hidden"
+            name="client_ids_json"
+            value={JSON.stringify(selectedClientIds)}
+          />
+          <input
+            type="hidden"
+            name="uptime_overrides_json"
+            value={JSON.stringify(uptimeOverrides)}
+          />
+        </>
+      )}
 
       {/* ── Basic Info ─────────────────────────────────────────────────────── */}
       <section className="bg-white rounded-xl border border-slate-200 p-6 space-y-5">
-        <h2 className="text-sm font-semibold text-slate-900">ข้อมูลทั่วไป</h2>
+        <h2 className="text-sm font-semibold text-slate-900">
+          {t("admin_editor_section_basic")}
+        </h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {/* Client */}
-          <div className="space-y-1.5">
-            <Label htmlFor="client_id">ลูกค้า</Label>
-            <select
-              id="client_id"
-              name="client_id"
-              defaultValue={report?.client_id ?? ""}
-              required
-              className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
-            >
-              <option value="" disabled>เลือกลูกค้า</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.company_name}
+          {/* Client(s) */}
+          {isNew ? (
+            <div className="space-y-2 sm:col-span-2">
+              <Label>{t("admin_editor_select_clients")}</Label>
+              <div className="max-h-44 overflow-y-auto rounded-lg border border-slate-200 bg-white p-3 grid sm:grid-cols-2 gap-2">
+                {clients.map((c) => {
+                  const checked = selectedClientIds.includes(c.id);
+                  return (
+                    <label
+                      key={c.id}
+                      className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-slate-50 text-sm text-slate-700 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => handleToggleClient(c.id, e.target.checked)}
+                        className="rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+                      />
+                      <span>{c.company_name}</span>
+                    </label>
+                  );
+                })}
+              </div>
+              {errors?.client_ids_json && (
+                <p className="text-red-500 text-xs">{errors.client_ids_json[0]}</p>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <Label htmlFor="client_id">{t("admin_col_client")}</Label>
+              <select
+                id="client_id"
+                name="client_id"
+                value={selectedClientId}
+                onChange={(e) => handleClientChange(e.target.value)}
+                required
+                className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
+              >
+                <option value="" disabled>
+                  {t("admin_editor_select_client")}
                 </option>
-              ))}
-            </select>
-            {errors?.client_id && (
-              <p className="text-red-500 text-xs">{errors.client_id[0]}</p>
-            )}
-          </div>
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.company_name}
+                  </option>
+                ))}
+              </select>
+              {errors?.client_id && (
+                <p className="text-red-500 text-xs">{errors.client_id[0]}</p>
+              )}
+            </div>
+          )}
 
           {/* Year */}
           <div className="space-y-1.5">
-            <Label htmlFor="year">ปี (ค.ศ.)</Label>
+            <Label htmlFor="year">{t("admin_editor_year_ad")}</Label>
             <Input
               id="year"
               name="year"
               type="number"
-              defaultValue={report?.year ?? currentYear}
+              value={year}
+              onChange={(e) => handleYearChange(Number(e.target.value))}
               min={2020}
               max={currentYear + 2}
               required
@@ -142,17 +337,18 @@ export default function ReportEditor({
 
           {/* Month */}
           <div className="space-y-1.5">
-            <Label htmlFor="month">เดือน</Label>
+            <Label htmlFor="month">{t("admin_editor_month")}</Label>
             <select
               id="month"
               name="month"
-              defaultValue={report?.month ?? new Date().getMonth() + 1}
+              value={month}
+              onChange={(e) => handleMonthChange(Number(e.target.value))}
               required
               className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
             >
-              {MONTHS.map((m, i) => (
-                <option key={i + 1} value={i + 1}>
-                  {m}
+              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                <option key={m} value={m}>
+                  {getMonthName(m, lang)}
                 </option>
               ))}
             </select>
@@ -160,12 +356,15 @@ export default function ReportEditor({
 
           {/* Title */}
           <div className="space-y-1.5">
-            <Label htmlFor="title">ชื่อรายงาน</Label>
+            <Label htmlFor="title">{t("admin_editor_report_title")}</Label>
             <Input
               id="title"
               name="title"
-              defaultValue={report?.title ?? ""}
-              placeholder="รายงานประจำเดือน มีนาคม 2569"
+              value={title}
+              onChange={(e) => {
+                setTitle(e.target.value);
+                setTitleManuallyEdited(true);
+              }}
               required
             />
           </div>
@@ -173,20 +372,70 @@ export default function ReportEditor({
 
         {/* Summary */}
         <div className="space-y-1.5">
-          <Label htmlFor="summary">สรุปภาพรวม (optional)</Label>
+          <Label htmlFor="summary">{t("admin_editor_summary")}</Label>
           <Textarea
             id="summary"
             name="summary"
             defaultValue={report?.summary ?? ""}
             rows={3}
-            placeholder="สรุปงานที่ดำเนินการในเดือนนี้..."
+            placeholder={t("admin_editor_summary_ph")}
           />
         </div>
 
-        {/* Metrics */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="uptime_percent">Uptime %</Label>
+        {/* Uptime */}
+        {isNew ? (
+          <div className="space-y-2">
+            <Label>{t("admin_editor_uptime_per_client")}</Label>
+            {selectedClientIds.length === 0 ? (
+              <p className="text-xs text-slate-400">{t("admin_editor_uptime_select_client_first")}</p>
+            ) : (
+              <div className="space-y-2">
+                {selectedClientIds.map((clientId) => {
+                  const client = clients.find((c) => c.id === clientId);
+                  if (!client) return null;
+                  const isLoading = uptimeFetchingByClient[clientId];
+                  return (
+                    <div key={clientId} className="grid grid-cols-1 sm:grid-cols-[1fr_180px] gap-2 items-center rounded-lg border border-slate-200 bg-slate-50 p-3">
+                      <div className="text-sm">
+                        <p className="font-medium text-slate-800">{client.company_name}</p>
+                        <p className="text-xs text-slate-500">
+                          {client.website_url?.replace(/^https?:\/\//, "") ?? t("admin_editor_no_domain")}
+                        </p>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-slate-500">{t("admin_editor_uptime_pct")}</span>
+                          {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" /> : null}
+                        </div>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min={0}
+                          max={100}
+                          value={uptimeOverrides[clientId] ?? ""}
+                          onChange={(e) =>
+                            setUptimeOverrides((prev) => ({
+                              ...prev,
+                              [clientId]: e.target.value,
+                            }))
+                          }
+                          placeholder="99.95"
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-1.5 max-w-xs">
+            <Label htmlFor="uptime_percent" className="flex items-center gap-2">
+              {t("admin_editor_uptime_pct")}
+              {uptimeFetching && (
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />
+              )}
+            </Label>
             <Input
               id="uptime_percent"
               name="uptime_percent"
@@ -194,30 +443,22 @@ export default function ReportEditor({
               step="0.01"
               min={0}
               max={100}
-              defaultValue={report?.uptime_percent ?? ""}
+              value={uptimePercent}
+              onChange={(e) => setUptimePercent(e.target.value)}
               placeholder="99.95"
             />
+            {uptimePercent === "" && !uptimeFetching && selectedClientId && (
+              <p className="text-xs text-slate-400">{t("admin_editor_uptime_hint")}</p>
+            )}
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="speed_score">Speed Score (0–100)</Label>
-            <Input
-              id="speed_score"
-              name="speed_score"
-              type="number"
-              min={0}
-              max={100}
-              defaultValue={report?.speed_score ?? ""}
-              placeholder="90"
-            />
-          </div>
-        </div>
+        )}
       </section>
 
       {/* ── Tasks ──────────────────────────────────────────────────────────── */}
       <section className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-slate-900">
-            รายการงาน ({taskDrafts.length})
+            {t("admin_editor_tasks_title")} ({taskDrafts.length})
           </h2>
           <Button
             type="button"
@@ -226,13 +467,41 @@ export default function ReportEditor({
             onClick={addTask}
             className="gap-1.5"
           >
-            <PlusCircle className="w-4 h-4" /> เพิ่มงาน
+            <PlusCircle className="w-4 h-4" /> {t("admin_editor_add_task")}
           </Button>
+        </div>
+
+        {/* Preset tasks */}
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-slate-500">
+            {t("admin_editor_presets_hint")}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {presetTasks.map((preset) => {
+              const alreadyAdded = taskDrafts.some((t) => t.title === preset.title);
+              return (
+                <button
+                  key={preset.title}
+                  type="button"
+                  onClick={() => addPresetTask(preset)}
+                  disabled={alreadyAdded}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                    alreadyAdded
+                      ? "bg-violet-50 border-violet-200 text-violet-400 cursor-default"
+                      : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300"
+                  }`}
+                >
+                  {alreadyAdded ? "✓ " : "+ "}
+                  {preset.title}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {taskDrafts.length === 0 && (
           <p className="text-slate-400 text-sm py-4 text-center">
-            กด "เพิ่มงาน" เพื่อเพิ่มรายการ
+            {t("admin_editor_tasks_empty")}
           </p>
         )}
 
@@ -268,7 +537,7 @@ export default function ReportEditor({
               <input
                 value={task.title}
                 onChange={(e) => updateTask(task.id, "title", e.target.value)}
-                placeholder={`งานที่ ${index + 1}`}
+                placeholder={`${t("admin_editor_task_placeholder")} ${index + 1}`}
                 className="h-9 rounded-lg border border-slate-200 px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 w-full"
               />
 
@@ -278,7 +547,7 @@ export default function ReportEditor({
                 onChange={(e) =>
                   updateTask(task.id, "description", e.target.value)
                 }
-                placeholder="รายละเอียด (optional)"
+                placeholder={t("admin_editor_task_desc_ph")}
                 className="h-9 rounded-lg border border-slate-200 px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 w-full"
               />
 
@@ -287,7 +556,7 @@ export default function ReportEditor({
                 type="button"
                 onClick={() => removeTask(task.id)}
                 className="p-1.5 text-slate-300 hover:text-red-500 transition-colors mt-1"
-                aria-label="ลบ"
+                aria-label={t("admin_editor_remove_task")}
               >
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -302,23 +571,25 @@ export default function ReportEditor({
           href="/admin/reports"
           className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
         >
-          ยกเลิก
+          {t("cancel")}
         </a>
         <Button
           type="submit"
           name="intent"
           value="draft"
           variant="outline"
+          disabled={isNew && selectedClientIds.length === 0}
         >
-          บันทึก Draft
+          {t("admin_editor_save_draft")}
         </Button>
         <Button
           type="submit"
           name="intent"
           value="publish"
           className="bg-violet-600 hover:bg-violet-700 text-white"
+          disabled={isNew && selectedClientIds.length === 0}
         >
-          {isNew ? "สร้างและเผยแพร่" : "เผยแพร่รายงาน"}
+          {isNew ? t("admin_editor_publish_new") : t("admin_editor_publish")}
         </Button>
       </div>
     </Form>

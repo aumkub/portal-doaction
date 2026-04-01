@@ -1,6 +1,6 @@
 import { redirect } from "react-router";
 import type { Route } from "./+types/logout";
-import { createAuth } from "~/lib/auth.server";
+import { createAuth, evictSessionUserCache } from "~/lib/auth.server";
 
 export async function action({ request, context }: Route.ActionArgs) {
   const env = context.cloudflare.env;
@@ -10,6 +10,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   if (sessionId) {
     await lucia.invalidateSession(sessionId);
+    evictSessionUserCache(sessionId);
   }
 
   const blankCookie = lucia.createBlankSessionCookie();

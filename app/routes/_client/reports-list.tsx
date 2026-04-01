@@ -6,7 +6,7 @@ import PageHeader from "~/components/layout/PageHeader";
 import type { MonthlyReport } from "~/types";
 
 export function meta() {
-  return [{ title: "รายงานประจำเดือน — DoAction Portal" }];
+  return [{ title: "รายงานประจำเดือน — do action portal" }];
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
@@ -24,7 +24,7 @@ export default function ReportsListPage({ loaderData }: Route.ComponentProps) {
   const { reports } = loaderData as { reports: MonthlyReport[] };
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="space-y-6">
       <PageHeader
         title="รายงานประจำเดือน"
         subtitle="สรุปงานที่ทีมดำเนินการในแต่ละเดือน"

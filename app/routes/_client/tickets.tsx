@@ -1,4 +1,5 @@
 import { Form, useSearchParams } from "react-router";
+import { useState } from "react";
 import type { Route } from "./+types/tickets";
 import { requireUser } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
@@ -7,7 +8,7 @@ import { z } from "zod";
 import type { SupportTicket, TicketStatus, TicketPriority } from "~/types";
 
 export function meta() {
-  return [{ title: "Support Tickets — DoAction Portal" }];
+  return [{ title: "Support Tickets — do action portal" }];
 }
 
 const NewTicketSchema = z.object({
@@ -90,14 +91,14 @@ const priorityLabels: Record<TicketPriority, string> = {
 export default function TicketsPage({ loaderData, actionData }: Route.ComponentProps) {
   const { tickets } = loaderData as { tickets: SupportTicket[] };
   const [searchParams, setSearchParams] = useSearchParams();
-  const filter = (searchParams.get("status") ?? "all") as TicketStatus | "all";
+  const [filter, setFilter] = useState<TicketStatus | "all">("all");
   const showNew = searchParams.get("new") === "1";
 
   const filtered =
     filter === "all" ? tickets : tickets.filter((t) => t.status === filter);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-4xl">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">
@@ -184,7 +185,8 @@ export default function TicketsPage({ loaderData, actionData }: Route.ComponentP
         {(["all", "open", "in_progress", "resolved"] as const).map((s) => (
           <button
             key={s}
-            onClick={() => setSearchParams(s === "all" ? {} : { status: s })}
+            type="button"
+            onClick={() => setFilter(s)}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
               filter === s
                 ? "bg-slate-900 text-white"

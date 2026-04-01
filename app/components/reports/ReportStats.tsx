@@ -16,21 +16,28 @@ export default function ReportStats({ report }: ReportStatsProps) {
     },
     {
       icon: <Globe className="w-5 h-5" />,
-      label: "Uptime",
+      label: "อัพไทม์",
       value:
         report.uptime_percent != null
           ? `${report.uptime_percent.toFixed(2)}%`
           : "—",
       color: "blue" as const,
     },
-    {
-      icon: <Zap className="w-5 h-5" />,
-      label: "Speed Score",
-      value: report.speed_score != null ? String(report.speed_score) : "—",
-      suffix: report.speed_score != null ? "/ 100" : undefined,
-      color: "amber" as const,
-    },
+    ...(report.speed_score != null
+      ? [
+          {
+            icon: <Zap className="w-5 h-5" />,
+            label: "คะแนนสปีด",
+            value: String(report.speed_score),
+            suffix: "/ 100" as const,
+            color: "amber" as const,
+          },
+        ]
+      : []),
   ];
+
+  const gridClass =
+    items.length >= 3 ? "grid-cols-3" : items.length === 2 ? "grid-cols-2" : "grid-cols-1";
 
   const colorMap = {
     emerald: { bg: "bg-emerald-50", icon: "text-emerald-600" },
@@ -39,7 +46,7 @@ export default function ReportStats({ report }: ReportStatsProps) {
   };
 
   return (
-    <div className="grid grid-cols-3 gap-4">
+    <div className={`grid gap-4 ${gridClass}`}>
       {items.map((item) => {
         const c = colorMap[item.color];
         return (

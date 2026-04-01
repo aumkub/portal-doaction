@@ -4,8 +4,11 @@ import type { Route } from "./+types/reports-new";
 import { requireAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { generateId, getThaiMonth } from "~/lib/utils";
+import { sendTelegramNotification } from "~/lib/telegram.server";
+import { fetchUptimeForWebsite } from "~/lib/uptime.server";
 import PageHeader from "~/components/layout/PageHeader";
 import ReportEditor from "~/routes/_admin/reports-editor";
+import { useT } from "~/lib/i18n";
 import type { TaskCategory } from "~/types";
 
 export function meta() {
@@ -21,7 +24,9 @@ const TaskSchema = z.object({
 });
 
 const ReportSchema = z.object({
-  client_id: z.string().min(1, "กรุณาเลือกลูกค้า"),
+  client_id: z.string().optional().default(""),
+  client_ids_json: z.string().optional().default("[]"),
+  uptime_overrides_json: z.string().optional().default("{}"),
   year: z.coerce.number().int().min(2020).max(2100),
   month: z.coerce.number().int().min(1).max(12),
   title: z.string().min(1, "กรุณาระบุชื่อรายงาน"),
@@ -54,7 +59,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   const {
-    client_id, year, month, title, summary,
+    client_id, client_ids_json, uptime_overrides_json, year, month, title, summary,
     uptime_percent, speed_score, tasks_json, intent,
   } = parsed.data;
 
@@ -67,42 +72,98 @@ export async function action({ request, context }: Route.ActionArgs) {
     return { errors: { tasks_json: ["รายการงานไม่ถูกต้อง"] } };
   }
 
-  const reportId = generateId();
   const isPublish = intent === "publish";
   const now = Math.floor(Date.now() / 1000);
+  const apiKey =
+    (env as any).UPTIMEROBOT_API_KEY ?? "ur2618139-5281beb51ff9820a629669c2";
 
-  await db.createReport({
-    id: reportId,
-    client_id,
-    year,
-    month,
-    title,
-    summary: summary ?? null,
-    uptime_percent: uptime_percent ?? null,
-    speed_score: speed_score ?? null,
-    total_tasks: tasks.length,
-    status: isPublish ? "published" : "draft",
-    published_at: isPublish ? now : null,
-  });
-
-  // Create tasks
-  for (let i = 0; i < tasks.length; i++) {
-    await db.createReportTask({
-      id: generateId(),
-      report_id: reportId,
-      category: tasks[i].category as TaskCategory,
-      title: tasks[i].title,
-      description: tasks[i].description ?? null,
-      completed: 1,
-      sort_order: i,
-    });
+  let clientIds: string[] = [];
+  try {
+    const parsedClientIds = JSON.parse(client_ids_json);
+    if (Array.isArray(parsedClientIds)) {
+      clientIds = parsedClientIds.filter((id): id is string => typeof id === "string");
+    }
+  } catch {
+    // ignore invalid JSON and fallback to legacy client_id
   }
 
-  // Send notification on publish
-  if (isPublish) {
-    const client = await db.getClientById(client_id);
-    if (client) {
-      await db.createNotification({
+  if (clientIds.length === 0 && client_id) {
+    clientIds = [client_id];
+  }
+
+  if (clientIds.length === 0) {
+    return { errors: { client_ids_json: ["กรุณาเลือกลูกค้าอย่างน้อย 1 ราย"] } };
+  }
+
+  const uniqueClientIds = [...new Set(clientIds)];
+
+  let uptimeOverrides: Record<string, string> = {};
+  try {
+    const rawOverrides = JSON.parse(uptime_overrides_json);
+    if (rawOverrides && typeof rawOverrides === "object") {
+      uptimeOverrides = rawOverrides as Record<string, string>;
+    }
+  } catch {
+    // ignore malformed override JSON
+  }
+
+  const createdReportIds: string[] = [];
+  const failedClients: string[] = [];
+
+  for (const currentClientId of uniqueClientIds) {
+    const client = await db.getClientById(currentClientId);
+    if (!client) {
+      failedClients.push(currentClientId);
+      continue;
+    }
+
+    const existing = await db.getReportByMonth(currentClientId, year, month);
+    if (existing) {
+      failedClients.push(client.company_name);
+      continue;
+    }
+
+    const overrideRaw = uptimeOverrides[currentClientId]?.trim();
+    const overrideValue = overrideRaw ? Number(overrideRaw) : null;
+    let resolvedUptime: number | null = null;
+    if (overrideValue != null && !Number.isNaN(overrideValue)) {
+      resolvedUptime = Math.max(0, Math.min(100, overrideValue));
+    } else if (client.website_url) {
+      const uptime = await fetchUptimeForWebsite(client.website_url, apiKey);
+      resolvedUptime = uptime.uptimeRatio;
+    } else {
+      resolvedUptime = uptime_percent ?? null;
+    }
+
+    const reportId = generateId();
+    await db.createReport({
+      id: reportId,
+      client_id: currentClientId,
+      year,
+      month,
+      title,
+      summary: summary ?? null,
+      uptime_percent: resolvedUptime,
+      speed_score: speed_score ?? null,
+      total_tasks: tasks.length,
+      status: isPublish ? "published" : "draft",
+      published_at: isPublish ? now : null,
+    });
+
+    for (let i = 0; i < tasks.length; i++) {
+      await db.createReportTask({
+        id: generateId(),
+        report_id: reportId,
+        category: tasks[i].category as TaskCategory,
+        title: tasks[i].title,
+        description: tasks[i].description ?? null,
+        completed: 1,
+        sort_order: i,
+      });
+    }
+
+    if (isPublish) {
+      const notification = {
         id: generateId(),
         user_id: client.user_id,
         type: "report_published",
@@ -110,26 +171,40 @@ export async function action({ request, context }: Route.ActionArgs) {
         body: "ทีม DoAction ได้เผยแพร่รายงานสรุปงานสำหรับเดือนนี้แล้ว",
         link: `/reports/${reportId}`,
         read: 0,
+      } as const;
+      await db.createNotification(notification);
+      await sendTelegramNotification({
+        db,
+        appUrl: env.APP_URL,
+        notification,
       });
     }
+
+    createdReportIds.push(reportId);
   }
 
-  return redirect(`/admin/reports/${reportId}`);
+  const search = new URLSearchParams({
+    bulkCreated: String(createdReportIds.length),
+    bulkFailed: String(failedClients.length),
+  });
+  return redirect(`/admin/reports?${search.toString()}`);
 }
 
-export default function AdminReportNewPage({ loaderData }: Route.ComponentProps) {
+export default function AdminReportNewPage({ loaderData, actionData }: Route.ComponentProps) {
   const { clients } = loaderData;
+  const errors = (actionData as { errors?: Record<string, string[]> } | undefined)?.errors;
+  const { t } = useT();
   return (
     <div className="space-y-6 max-w-4xl">
       <PageHeader
-        title="สร้าง Report ใหม่"
+        title={t("admin_report_new_title")}
         breadcrumbs={[
-          { label: "Admin", href: "/admin/clients" },
-          { label: "Reports", href: "/admin/reports" },
-          { label: "ใหม่" },
+          { label: t("admin_breadcrumb_admin"), href: "/admin/clients" },
+          { label: t("admin_breadcrumb_reports"), href: "/admin/reports" },
+          { label: t("admin_breadcrumb_new") },
         ]}
       />
-      <ReportEditor clients={clients} isNew={true} />
+      <ReportEditor clients={clients} isNew={true} errors={errors} />
     </div>
   );
 }

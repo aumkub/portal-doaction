@@ -5,11 +5,11 @@ const categoryConfig: Record<
   TaskCategory,
   { label: string; icon: string; color: string }
 > = {
-  maintenance: { label: "Maintenance", icon: "🔧", color: "text-slate-600" },
-  development: { label: "Development", icon: "💻", color: "text-blue-600" },
-  security: { label: "Security", icon: "🔒", color: "text-red-600" },
+  maintenance: { label: "บำรุงรักษา", icon: "🔧", color: "text-slate-600" },
+  development: { label: "พัฒนา", icon: "💻", color: "text-blue-600" },
+  security: { label: "ความปลอดภัย", icon: "🔒", color: "text-red-600" },
   seo: { label: "SEO", icon: "📈", color: "text-emerald-600" },
-  performance: { label: "Performance", icon: "⚡", color: "text-amber-600" },
+  performance: { label: "ประสิทธิภาพ", icon: "⚡", color: "text-amber-600" },
   other: { label: "อื่นๆ", icon: "📌", color: "text-slate-500" },
 };
 

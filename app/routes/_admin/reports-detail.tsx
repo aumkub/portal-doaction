@@ -3,9 +3,11 @@ import { z } from "zod";
 import type { Route } from "./+types/reports-detail";
 import { requireAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
-import { generateId, getThaiMonth } from "~/lib/utils";
+import { generateId, getMonthName, getThaiMonth } from "~/lib/utils";
+import { sendTelegramNotification } from "~/lib/telegram.server";
 import PageHeader from "~/components/layout/PageHeader";
 import ReportEditor from "~/routes/_admin/reports-editor";
+import { useT } from "~/lib/i18n";
 import type { TaskCategory } from "~/types";
 
 export function meta() {
@@ -112,7 +114,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   if (isPublishing) {
     const client = await db.getClientById(existing.client_id);
     if (client) {
-      await db.createNotification({
+      const notification = {
         id: generateId(),
         user_id: client.user_id,
         type: "report_published",
@@ -120,6 +122,12 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         body: "ทีม DoAction ได้เผยแพร่รายงานสรุปงานสำหรับเดือนนี้แล้ว",
         link: `/reports/${existing.id}`,
         read: 0,
+      } as const;
+      await db.createNotification(notification);
+      await sendTelegramNotification({
+        db,
+        appUrl: env.APP_URL,
+        notification,
       });
     }
   }
@@ -131,22 +139,38 @@ export default function AdminReportDetailPage({
   loaderData,
 }: Route.ComponentProps) {
   const { report, tasks, clients } = loaderData;
+  const { t, lang } = useT();
+
+  const periodTitle =
+    lang === "en"
+      ? `${getMonthName(report.month, "en")} ${report.year}`
+      : `${getThaiMonth(report.month)} ${report.year + 543}`;
 
   return (
     <div className="space-y-6 max-w-4xl">
       <PageHeader
-        title={`${getThaiMonth(report.month)} ${report.year + 543}`}
+        title={periodTitle}
         subtitle={
           report.status === "published"
-            ? "เผยแพร่แล้ว — แก้ไขจะอัปเดทหน้าลูกค้าทันที"
-            : "Draft — ลูกค้าจะเห็น Report นี้หลังจาก Publish"
+            ? t("admin_report_subtitle_published")
+            : t("admin_report_subtitle_draft")
         }
         breadcrumbs={[
-          { label: "Admin", href: "/admin/clients" },
-          { label: "Reports", href: "/admin/reports" },
-          { label: `${getThaiMonth(report.month)} ${report.year + 543}` },
+          { label: t("admin_breadcrumb_admin"), href: "/admin/clients" },
+          { label: t("admin_breadcrumb_reports"), href: "/admin/reports" },
+          { label: periodTitle },
         ]}
       />
+      <div className="flex justify-end">
+        <a
+          href={`/reports/${report.id}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+        >
+          {t("admin_reports_preview")}
+        </a>
+      </div>
       <ReportEditor
         report={report}
         tasks={tasks}

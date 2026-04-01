@@ -42,6 +42,8 @@ export async function action({ request, context }: Route.ActionArgs) {
         toName: user.name,
         magicUrl,
         apiKey: env.SMTP2GO_API_KEY,
+        db,
+        source: "api_send_magic_link",
       });
     } catch (err) {
       // Log but don't leak SMTP errors to the client

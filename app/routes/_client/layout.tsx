@@ -1,7 +1,8 @@
-import { Outlet, redirect, Form } from "react-router";
+import { Outlet, redirect } from "react-router";
 import type { Route } from "./+types/layout";
-import { requireUser } from "~/lib/auth.server";
+import { getImpersonationData, requireUser } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
+import { generateId } from "~/lib/utils";
 import Sidebar from "~/components/layout/Sidebar";
 import Topbar from "~/components/layout/Topbar";
 
@@ -24,21 +25,16 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   }
 
   const db = createDB(env.DB);
-  const [client, notifications] = await Promise.all([
+  const [client, impersonation] = await Promise.all([
     db.getClientByUserId(user.id),
-    db.listNotifications(user.id),
+    db.listNotifications(user.id), // all recent (unread first)
   ]);
 
-  return { user, client, notifications, isImpersonating };
+  return { user, client, notifications };
 }
 
 export default function ClientLayout({ loaderData }: Route.ComponentProps) {
-  const { user, client, notifications, isImpersonating } = loaderData as {
-    user: import("~/types").User;
-    client: import("~/types").Client | null;
-    notifications: import("~/types").Notification[];
-    isImpersonating: boolean;
-  };
+  const { user, client, notifications } = loaderData;
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
@@ -68,6 +64,21 @@ export default function ClientLayout({ loaderData }: Route.ComponentProps) {
           notifications={notifications}
           role="client"
         />
+        {isImpersonating ? (
+          <div className="bg-amber-50 border-b border-amber-200 px-4 lg:px-6 py-2 flex items-center justify-between gap-3">
+            <p className="text-xs text-amber-900">
+              You are impersonating a client session.
+            </p>
+            <Form method="post" action="/api/impersonation/stop">
+              <button
+                type="submit"
+                className="text-xs rounded-md bg-amber-500 px-2.5 py-1 text-white hover:bg-amber-600"
+              >
+                Return to admin
+              </button>
+            </Form>
+          </div>
+        ) : null}
         <main className="flex-1 overflow-y-auto p-4 lg:p-6 animate-fade-in">
           <Outlet context={{ user, client }} />
         </main>

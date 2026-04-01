@@ -1,12 +1,12 @@
-import { useState } from "react";
 import type { Route } from "./+types/reports";
 import { requireUser } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
-import { getThaiMonth } from "~/lib/utils";
+import { getMonthName } from "~/lib/utils";
+import { useT } from "~/lib/i18n";
 import type { MonthlyReport, ReportTask } from "~/types";
 
 export function meta() {
-  return [{ title: "รายงานประจำเดือน — DoAction Portal" }];
+  return [{ title: "Monthly Reports — do action portal" }];
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
@@ -18,7 +18,6 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const reports = await db.listReportsByClient(client.id);
   const publishedReports = reports.filter((r) => r.status === "published");
 
-  // Load tasks for the most recent published report
   const url = new URL(request.url);
   const reportId = url.searchParams.get("report") ?? publishedReports[0]?.id;
   const selectedReport = publishedReports.find((r) => r.id === reportId) ?? null;
@@ -35,29 +34,30 @@ export default function ReportsPage({ loaderData }: Route.ComponentProps) {
     selectedReport: MonthlyReport | null;
     tasks: ReportTask[];
   };
+  const { t, lang } = useT();
 
   const categoryLabels: Record<string, string> = {
-    maintenance: "Maintenance",
-    development: "Development",
-    security: "Security",
-    seo: "SEO",
-    performance: "Performance",
-    other: "อื่นๆ",
+    maintenance: t("cat_maintenance"),
+    development: t("cat_development"),
+    security: t("cat_security"),
+    seo: t("cat_seo"),
+    performance: t("cat_performance"),
+    other: t("cat_other"),
   };
+
+  const yearDisplay = (year: number) =>
+    lang === "th" ? year + 543 : year;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">
-            รายงานประจำเดือน
+            {t("reports_title")}
           </h1>
-          <p className="text-slate-500 text-sm mt-1">
-            สรุปงานที่ทีมดำเนินการในแต่ละเดือน
-          </p>
+          <p className="text-slate-500 text-sm mt-1">{t("reports_subtitle")}</p>
         </div>
 
-        {/* Month selector */}
         {reports.length > 0 && (
           <form>
             <select
@@ -72,7 +72,7 @@ export default function ReportsPage({ loaderData }: Route.ComponentProps) {
             >
               {reports.map((r) => (
                 <option key={r.id} value={r.id}>
-                  {getThaiMonth(r.month)} {r.year + 543}
+                  {getMonthName(r.month, lang)} {yearDisplay(r.year)}
                 </option>
               ))}
             </select>
@@ -82,7 +82,7 @@ export default function ReportsPage({ loaderData }: Route.ComponentProps) {
 
       {!selectedReport ? (
         <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
-          <p className="text-slate-400">ยังไม่มีรายงาน</p>
+          <p className="text-slate-400">{t("reports_no_reports")}</p>
         </div>
       ) : (
         <>
@@ -96,25 +96,19 @@ export default function ReportsPage({ loaderData }: Route.ComponentProps) {
                 {selectedReport.summary}
               </p>
             )}
-            <div className="grid grid-cols-3 gap-4 mt-4">
+            <div className="grid grid-cols-2 gap-4 mt-4">
               <div className="text-center p-3 bg-slate-50 rounded-lg">
-                <p className="text-xs text-slate-500">งานทั้งหมด</p>
+                <p className="text-xs text-slate-500">{t("reports_total_tasks")}</p>
                 <p className="text-2xl font-semibold text-slate-900">
                   {selectedReport.total_tasks}
                 </p>
               </div>
               <div className="text-center p-3 bg-slate-50 rounded-lg">
-                <p className="text-xs text-slate-500">Uptime</p>
+                <p className="text-xs text-slate-500">{t("reports_uptime")}</p>
                 <p className="text-2xl font-semibold text-slate-900">
                   {selectedReport.uptime_percent != null
                     ? `${selectedReport.uptime_percent.toFixed(2)}%`
                     : "—"}
-                </p>
-              </div>
-              <div className="text-center p-3 bg-slate-50 rounded-lg">
-                <p className="text-xs text-slate-500">Speed Score</p>
-                <p className="text-2xl font-semibold text-slate-900">
-                  {selectedReport.speed_score ?? "—"}
                 </p>
               </div>
             </div>
@@ -123,10 +117,10 @@ export default function ReportsPage({ loaderData }: Route.ComponentProps) {
           {/* Task list */}
           <div className="bg-white rounded-xl border border-slate-200 p-6">
             <h2 className="text-sm font-semibold text-slate-900 mb-4">
-              📋 งานที่ดำเนินการ ({tasks.length} รายการ)
+              📋 {t("reports_tasks_list")} ({tasks.length} {t("items")})
             </h2>
             {tasks.length === 0 ? (
-              <p className="text-slate-400 text-sm">ไม่มีรายการงาน</p>
+              <p className="text-slate-400 text-sm">{t("reports_no_tasks")}</p>
             ) : (
               <ul className="space-y-3">
                 {tasks.map((task) => (
@@ -160,7 +154,7 @@ export default function ReportsPage({ loaderData }: Route.ComponentProps) {
               type="button"
               className="flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
             >
-              📥 Export PDF
+              {t("btn_export_pdf")}
             </button>
           </div>
         </>

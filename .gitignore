@@ -201,3 +201,7 @@ dist
 ### React Router ###
 .react-router/
 /build/
+
+*.history
+*.claude
+.claude/worktrees/

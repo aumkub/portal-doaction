@@ -60,7 +60,7 @@ export default function PageHeader({
         )}
 
         {/* Title */}
-        <h1 className="text-2xl font-semibold text-slate-900 leading-tight truncate">
+        <h1 className="text-2xl font-semibold text-slate-900 leading-tight truncate mt-4">
           {title}
         </h1>
 
