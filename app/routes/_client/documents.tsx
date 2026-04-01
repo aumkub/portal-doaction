@@ -6,6 +6,7 @@ import { getMonthName } from "~/lib/utils";
 import { useT } from "~/lib/i18n";
 import PageHeader from "~/components/layout/PageHeader";
 import type { MonthlyReport } from "~/types";
+import { FaFileLines } from "react-icons/fa6";
 
 export function meta() {
   return [{ title: "Documents — do action portal" }];
@@ -59,7 +60,7 @@ export default function DocumentsPage({ loaderData }: Route.ComponentProps) {
 
         {reports.length === 0 ? (
           <div className="bg-white rounded-xl border border-slate-200 p-16 text-center">
-            <p className="text-4xl mb-3">📄</p>
+            <FaFileLines className="mx-auto mb-3 text-4xl text-slate-400" aria-hidden="true" />
             <p className="text-slate-600 font-medium">{t("docs_no_docs_title")}</p>
             <p className="text-slate-400 text-sm mt-1">{t("docs_no_docs_subtitle")}</p>
           </div>
@@ -71,7 +72,7 @@ export default function DocumentsPage({ loaderData }: Route.ComponentProps) {
                 className="flex items-center gap-4 px-5 py-4 hover:bg-slate-50 transition-colors group"
               >
                 <div className="w-10 h-10 rounded-lg bg-violet-50 flex items-center justify-center shrink-0">
-                  <span className="text-base">📋</span>
+                  <FaFileLines className="text-base text-violet-600" aria-hidden="true" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-slate-800 truncate">

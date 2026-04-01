@@ -4,6 +4,7 @@ import { createDB } from "~/lib/db.server";
 import ReportCard from "~/components/reports/ReportCard";
 import PageHeader from "~/components/layout/PageHeader";
 import type { MonthlyReport } from "~/types";
+import { FaFileLines } from "react-icons/fa6";
 
 export function meta() {
   return [{ title: "รายงานประจำเดือน — do action portal" }];
@@ -33,7 +34,7 @@ export default function ReportsListPage({ loaderData }: Route.ComponentProps) {
 
       {reports.length === 0 ? (
         <div className="bg-white rounded-xl border border-slate-200 p-16 text-center">
-          <p className="text-4xl mb-3">📋</p>
+          <FaFileLines className="mx-auto mb-3 text-4xl text-slate-400" aria-hidden="true" />
           <p className="text-slate-600 font-medium">ยังไม่มีรายงาน</p>
           <p className="text-slate-400 text-sm mt-1">
             ทีมจะเผยแพร่รายงานหลังสิ้นสุดแต่ละเดือน

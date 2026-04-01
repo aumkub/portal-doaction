@@ -45,7 +45,7 @@ export async function sendTelegramNotification(params: {
 
     const absoluteLink = toAbsoluteUrl(appUrl, notification.link);
     const lines = [
-      `🔔 ${notification.title}`,
+      `[Notification] ${notification.title}`,
       notification.body || "",
       absoluteLink ? `\n${absoluteLink}` : "",
     ].filter(Boolean);

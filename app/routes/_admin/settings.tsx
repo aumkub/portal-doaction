@@ -5,6 +5,7 @@ import { createDB } from "~/lib/db.server";
 import PageHeader from "~/components/layout/PageHeader";
 import { useT } from "~/lib/i18n";
 import { sendTelegramNotification } from "~/lib/telegram.server";
+import { FaCircleCheck, FaPaperPlane } from "react-icons/fa6";
 
 export function meta() {
   return [{ title: "Settings — Admin" }];
@@ -225,7 +226,7 @@ export default function AdminSettingsPage({ loaderData, actionData }: any) {
         </h2>
         <div className="rounded-lg border border-slate-100 bg-slate-50 p-4 space-y-2">
           <div className="flex items-center gap-2">
-            <span className="text-base">🟢</span>
+            <FaCircleCheck className="text-base text-emerald-500" aria-hidden="true" />
             <p className="text-sm font-medium text-slate-800">
               {t("admin_settings_uptime")}
             </p>
@@ -248,7 +249,7 @@ export default function AdminSettingsPage({ loaderData, actionData }: any) {
         <Form method="post" className="rounded-lg border border-slate-100 bg-slate-50 p-4 space-y-3">
           <input type="hidden" name="intent" value="telegram" />
           <div className="flex items-center gap-2">
-            <span className="text-base">📨</span>
+            <FaPaperPlane className="text-base text-slate-700" aria-hidden="true" />
             <p className="text-sm font-medium text-slate-800">
               {t("admin_settings_telegram")}
             </p>

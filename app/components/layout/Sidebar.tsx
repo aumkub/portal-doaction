@@ -5,25 +5,38 @@ import { ScrollArea } from "~/components/ui/scroll-area";
 import { cn } from "~/lib/utils";
 import { useT } from "~/lib/i18n";
 import type { TranslationKey } from "~/lib/translations";
+import type { IconType } from "react-icons";
+import {
+  FaArrowRightFromBracket,
+  FaChartColumn,
+  FaEnvelope,
+  FaFileLines,
+  FaGear,
+  FaHeadset,
+  FaHouse,
+  FaPaperclip,
+  FaTicket,
+  FaUsers,
+} from "react-icons/fa6";
 
-type NavItem = { labelKey: TranslationKey; href: string; icon: string; end?: boolean };
+type NavItem = { labelKey: TranslationKey; href: string; icon: IconType; end?: boolean };
 
 const clientNav: NavItem[] = [
-  { labelKey: "nav_dashboard", href: "/dashboard", icon: "📊", end: true },
-  { labelKey: "nav_reports", href: "/reports", icon: "📋" },
-  { labelKey: "nav_tickets", href: "/tickets", icon: "🎫" },
-  { labelKey: "nav_documents", href: "/documents", icon: "📄" },
-  { labelKey: "nav_settings", href: "/settings", icon: `⚙️` },
+  { labelKey: "nav_dashboard", href: "/dashboard", icon: FaChartColumn, end: true },
+  { labelKey: "nav_reports", href: "/reports", icon: FaFileLines },
+  { labelKey: "nav_tickets", href: "/tickets", icon: FaTicket },
+  { labelKey: "nav_documents", href: "/documents", icon: FaFileLines },
+  { labelKey: "nav_settings", href: "/settings", icon: FaGear },
 ];
 
 const adminNav: NavItem[] = [
-  { labelKey: "nav_overview", href: "/admin", icon: "🏠", end: true },
-  { labelKey: "nav_clients", href: "/admin/clients", icon: "👥" },
-  { labelKey: "nav_admin_reports", href: "/admin/reports", icon: "📋" },
-  { labelKey: "nav_all_tickets", href: "/admin/tickets", icon: "🎫" },
-  { labelKey: "nav_attachments", href: "/admin/attachments", icon: "📎" },
-  { labelKey: "nav_email_logs", href: "/admin/email-logs", icon: "📧" },
-  { labelKey: "nav_settings", href: "/admin/settings", icon: `⚙️` },
+  { labelKey: "nav_overview", href: "/admin", icon: FaHouse, end: true },
+  { labelKey: "nav_clients", href: "/admin/clients", icon: FaUsers },
+  { labelKey: "nav_admin_reports", href: "/admin/reports", icon: FaFileLines },
+  { labelKey: "nav_all_tickets", href: "/admin/tickets", icon: FaTicket },
+  { labelKey: "nav_attachments", href: "/admin/attachments", icon: FaPaperclip },
+  { labelKey: "nav_email_logs", href: "/admin/email-logs", icon: FaEnvelope },
+  { labelKey: "nav_settings", href: "/admin/settings", icon: FaGear },
 ];
 
 interface SidebarProps {
@@ -51,7 +64,7 @@ function NavItems({ nav, onNavigate }: { nav: NavItem[]; onNavigate?: () => void
             )
           }
         >
-          <span className="text-base leading-none">{item.icon}</span>
+          <item.icon className="text-base leading-none" aria-hidden="true" />
           {t(item.labelKey)}
         </NavLink>
       ))}
@@ -98,7 +111,7 @@ function ClientContactNavLink({ onNavigate }: { onNavigate?: () => void }) {
           )
         }
       >
-        <span className="text-base leading-none">💬</span>
+        <FaHeadset className="text-base leading-none" aria-hidden="true" />
         {t("nav_contact_team")}
       </NavLink>
     </div>
@@ -114,7 +127,7 @@ function LogoutButton() {
           type="submit"
           className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
         >
-          <span className="text-base leading-none">🚪</span>
+          <FaArrowRightFromBracket className="text-base leading-none" aria-hidden="true" />
           {t("nav_logout")}
         </button>
       </Form>

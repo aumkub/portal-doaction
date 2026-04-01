@@ -2,6 +2,7 @@ import { redirect } from "react-router";
 import type { Route } from "./+types/magic-link";
 import { createAuth } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
+import { FaTriangleExclamation, FaSpinner } from "react-icons/fa6";
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = context.cloudflare.env;
@@ -42,7 +43,7 @@ export default function MagicLinkVerify({ loaderData }: Route.ComponentProps) {
     return (
       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-10 text-center space-y-4">
         <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto">
-          <span className="text-3xl">⚠️</span>
+          <FaTriangleExclamation className="text-3xl text-red-500" aria-hidden="true" />
         </div>
         <h2 className="text-lg font-semibold text-slate-900">ลิ้งก์ไม่ถูกต้อง</h2>
         <p className="text-sm text-slate-500 leading-relaxed">{error}</p>
@@ -59,7 +60,7 @@ export default function MagicLinkVerify({ loaderData }: Route.ComponentProps) {
   return (
     <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-10 text-center">
       <div className="w-16 h-16 bg-violet-50 rounded-full flex items-center justify-center mx-auto mb-4">
-        <span className="text-3xl">⏳</span>
+        <FaSpinner className="text-3xl text-violet-600 animate-spin" aria-hidden="true" />
       </div>
       <p className="text-slate-600 text-sm">กำลังเข้าสู่ระบบ…</p>
     </div>

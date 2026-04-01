@@ -18,6 +18,7 @@ import type { SupportTicket, TicketAttachment, TicketMessage, User } from "~/typ
 import StatusBadge from "~/components/tickets/StatusBadge";
 import PriorityBadge from "~/components/tickets/PriorityBadge";
 import MessageBubble from "~/components/tickets/MessageBubble";
+import { FaPaperclip } from "react-icons/fa6";
 
 const ReplySchema = z.object({
   message: z.string().min(1, "กรุณาพิมพ์ข้อความ"),
@@ -30,14 +31,6 @@ type LoaderData = {
   usersById: Record<string, User>;
   currentUserId: string;
 };
-
-function getAttachmentIcon(fileName: string, mimeType?: string): string {
-  const lower = fileName.toLowerCase();
-  if (mimeType === "application/pdf" || lower.endsWith(".pdf")) return "📄";
-  if (mimeType?.startsWith("image/") || /\.(png|jpe?g|gif|webp|svg)$/.test(lower)) return "🖼️";
-  if (mimeType?.startsWith("video/") || /\.(mp4|mov|webm|mkv|avi)$/.test(lower)) return "🎬";
-  return "📎";
-}
 
 export async function loader({ request, context, params }: any) {
   const user = await requireUser(
@@ -129,9 +122,12 @@ export async function action({ request, context, params }: any) {
   const client = await db.getClientByUserId(user.id);
   const admins = await db.listAdminUsers();
   const adminNotificationTitle = `ลูกค้าตอบกลับ Ticket: ${ticket.title}`;
+  const ticketUrl = `${env.APP_URL}/admin/tickets/${ticket.id}`;
+
+  // DB writes are fast — do them synchronously
   await Promise.all(
-    admins.map(async (admin) => {
-      await db.createNotification({
+    admins.map((admin) =>
+      db.createNotification({
         id: generateId(),
         user_id: admin.id,
         type: "ticket_reply_from_client",
@@ -139,32 +135,39 @@ export async function action({ request, context, params }: any) {
         body: parsed.data.message.slice(0, 120),
         link: `/admin/tickets/${ticket.id}`,
         read: 0,
-      });
-
-      if (env.SMTP2GO_API_KEY) {
-        const ticketUrl = `${env.APP_URL}/admin/tickets/${ticket.id}`;
-        await sendTicketEmailToAdmin({
-          to: admin.email,
-          toName: admin.name,
-          clientName: client?.company_name ?? user.name,
-          ticketTitle: ticket.title,
-          message: parsed.data.message,
-          ticketUrl,
-          apiKey: env.SMTP2GO_API_KEY,
-          db,
-        });
-      }
-    })
+      })
+    )
   );
-  await sendTelegramNotification({
-    db,
-    appUrl: env.APP_URL,
-    notification: {
-      title: adminNotificationTitle,
-      body: parsed.data.message.slice(0, 120),
-      link: `/admin/tickets/${ticket.id}`,
-    },
-  });
+
+  // Email + Telegram are HTTP calls — fire in background, don't block the redirect
+  const msgSnapshot = parsed.data.message;
+  context.cloudflare.ctx.waitUntil(
+    Promise.allSettled([
+      sendTelegramNotification({
+        db,
+        appUrl: env.APP_URL,
+        notification: {
+          title: adminNotificationTitle,
+          body: msgSnapshot.slice(0, 120),
+          link: `/admin/tickets/${ticket.id}`,
+        },
+      }),
+      ...admins.map((admin) =>
+        env.SMTP2GO_API_KEY
+          ? sendTicketEmailToAdmin({
+              to: admin.email,
+              toName: admin.name,
+              clientName: client?.company_name ?? user.name,
+              ticketTitle: ticket.title,
+              message: msgSnapshot,
+              ticketUrl,
+              apiKey: env.SMTP2GO_API_KEY,
+              db,
+            })
+          : Promise.resolve()
+      ),
+    ])
+  );
 
   return redirect(`/tickets/${ticket.id}`);
 }
@@ -174,6 +177,7 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
   const errors = actionData?.errors;
   const { t, lang } = useT();
   const navigation = useNavigation();
+  const isSubmitting = navigation.state !== "idle";
   const formRef = useRef<HTMLFormElement | null>(null);
   const isSubmittingReplyRef = useRef(false);
   const [uploading, setUploading] = useState(false);
@@ -301,7 +305,6 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
                 id: att.id,
                 name: att.file_name,
                 href: `/api/attachments/${encodeURIComponent(att.file_key)}`,
-                icon: getAttachmentIcon(att.file_name, att.mime_type),
               }))}
             />
           ))}
@@ -354,7 +357,8 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
                   className="flex items-center justify-between gap-2 bg-slate-50 rounded px-2 py-1"
                 >
                     <span>
-                      {getAttachmentIcon(f.fileName, f.mimeType)} {f.fileName}
+                      <FaPaperclip className="inline mr-1" aria-hidden="true" />
+                      {f.fileName}
                     </span>
                     <button
                       type="button"
@@ -376,9 +380,10 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
           <div className="flex justify-end">
             <button
               type="submit"
+              disabled={uploading || isSubmitting}
               className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
             >
-              {t("btn_send_message")}
+              {uploading ? "Uploading..." : isSubmitting ? "Sending..." : t("btn_send_message")}
             </button>
           </div>
         </Form>

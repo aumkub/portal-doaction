@@ -1,4 +1,5 @@
 import { CheckCircle2, Globe, Ticket, ArrowRight } from "lucide-react";
+import { FaCircleCheck, FaRotateRight } from "react-icons/fa6";
 import type { Route } from "./+types/dashboard";
 import { requireUser } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
@@ -110,7 +111,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     id: string;
     type: "task" | "ticket";
     title: string;
-    icon: string;
+    iconKind: "resolved" | "in_progress" | "ticket";
     time: number;
   };
 
@@ -118,7 +119,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     id: t.id,
     type: "task",
     title: t.title,
-    icon: "✅",
+    iconKind: "resolved",
     time: latestReport!.created_at,
   }));
 
@@ -126,7 +127,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     id: t.id,
     type: "ticket",
     title: t.title,
-    icon: t.status === "resolved" ? "✅" : t.status === "in_progress" ? "🔄" : "🎫",
+    iconKind: t.status === "resolved" ? "resolved" : t.status === "in_progress" ? "in_progress" : "ticket",
     time: t.updated_at,
   }));
 
@@ -206,7 +207,13 @@ export default function DashboardPage({ loaderData }: Route.ComponentProps) {
               {activity.map((item) => (
                 <li key={item.id} className="flex items-center gap-3 py-3">
                   <span className="text-lg leading-none shrink-0">
-                    {item.icon}
+                    {item.iconKind === "resolved" ? (
+                      <FaCircleCheck className="text-emerald-500" aria-hidden="true" />
+                    ) : item.iconKind === "in_progress" ? (
+                      <FaRotateRight className="text-blue-500" aria-hidden="true" />
+                    ) : (
+                      <Ticket className="w-4 h-4 text-violet-600" aria-hidden="true" />
+                    )}
                   </span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-slate-700 truncate">

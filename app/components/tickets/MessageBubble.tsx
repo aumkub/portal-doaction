@@ -1,3 +1,5 @@
+import { FaPaperclip } from "react-icons/fa6";
+
 export default function MessageBubble({
   message,
   isClient,
@@ -41,7 +43,7 @@ export default function MessageBubble({
                 rel="noopener noreferrer"
                 className={`inline-flex items-center rounded-md border px-2.5 py-1 text-xs transition-colors ${attachmentClass}`}
               >
-                {a.icon ? `${a.icon} ` : "📎 "}
+                <FaPaperclip className="mr-1" aria-hidden="true" />
                 {a.name}
               </a>
             ))}

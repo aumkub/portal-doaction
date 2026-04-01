@@ -4,6 +4,7 @@ import { createDB } from "~/lib/db.server";
 import { getMonthName } from "~/lib/utils";
 import { useT } from "~/lib/i18n";
 import type { MonthlyReport, ReportTask } from "~/types";
+import { FaFileLines, FaCircleCheck } from "react-icons/fa6";
 
 export function meta() {
   return [{ title: "Monthly Reports — do action portal" }];
@@ -117,7 +118,10 @@ export default function ReportsPage({ loaderData }: Route.ComponentProps) {
           {/* Task list */}
           <div className="bg-white rounded-xl border border-slate-200 p-6">
             <h2 className="text-sm font-semibold text-slate-900 mb-4">
-              📋 {t("reports_tasks_list")} ({tasks.length} {t("items")})
+              <span className="inline-flex items-center gap-2">
+                <FaFileLines aria-hidden="true" />
+                {t("reports_tasks_list")} ({tasks.length} {t("items")})
+              </span>
             </h2>
             {tasks.length === 0 ? (
               <p className="text-slate-400 text-sm">{t("reports_no_tasks")}</p>
@@ -128,7 +132,7 @@ export default function ReportsPage({ loaderData }: Route.ComponentProps) {
                     key={task.id}
                     className="flex items-start gap-3 py-3 border-b border-slate-100 last:border-0"
                   >
-                    <span className="text-emerald-500 mt-0.5">✅</span>
+                    <FaCircleCheck className="text-emerald-500 mt-0.5" aria-hidden="true" />
                     <div className="flex-1">
                       <p className="text-sm text-slate-700 font-medium">
                         {task.title}

@@ -13,6 +13,7 @@ import { MobileSidebarTrigger } from "~/components/layout/Sidebar";
 import { formatRelativeTime } from "~/lib/utils";
 import { useT, LanguageSwitcher } from "~/lib/i18n";
 import type { User, Notification } from "~/types";
+import { FaBell, FaFileLines, FaGear, FaArrowRightFromBracket } from "react-icons/fa6";
 
 interface TopbarProps {
   user: User;
@@ -92,7 +93,7 @@ function NotificationDropdown({
 
         {notifications.length === 0 ? (
           <div className="px-3 py-8 text-center">
-            <p className="text-2xl mb-1">🔔</p>
+            <FaBell className="mx-auto mb-1 text-2xl text-slate-400" aria-hidden="true" />
             <p className="text-sm text-slate-400">{t("topbar_no_notifications")}</p>
           </div>
         ) : (
@@ -112,7 +113,11 @@ function NotificationDropdown({
                 >
                   <div className="flex items-start gap-2">
                     <span className="text-base leading-none mt-0.5 shrink-0">
-                      {n.type === "report_published" ? "📋" : "🔔"}
+                      {n.type === "report_published" ? (
+                        <FaFileLines aria-hidden="true" />
+                      ) : (
+                        <FaBell aria-hidden="true" />
+                      )}
                     </span>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-slate-800 leading-tight">
@@ -218,14 +223,14 @@ export default function Topbar({
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
               <a href={settingsHref}>
-                <span className="">⚙️</span> {t("topbar_account_settings")}
+                <span className=""><FaGear aria-hidden="true" /></span> {t("topbar_account_settings")}
               </a>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
               <Form method="post" action="/logout" className="w-full">
                 <button type="submit" className="flex items-center gap-2 w-full text-red-500 text-sm">
-                  <span>🚪</span> {t("topbar_logout")}
+                  <span><FaArrowRightFromBracket aria-hidden="true" /></span> {t("topbar_logout")}
                 </button>
               </Form>
             </DropdownMenuItem>

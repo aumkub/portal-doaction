@@ -7,6 +7,7 @@ import ReportCustomerEmailDialog, {
 import { createDB } from "~/lib/db.server";
 import { formatDate, formatRelativeTime, getMonthName } from "~/lib/utils";
 import { useT } from "~/lib/i18n";
+import { FaEye, FaFileCirclePlus, FaPaperPlane, FaRotateRight, FaPenToSquare, FaMagnifyingGlass } from "react-icons/fa6";
 export function meta() {
   return [{ title: "จัดการ Report — Admin" }];
 }
@@ -83,6 +84,7 @@ export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
           href="/admin/reports/new"
           className="flex items-center gap-2 bg-[#F0D800] text-slate-900 rounded-lg px-4 py-2 text-sm font-medium hover:bg-yellow-400 transition-colors"
         >
+          <FaFileCirclePlus aria-hidden="true" />
           {t("admin_reports_new_btn")}
         </a>
       </div>
@@ -202,8 +204,9 @@ export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
                                   onClick={() =>
                                     setEmailDialog({ report, mode: "send" })
                                   }
-                                  className="rounded-lg bg-violet-600 text-white text-xs font-medium px-3 py-2 hover:bg-violet-700 transition-colors shadow-sm"
+                                  className="inline-flex items-center justify-center gap-1 rounded-lg bg-violet-600 text-white text-xs font-medium px-3 py-2 hover:bg-violet-700 transition-colors shadow-sm"
                                 >
+                                  <FaPaperPlane aria-hidden="true" />
                                   {t("admin_report_email_btn_send")}
                                 </button>
                               ) : (
@@ -213,8 +216,9 @@ export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
                                     onClick={() =>
                                       setEmailDialog({ report, mode: "view" })
                                     }
-                                    className="rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-medium px-3 py-2 hover:bg-slate-50 transition-colors"
+                                    className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-medium px-3 py-2 hover:bg-slate-50 transition-colors"
                                   >
+                                    <FaEye aria-hidden="true" />
                                     {t("admin_report_email_btn_view")}
                                   </button>
                                   <button
@@ -222,8 +226,9 @@ export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
                                     onClick={() =>
                                       setEmailDialog({ report, mode: "send" })
                                     }
-                                    className="text-[11px] font-medium text-violet-600 hover:text-violet-800 underline-offset-2 hover:underline"
+                                    className="inline-flex items-center gap-1 text-[11px] font-medium text-violet-600 hover:text-violet-800 underline-offset-2 hover:underline"
                                   >
+                                    <FaRotateRight aria-hidden="true" />
                                     {t("admin_report_email_btn_resend")}
                                   </button>
                                 </div>
@@ -232,16 +237,18 @@ export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
                           )}
                           <a
                             href={`/admin/reports/${report.id}`}
-                            className="inline-flex items-center justify-center rounded-lg border border-transparent text-xs text-slate-500 hover:text-slate-900 transition-colors p-2"
+                            className="inline-flex items-center justify-center gap-1 rounded-lg border border-transparent text-xs text-slate-500 hover:text-slate-900 transition-colors p-2"
                           >
+                            <FaPenToSquare aria-hidden="true" />
                             {t("admin_reports_edit")}
                           </a>
                           <a
                             href={`/reports/${report.id}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-xs text-slate-600 hover:bg-slate-50 transition-colors px-3 py-2"
+                            className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white text-xs text-slate-600 hover:bg-slate-50 transition-colors px-3 py-2"
                           >
+                            <FaMagnifyingGlass aria-hidden="true" />
                             {t("admin_reports_preview")}
                           </a>
                         </div>

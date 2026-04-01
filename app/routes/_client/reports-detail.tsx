@@ -7,6 +7,7 @@ import PageHeader from "~/components/layout/PageHeader";
 import ReportStats from "~/components/reports/ReportStats";
 import TaskList from "~/components/reports/TaskList";
 import type { MonthlyReport, ReportTask } from "~/types";
+import { FaFileLines } from "react-icons/fa6";
 
 export function meta({ data }: Route.MetaArgs) {
   const report = (data as { report: MonthlyReport } | null)?.report;
@@ -96,7 +97,10 @@ export default function ReportDetailPage({ loaderData }: Route.ComponentProps) {
       {/* Task list */}
       <div className="bg-white rounded-xl border border-slate-200 p-6">
         <h2 className="text-sm font-semibold text-slate-900 mb-5">
-          📋 งานที่ดำเนินการ ({tasks.length} รายการ)
+          <span className="inline-flex items-center gap-2">
+            <FaFileLines aria-hidden="true" />
+            งานที่ดำเนินการ ({tasks.length} รายการ)
+          </span>
         </h2>
         <TaskList tasks={tasks} />
       </div>

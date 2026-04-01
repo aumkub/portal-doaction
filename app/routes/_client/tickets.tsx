@@ -6,6 +6,7 @@ import { createDB } from "~/lib/db.server";
 import { generateId, formatRelativeTime } from "~/lib/utils";
 import { z } from "zod";
 import type { SupportTicket, TicketStatus, TicketPriority } from "~/types";
+import { FaCircle } from "react-icons/fa6";
 
 export function meta() {
   return [{ title: "Support Tickets — do action portal" }];
@@ -56,28 +57,28 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
 const statusConfig: Record<
   TicketStatus,
-  { label: string; color: string; dot: string }
+  { label: string; color: string; dotClass: string }
 > = {
-  open: { label: "เปิด", color: "text-amber-600 bg-amber-50", dot: "🟡" },
+  open: { label: "เปิด", color: "text-amber-600 bg-amber-50", dotClass: "text-amber-500" },
   in_progress: {
     label: "กำลังดำเนิน",
     color: "text-blue-600 bg-blue-50",
-    dot: "🔵",
+    dotClass: "text-blue-500",
   },
   waiting: {
     label: "รอข้อมูล",
     color: "text-slate-600 bg-slate-100",
-    dot: "⚪",
+    dotClass: "text-slate-400",
   },
   resolved: {
     label: "เสร็จสิ้น",
     color: "text-emerald-600 bg-emerald-50",
-    dot: "🟢",
+    dotClass: "text-emerald-500",
   },
   closed: {
     label: "ปิดแล้ว",
     color: "text-slate-400 bg-slate-100",
-    dot: "⚫",
+    dotClass: "text-slate-500",
   },
 };
 
@@ -227,7 +228,7 @@ export default function TicketsPage({ loaderData, actionData }: Route.ComponentP
                   <span
                     className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full whitespace-nowrap ${st.color}`}
                   >
-                    {st.dot} {st.label}
+                    <FaCircle className={`text-[9px] ${st.dotClass}`} aria-hidden="true" /> {st.label}
                   </span>
                 </div>
               </div>

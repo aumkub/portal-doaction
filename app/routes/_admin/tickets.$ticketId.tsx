@@ -29,6 +29,7 @@ import MessageBubble from "~/components/tickets/MessageBubble";
 import PageHeader from "~/components/layout/PageHeader";
 import { useT } from "~/lib/i18n";
 import type { TranslationKey } from "~/lib/translations";
+import { FaPaperclip } from "react-icons/fa6";
 
 const ReplySchema = z.object({
   message: z.string().default(""),
@@ -85,14 +86,6 @@ const STATUS_LABEL_TH: Record<string, string> = {
   closed: "ปิด",
 };
 
-function getAttachmentIcon(fileName: string, mimeType?: string): string {
-  const lower = fileName.toLowerCase();
-  if (mimeType === "application/pdf" || lower.endsWith(".pdf")) return "📄";
-  if (mimeType?.startsWith("image/") || /\.(png|jpe?g|gif|webp|svg)$/.test(lower)) return "🖼️";
-  if (mimeType?.startsWith("video/") || /\.(mp4|mov|webm|mkv|avi)$/.test(lower)) return "🎬";
-  return "📎";
-}
-
 export async function action({ request, context, params }: any) {
   const env = context.cloudflare.env;
   const admin = await requireAdmin(request, env.DB, env.SESSIONPORTAL);
@@ -136,24 +129,26 @@ export async function action({ request, context, params }: any) {
         read: 0,
       } as const;
       await db.createNotification(notification);
-      await sendTelegramNotification({
-        db,
-        appUrl: env.APP_URL,
-        notification,
-      });
-
-      if (status === "closed" && clientUser?.email && env.SMTP2GO_API_KEY) {
-        const ticketUrl = `${env.APP_URL}/tickets/${ticket.id}`;
-        await sendTicketClosedEmailToClient({
-          to: clientUser.email,
-          toName: clientUser.name,
-          ticketTitle: ticket.title,
-          ticketUrl,
-          apiKey: env.SMTP2GO_API_KEY,
-          db,
-          lang: clientUser.language === "en" ? "en" : "th",
-        });
-      }
+      context.cloudflare.ctx.waitUntil(
+        Promise.allSettled([
+          sendTelegramNotification({
+            db,
+            appUrl: env.APP_URL,
+            notification,
+          }),
+          status === "closed" && clientUser?.email && env.SMTP2GO_API_KEY
+            ? sendTicketClosedEmailToClient({
+                to: clientUser.email,
+                toName: clientUser.name,
+                ticketTitle: ticket.title,
+                ticketUrl: `${env.APP_URL}/tickets/${ticket.id}`,
+                apiKey: env.SMTP2GO_API_KEY,
+                db,
+                lang: clientUser.language === "en" ? "en" : "th",
+              })
+            : Promise.resolve(),
+        ])
+      );
     }
     return redirect(`/admin/tickets/${ticket.id}`);
   }
@@ -216,24 +211,28 @@ export async function action({ request, context, params }: any) {
         read: 0,
       } as const;
       await db.createNotification(notification);
-      await sendTelegramNotification({
-        db,
-        appUrl: env.APP_URL,
-        notification,
-      });
-      if (clientUser?.email && env.SMTP2GO_API_KEY) {
-        const ticketUrl = `${env.APP_URL}/tickets/${ticket.id}`;
-        await sendTicketEmailToClient({
-          to: clientUser.email,
-          toName: clientUser.name,
-          ticketTitle: ticket.title,
-          message,
-          ticketUrl,
-          apiKey: env.SMTP2GO_API_KEY,
-          db,
-          lang: clientUser.language === "en" ? "en" : "th",
-        });
-      }
+      const messageSnapshot = message;
+      context.cloudflare.ctx.waitUntil(
+        Promise.allSettled([
+          sendTelegramNotification({
+            db,
+            appUrl: env.APP_URL,
+            notification,
+          }),
+          clientUser?.email && env.SMTP2GO_API_KEY
+            ? sendTicketEmailToClient({
+                to: clientUser.email,
+                toName: clientUser.name,
+                ticketTitle: ticket.title,
+                message: messageSnapshot,
+                ticketUrl: `${env.APP_URL}/tickets/${ticket.id}`,
+                apiKey: env.SMTP2GO_API_KEY,
+                db,
+                lang: clientUser.language === "en" ? "en" : "th",
+              })
+            : Promise.resolve(),
+        ])
+      );
     }
   }
 
@@ -252,6 +251,7 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
   const errors = actionData?.errors;
   const { t, lang } = useT();
   const navigation = useNavigation();
+  const isSubmitting = navigation.state !== "idle";
   const formRef = useRef<HTMLFormElement | null>(null);
   const isSubmittingReplyRef = useRef(false);
   const [uploading, setUploading] = useState(false);
@@ -372,7 +372,7 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
               type="submit"
               name="status"
               value={s}
-              disabled={ticket.status === s}
+              disabled={ticket.status === s || isSubmitting}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
                 ticket.status === s
                   ? "bg-slate-900 text-white border-slate-900 cursor-default"
@@ -399,7 +399,6 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
                 id: att.id,
                 name: att.file_name,
                 href: `/api/attachments/${encodeURIComponent(att.file_key)}`,
-                icon: getAttachmentIcon(att.file_name, att.mime_type),
               }))}
             />
           </div>
@@ -455,7 +454,8 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
                     className="flex items-center justify-between gap-2 bg-slate-50 rounded px-2 py-1"
                   >
                     <span>
-                      {getAttachmentIcon(f.fileName, f.mimeType)} {f.fileName}
+                      <FaPaperclip className="inline mr-1" aria-hidden="true" />
+                      {f.fileName}
                     </span>
                     <button
                       type="button"
@@ -486,9 +486,10 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
             </label>
             <button
               type="submit"
+              disabled={uploading || isSubmitting}
               className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 transition-colors"
             >
-              {t("admin_ticket_send")}
+              {uploading ? "Uploading..." : isSubmitting ? "Sending..." : t("admin_ticket_send")}
             </button>
           </div>
         </Form>

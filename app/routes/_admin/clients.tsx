@@ -7,6 +7,7 @@ import { formatRelativeTime } from "~/lib/utils";
 import type { Client } from "~/types";
 import { useT } from "~/lib/i18n";
 import type { TranslationKey } from "~/lib/translations";
+import { FaCirclePlus, FaEye, FaUserSecret } from "react-icons/fa6";
 
 export function meta() {
   return [{ title: "จัดการลูกค้า — Admin" }];
@@ -60,6 +61,7 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
           href="/admin/clients/new"
           className="flex items-center gap-2 bg-[#F0D800] text-slate-900 rounded-lg px-4 py-2 text-sm font-medium hover:bg-yellow-400 transition-colors"
         >
+          <FaCirclePlus aria-hidden="true" />
           {t("admin_clients_add")}
         </a>
       </div>
@@ -149,8 +151,9 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
                     <div className="flex items-center gap-2">
                       <a
                         href={`/admin/clients/${client.id}`}
-                        className="inline-block text-center text-xs font-medium text-violet-700 bg-violet-50 hover:bg-violet-100 hover:text-violet-900 border border-violet-200 px-3 py-1 rounded-lg transition-colors"
+                        className="inline-flex items-center gap-1 text-center text-xs font-medium text-violet-700 bg-violet-50 hover:bg-violet-100 hover:text-violet-900 border border-violet-200 px-3 py-1 rounded-lg transition-colors"
                       >
+                        <FaEye aria-hidden="true" />
                         {t("admin_view_details")}
                       </a>
                       <Form
@@ -169,8 +172,9 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
                         <input type="hidden" name="intent" value="impersonate" />
                         <button
                           type="submit"
-                          className="text-xs text-amber-600 hover:text-amber-700 font-medium transition-colors border border-amber-200 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg cursor-pointer"
+                          className="inline-flex items-center gap-1 text-xs text-amber-600 hover:text-amber-700 font-medium transition-colors border border-amber-200 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg cursor-pointer"
                         >
+                          <FaUserSecret aria-hidden="true" />
                           {t("admin_impersonate")}
                         </button>
                       </Form>

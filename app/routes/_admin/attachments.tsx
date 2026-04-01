@@ -4,14 +4,7 @@ import { createDB } from "~/lib/db.server";
 import { formatDate } from "~/lib/utils";
 import { useT } from "~/lib/i18n";
 import PageHeader from "~/components/layout/PageHeader";
-
-function iconForAttachment(fileName: string, mimeType: string): string {
-  const lower = fileName.toLowerCase();
-  if (mimeType === "application/pdf" || lower.endsWith(".pdf")) return "📄";
-  if (mimeType.startsWith("image/") || /\.(png|jpe?g|gif|webp|svg)$/.test(lower)) return "🖼️";
-  if (mimeType.startsWith("video/") || /\.(mp4|mov|webm|mkv|avi)$/.test(lower)) return "🎬";
-  return "📎";
-}
+import { FaPaperclip } from "react-icons/fa6";
 
 export function meta() {
   return [{ title: "ไฟล์แนบ Ticket — Admin" }];
@@ -104,7 +97,7 @@ export default function AdminAttachmentsPage({ loaderData }: any) {
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-2 text-slate-700 hover:text-slate-900"
                       >
-                        <span>{iconForAttachment(a.file_name, a.mime_type)}</span>
+                        <FaPaperclip aria-hidden="true" />
                         <span>{a.file_name}</span>
                       </a>
                       <p className="text-[11px] text-slate-400 mt-1">
