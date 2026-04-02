@@ -8,6 +8,7 @@ import {
 	useLoaderData,
 	useNavigation,
 } from "react-router";
+import { useEffect } from "react";
 
 import type { Route } from "./+types/root";
 import "./app.css";
@@ -18,8 +19,12 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	const cookieLang = getLanguageFromCookieHeader(request.headers.get("Cookie"));
 	if (cookieLang) return { lang: cookieLang };
 
-	const user = await getAuthenticatedUser(request, env.DB, env.SESSIONPORTAL);
-	if (user?.language) return { lang: resolveLanguage(user.language) };
+	try {
+		const user = await getAuthenticatedUser(request, env.DB, env.SESSIONPORTAL);
+		if (user?.language) return { lang: resolveLanguage(user.language) };
+	} catch {
+		// D1 / KV infrastructure error — degrade gracefully
+	}
 
 	return { lang: "th" as const };
 }
@@ -82,6 +87,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
 	let title = "เกิดข้อผิดพลาด";
 	let detail = "เกิดข้อผิดพลาดที่ไม่คาดคิด กรุณาลองใหม่อีกครั้ง";
 	let stack: string | undefined;
+	const isInfraError = !isRouteErrorResponse(error);
 
 	if (isRouteErrorResponse(error)) {
 		status = error.status;
@@ -99,8 +105,21 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
 		stack = error.stack;
 	}
 
+	// For infra errors (D1 / KV failures), auto-redirect to login and wipe session
+	// eslint-disable-next-line react-hooks/rules-of-hooks
+	useEffect(() => {
+		if (isInfraError) {
+			document.cookie = "doaction_session=; Path=/; Max-Age=0; SameSite=Lax";
+			window.location.replace("/login");
+		}
+	}, [isInfraError]);
+
 	return (
 		<main className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+			{/* SSR fallback: meta refresh for infra errors */}
+			{isInfraError && (
+				<meta httpEquiv="refresh" content="0;url=/login" />
+			)}
 			<div className="bg-white rounded-2xl border border-slate-200 p-10 max-w-md w-full text-center space-y-4">
 				<p className="text-5xl font-bold text-slate-200">{status}</p>
 				<h1 className="text-xl font-semibold text-slate-900">{title}</h1>
@@ -111,10 +130,10 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
 					</pre>
 				)}
 				<a
-					href="/"
+					href={isInfraError ? "/login" : "/"}
 					className="inline-block mt-2 px-5 py-2.5 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 transition-colors"
 				>
-					กลับหน้าหลัก
+					{isInfraError ? "เข้าสู่ระบบใหม่" : "กลับหน้าหลัก"}
 				</a>
 			</div>
 		</main>
