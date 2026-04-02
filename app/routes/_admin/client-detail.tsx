@@ -167,6 +167,12 @@ type ActionData = {
   success?: { magic_link: true; email: string } | { email_changed: true; email: string };
 };
 
+const PKG_BADGE: Record<string, string> = {
+  basic: "bg-slate-100 text-slate-600",
+  standard: "bg-blue-100 text-blue-700",
+  premium: "bg-violet-100 text-violet-700",
+};
+
 export default function AdminClientDetailPage({ loaderData }: any) {
   const { client, user, reportsCount, ticketsCount } = loaderData;
   const { t } = useT();
@@ -190,21 +196,64 @@ export default function AdminClientDetailPage({ loaderData }: any) {
       : !client.contract_end;
 
   const [noContractEnd, setNoContractEnd] = useState(noContractEndInitial);
-
   const formKey = `${client.id}-${actionData?.errors ? "err" : "ok"}`;
 
+  const emailChanged = actionData?.success && "email_changed" in actionData.success;
+  const magicLinkSent = actionData?.success && "magic_link" in actionData.success;
+  const currentEmail = emailChanged
+    ? (actionData!.success as any).email
+    : user?.email ?? "";
+
   return (
-    <div className="space-y-6 max-w-3xl">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900">{client.company_name}</h1>
-          <p className="text-sm text-slate-500 mt-1">{t("admin_client_detail_subtitle")}</p>
+    <div className="space-y-5 max-w-3xl">
+
+      {/* ── Header ── */}
+      <div className="flex items-start justify-between">
+        <div className="space-y-2">
+          <a href="/admin/clients" className="text-xs text-slate-400 hover:text-slate-700 transition-colors">
+            ← {t("admin_back_clients")}
+          </a>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-2xl font-semibold text-slate-900">{client.company_name}</h1>
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize ${PKG_BADGE[client.package] ?? PKG_BADGE.standard}`}>
+              {t(`admin_pkg_${client.package}` as any)}
+            </span>
+          </div>
+          {/* Identity meta row */}
+          <div className="flex items-center gap-3 text-xs text-slate-500 flex-wrap">
+            <span>{user?.name ?? "—"}</span>
+            <span className="text-slate-300">·</span>
+            <span>{currentEmail || "—"}</span>
+            {client.website_url && (
+              <>
+                <span className="text-slate-300">·</span>
+                <a
+                  href={client.website_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-violet-600 hover:underline truncate max-w-[180px]"
+                >
+                  {client.website_url.replace(/^https?:\/\//, "")}
+                </a>
+              </>
+            )}
+          </div>
         </div>
-        <a href="/admin/clients" className="text-sm text-slate-500 hover:text-slate-900">
-          {t("admin_back_clients")}
-        </a>
+
+        {/* Stats */}
+        <div className="flex gap-3 shrink-0">
+          <div className="text-center bg-white border border-slate-200 rounded-xl px-5 py-3">
+            <p className="text-2xl font-semibold text-slate-900">{reportsCount}</p>
+            <p className="text-xs text-slate-400 mt-0.5">{t("admin_reports_total")}</p>
+          </div>
+          <div className="text-center bg-white border border-slate-200 rounded-xl px-5 py-3">
+            <p className="text-2xl font-semibold text-slate-900">{ticketsCount}</p>
+            <p className="text-xs text-slate-400 mt-0.5">{t("admin_tickets_total_label")}</p>
+          </div>
+        </div>
       </div>
 
+      {/* ── Edit client form ── */}
       <Form
         method="post"
         key={formKey}
@@ -220,18 +269,9 @@ export default function AdminClientDetailPage({ loaderData }: any) {
             {errors?.name && <p className="text-red-500 text-xs">{errors.name[0]}</p>}
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="email">{t("settings_email_label")}</Label>
-            <Input id="email" type="email" value={user?.email ?? ""} readOnly className="bg-slate-50" />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1.5 col-span-2">
             <Label htmlFor="company_name">{t("admin_client_new_company_name")}</Label>
             <Input id="company_name" name="company_name" defaultValue={v.company_name} required />
-            {errors?.company_name && (
-              <p className="text-red-500 text-xs">{errors.company_name[0]}</p>
-            )}
+            {errors?.company_name && <p className="text-red-500 text-xs">{errors.company_name[0]}</p>}
           </div>
           <div className="space-y-1.5 col-span-2">
             <Label htmlFor="website_url">{t("admin_client_new_website")}</Label>
@@ -294,99 +334,92 @@ export default function AdminClientDetailPage({ loaderData }: any) {
           </div>
         </div>
 
-        <div className="flex justify-end pt-2">
+        <div className="flex justify-end pt-1">
           <Button type="submit" className="bg-violet-600 hover:bg-violet-700 text-white">
             {t("save")}
           </Button>
         </div>
       </Form>
 
+      {/* ── Account Access (change email + magic link) ── */}
       <div className="grid grid-cols-2 gap-4">
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
-          <p className="text-xs text-slate-400">{t("admin_reports_total")}</p>
-          <p className="text-2xl font-semibold text-slate-900 mt-1">{reportsCount}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
-          <p className="text-xs text-slate-400">{t("admin_tickets_total_label")}</p>
-          <p className="text-2xl font-semibold text-slate-900 mt-1">{ticketsCount}</p>
-        </div>
-      </div>
-
-      {/* Change Email */}
-      <div className="bg-sky-50 border border-sky-200 rounded-xl p-5">
-        <p className="text-sm text-sky-900 font-medium">{t("admin_change_email_title")}</p>
-        <p className="text-xs text-sky-700 mt-1">{t("admin_change_email_desc")}</p>
-        {"email_changed" in (actionData?.success ?? {}) && (
-          <p className="mt-2 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
-            ✓ {t("admin_change_email_success")} — {(actionData!.success as any).email}
-          </p>
-        )}
-        {actionData?.errors?.email && (
-          <p className="mt-2 text-xs font-medium text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
-            {actionData.emailDuplicate ? t("admin_change_email_duplicate") : actionData.errors.email[0]}
-          </p>
-        )}
-        <Form method="post" className="mt-3 flex items-end gap-2">
-          <input type="hidden" name="intent" value="update_email" />
-          <div className="space-y-1">
-            <Label htmlFor="change_email">{t("admin_change_email_label")}</Label>
+        {/* Change Email */}
+        <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">{t("admin_change_email_title")}</p>
+            <p className="text-xs text-slate-500 mt-0.5">{t("admin_change_email_desc")}</p>
+          </div>
+          {emailChanged && (
+            <p className="text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+              ✓ {t("admin_change_email_success")} — {(actionData!.success as any).email}
+            </p>
+          )}
+          {errors?.email && (
+            <p className="text-xs font-medium text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+              {actionData?.emailDuplicate ? t("admin_change_email_duplicate") : errors.email[0]}
+            </p>
+          )}
+          <Form method="post" className="space-y-2">
+            <input type="hidden" name="intent" value="update_email" />
             <Input
-              id="change_email"
               name="email"
               type="email"
-              defaultValue={user?.email ?? ""}
-              className="w-72"
+              defaultValue={currentEmail}
               required
+              placeholder="email@example.com"
             />
+            <Button type="submit" className="w-full bg-slate-900 hover:bg-slate-700 text-white text-sm">
+              {t("admin_change_email_btn")}
+            </Button>
+          </Form>
+        </div>
+
+        {/* Send Magic Link */}
+        <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">{t("admin_send_magic_link_title")}</p>
+            <p className="text-xs text-slate-500 mt-0.5">{t("admin_send_magic_link_desc")}</p>
           </div>
-          <Button type="submit" className="bg-sky-600 hover:bg-sky-700 text-white">
-            {t("admin_change_email_btn")}
-          </Button>
-        </Form>
+          {magicLinkSent && (
+            <p className="text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+              ✓ {t("admin_send_magic_link_success")} — {(actionData!.success as any).email}
+            </p>
+          )}
+          <Form method="post">
+            <input type="hidden" name="intent" value="send_magic_link" />
+            <Button type="submit" className="w-full bg-violet-600 hover:bg-violet-700 text-white text-sm">
+              {t("admin_send_magic_link_btn")}
+            </Button>
+          </Form>
+        </div>
       </div>
 
-      {/* Send Magic Link */}
-      <div className="bg-violet-50 border border-violet-200 rounded-xl p-5">
-        <p className="text-sm text-violet-900 font-medium">{t("admin_send_magic_link_title")}</p>
-        <p className="text-xs text-violet-700 mt-1">{t("admin_send_magic_link_desc")}</p>
-        {"magic_link" in (actionData?.success ?? {}) && (
-          <p className="mt-2 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
-            ✓ {t("admin_send_magic_link_success")} — {(actionData!.success as any).email}
-          </p>
-        )}
-        <Form method="post" className="mt-3">
-          <input type="hidden" name="intent" value="send_magic_link" />
-          <button
-            type="submit"
-            className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 transition-colors"
-          >
-            {t("admin_send_magic_link_btn")}
-          </button>
-        </Form>
-      </div>
-
-      <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
-        <p className="text-sm text-amber-900 font-medium">{t("admin_impersonate_title")}</p>
-        <p className="text-xs text-amber-800 mt-1">{t("admin_impersonate_desc")}</p>
-        <Form method="post" className="mt-3">
+      {/* ── Impersonate ── */}
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 flex items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold text-amber-900">{t("admin_impersonate_title")}</p>
+          <p className="text-xs text-amber-800 mt-0.5">{t("admin_impersonate_desc")}</p>
+        </div>
+        <Form method="post" className="shrink-0">
           <input type="hidden" name="intent" value="impersonate" />
           <button
             type="submit"
-            className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600"
+            className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 transition-colors whitespace-nowrap"
           >
             {t("admin_impersonate_btn")}
           </button>
         </Form>
       </div>
 
-      <div className="bg-rose-50 border border-rose-200 rounded-xl p-5">
-        <p className="text-sm text-rose-900 font-medium">{t("admin_client_delete_title")}</p>
-        <p className="text-xs text-rose-800 mt-1">
-          {t("admin_client_delete_desc")}
-        </p>
+      {/* ── Danger zone ── */}
+      <div className="bg-rose-50 border border-rose-200 rounded-xl p-5 flex items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold text-rose-900">{t("admin_client_delete_title")}</p>
+          <p className="text-xs text-rose-800 mt-0.5">{t("admin_client_delete_desc")}</p>
+        </div>
         <Form
           method="post"
-          className="mt-3"
+          className="shrink-0"
           onSubmit={(e: FormEvent<HTMLFormElement>) => {
             if (!confirm(t("admin_client_delete_confirm"))) e.preventDefault();
           }}
@@ -394,7 +427,7 @@ export default function AdminClientDetailPage({ loaderData }: any) {
           <input type="hidden" name="intent" value="delete_client" />
           <button
             type="submit"
-            className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700"
+            className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 transition-colors"
           >
             {t("admin_client_delete_btn")}
           </button>
