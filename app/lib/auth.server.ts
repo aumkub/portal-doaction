@@ -95,7 +95,14 @@ function createKVAdapter(kv: KVNamespace, db: ReturnType<typeof createDB>) {
         import("lucia").DatabaseUser | null
       ]
     > {
-      const raw = await kv.get<KVSessionData>(`session:${sessionId}`, "json");
+      // Guard against empty/malformed session IDs that cause KV 400 errors
+      if (!sessionId || sessionId.length < 8) return [null, null];
+      let raw: KVSessionData | null;
+      try {
+        raw = await kv.get<KVSessionData>(`session:${sessionId}`, "json");
+      } catch {
+        return [null, null];
+      }
       if (!raw) return [null, null];
 
       const expiresAt = new Date(raw.expiresAt);
@@ -236,7 +243,16 @@ export async function getAuthenticatedUser(
     return cached.user;
   }
 
-  const { session, user } = await lucia.validateSession(sessionId);
+  let session: import("lucia").Session | null;
+  let user: import("lucia").User | null;
+  try {
+    ({ session, user } = await lucia.validateSession(sessionId));
+  } catch {
+    // KV error (e.g. 400 Bad Request with malformed session) — treat as invalid
+    sessionUserCache.set(sessionId, { cachedAt: Date.now(), user: null });
+    return null;
+  }
+
   if (!session || !user) {
     sessionUserCache.set(sessionId, { cachedAt: Date.now(), user: null });
     return null;
@@ -258,10 +274,12 @@ export async function requireUser(
   const user = await getAuthenticatedUser(request, d1, kv);
   if (!user) {
     const pathname = new URL(request.url).pathname;
+    // Clear the session cookie so a bad/expired token doesn't loop forever
     throw new Response(null, {
       status: 302,
       headers: {
         Location: `/login?redirect=${encodeURIComponent(pathname)}`,
+        "Set-Cookie": "doaction_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax",
       },
     });
   }
