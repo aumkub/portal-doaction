@@ -76,7 +76,7 @@ export default function PublicReportPage({ loaderData }: Route.ComponentProps) {
   const brandLogo = (
     <div>
       <div className="flex items-center gap-3 mb-1">
-        <img src="/logo-dark.svg" alt="DoAction" className="w-[150px] mx-auto"/>
+        <img src="/logo-dark.svg" alt="do action" className="w-[150px] mx-auto"/>
       </div>
       <p className="block text-center text-[10px] text-black mt-1 tracking-widest font-bold">
         CLIENT PORTAL

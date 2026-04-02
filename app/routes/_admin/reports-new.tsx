@@ -168,7 +168,7 @@ export async function action({ request, context }: Route.ActionArgs) {
         user_id: client.user_id,
         type: "report_published",
         title: `รายงานประจำเดือน ${getThaiMonth(month)} ${year + 543} พร้อมแล้ว`,
-        body: "ทีม DoAction ได้เผยแพร่รายงานสรุปงานสำหรับเดือนนี้แล้ว",
+        body: "ทีม do action ได้เผยแพร่รายงานสรุปงานสำหรับเดือนนี้แล้ว",
         link: `/reports/${reportId}`,
         read: 0,
       } as const;

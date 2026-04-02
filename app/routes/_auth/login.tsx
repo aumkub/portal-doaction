@@ -117,7 +117,7 @@ export default function LoginPage() {
         <div className="flex items-center gap-3">
           <img
             src="/logo-dark.svg"
-            alt="DoAction"
+            alt="do action"
             className="w-[200px] mx-auto"
           />
         </div>

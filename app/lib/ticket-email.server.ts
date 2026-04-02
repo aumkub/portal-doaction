@@ -23,7 +23,7 @@ function logoHeaderHtml(ticketUrl: string): string {
   const logoUrl = getLogoUrlFromTicketUrl(ticketUrl);
   if (!logoUrl) return "";
   return `<p style="margin:0 0 14px;">
-    <img src="${logoUrl}" alt="DoAction" width="140" style="display:block;height:auto;border:0;outline:none;text-decoration:none;" />
+    <img src="${logoUrl}" alt="do action" width="140" style="display:block;height:auto;border:0;outline:none;text-decoration:none;" />
   </p>`;
 }
 
@@ -78,7 +78,7 @@ export async function sendTicketEmailToClient(params: {
     "",
     `${s.openBtn}: ${ticketUrl}`,
     "",
-    "— DoAction",
+    "— do action",
   ].join("\n");
   const html = `<!doctype html><html><body style="font-family:system-ui,sans-serif;color:#0f172a;">
     ${logoHeaderHtml(ticketUrl)}
@@ -86,7 +86,7 @@ export async function sendTicketEmailToClient(params: {
     <p>${s.newMsg(escapeHtml(ticketTitle))}</p>
     <blockquote style="margin:12px 0;padding:12px;border-left:3px solid #cbd5e1;background:#f8fafc;">${escapeHtml(message)}</blockquote>
     <p><a href="${ticketUrl}">${s.openBtn}</a></p>
-    <p style="color:#64748b;">— DoAction</p>
+    <p style="color:#64748b;">— do action</p>
   </body></html>`;
   await sendEmail({ to, toName, subject, html, text, apiKey, db, source: "ticket_reply_to_client" });
 }
@@ -113,7 +113,7 @@ export async function sendTicketEmailToAdmin(params: {
     "",
     `เปิด Ticket: ${ticketUrl}`,
     "",
-    "— DoAction",
+    "— do action",
   ].join("\n");
   const html = `<!doctype html><html><body style="font-family:system-ui,sans-serif;color:#0f172a;">
     ${logoHeaderHtml(ticketUrl)}
@@ -121,7 +121,7 @@ export async function sendTicketEmailToAdmin(params: {
     <p>ลูกค้า <strong>${escapeHtml(clientName)}</strong> ตอบกลับ Ticket: <strong>${escapeHtml(ticketTitle)}</strong></p>
     <blockquote style="margin:12px 0;padding:12px;border-left:3px solid #cbd5e1;background:#f8fafc;">${escapeHtml(message)}</blockquote>
     <p><a href="${ticketUrl}">เปิด Ticket ในระบบ</a></p>
-    <p style="color:#64748b;">— DoAction</p>
+    <p style="color:#64748b;">— do action</p>
   </body></html>`;
   await sendEmail({ to, toName, subject, html, text, apiKey, db, source: "ticket_reply_to_admin" });
 }
@@ -148,7 +148,7 @@ export async function sendTicketClosedEmailToClient(params: {
     "",
     `${s.viewBtn}: ${ticketUrl}`,
     "",
-    "— DoAction",
+    "— do action",
   ].join("\n");
   const html = `<!doctype html><html><body style="font-family:system-ui,sans-serif;color:#0f172a;">
     ${logoHeaderHtml(ticketUrl)}
@@ -156,7 +156,7 @@ export async function sendTicketClosedEmailToClient(params: {
     <p>${s.closedMsg(ticketTitle)}</p>
     <p>${s.closedNote}</p>
     <p><a href="${ticketUrl}">${s.viewBtn}</a></p>
-    <p style="color:#64748b;">— DoAction</p>
+    <p style="color:#64748b;">— do action</p>
   </body></html>`;
   await sendEmail({ to, toName, subject, html, text, apiKey, db, source: "ticket_closed_to_client" });
 }

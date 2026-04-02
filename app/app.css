@@ -35,7 +35,7 @@
   --radius-xl:  calc(var(--radius) + 4px);
   --radius-2xl: calc(var(--radius) + 8px);
 
-  /* DoAction brand — violet primary */
+  /* do action brand — violet primary */
   --color-primary:            oklch(0.40 0.20 280);   /* violet-600 */
   --color-primary-foreground: oklch(1    0    0);
 

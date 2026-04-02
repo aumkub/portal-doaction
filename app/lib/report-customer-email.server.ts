@@ -5,7 +5,7 @@ const strings = {
   th: {
     subject: (period: string, company: string) =>
       `รายงานประจำเดือน ${period} พร้อมแล้ว — ${company}`,
-    label: "DoAction · Client Portal",
+    label: "do action · Client Portal",
     headline: "รายงานประจำเดือนพร้อมแล้ว",
     greeting: (name: string, company: string) =>
       `สวัสดีคุณ <strong style="color:#0f172a;">${name}</strong><br /><strong style="color:#0f172a;">${company}</strong>`,
@@ -13,7 +13,7 @@ const strings = {
       `รายงาน <strong style="color:#0f172a;">${title}</strong> สำหรับ <strong style="color:#0f172a;">${period}</strong> ได้เผยแพร่ใน Portal แล้ว`,
     cta: "เปิดรายงานใน Portal",
     fallback: "หากปุ่มไม่ทำงาน คัดลอกลิงก์นี้ไปวางในเบราว์เซอร์:",
-    footer: "อีเมลนี้ส่งจาก do action portal แจ้งเตือนรายงานประจำเดือน<br />หากมีคำถาม ติดต่อทีม DoAction ได้ตามช่องทางที่คุณคุ้นเคย",
+    footer: "อีเมลนี้ส่งจาก do action portal แจ้งเตือนรายงานประจำเดือน<br />หากมีคำถาม ติดต่อทีม do action ได้ตามช่องทางที่คุณคุ้นเคย",
     textGreeting: (name: string, company: string) => `สวัสดีคุณ ${name} (${company})`,
     textBody: (title: string, period: string) =>
       `รายงาน "${title}" สำหรับ ${period} พร้อมแล้วใน do action portal`,
@@ -22,7 +22,7 @@ const strings = {
   en: {
     subject: (period: string, company: string) =>
       `Monthly report for ${period} is ready — ${company}`,
-    label: "DoAction · Client Portal",
+    label: "do action · Client Portal",
     headline: "Your monthly report is ready",
     greeting: (name: string, company: string) =>
       `Hello <strong style="color:#0f172a;">${name}</strong><br /><strong style="color:#0f172a;">${company}</strong>`,
@@ -30,7 +30,7 @@ const strings = {
       `The report <strong style="color:#0f172a;">${title}</strong> for <strong style="color:#0f172a;">${period}</strong> has been published to your Portal.`,
     cta: "Open Report in Portal",
     fallback: "If the button doesn't work, copy and paste this URL into your browser:",
-    footer: "This email was sent from do action portal as a monthly report notification.<br />If you have questions, contact the DoAction team through your usual channels.",
+    footer: "This email was sent from do action portal as a monthly report notification.<br />If you have questions, contact the do action team through your usual channels.",
     textGreeting: (name: string, company: string) => `Hello ${name} (${company})`,
     textBody: (title: string, period: string) =>
       `The report "${title}" for ${period} is ready in do action portal`,
@@ -128,7 +128,7 @@ export function buildReportCustomerNotification(opts: {
     opts.summary ? `\n${opts.summary}\n` : "",
     `${s.cta}: ${opts.reportUrl}`,
     "",
-    "— DoAction",
+    "— do action",
   ]
     .filter(Boolean)
     .join("\n");

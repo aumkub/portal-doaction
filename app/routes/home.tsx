@@ -3,7 +3,7 @@ import type { Route } from "./+types/home";
 import { getAuthenticatedUser } from "~/lib/auth.server";
 
 export function meta({}: Route.MetaArgs) {
-  return [{ title: "DoAction Client Portal" }];
+  return [{ title: "do action Client Portal" }];
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {

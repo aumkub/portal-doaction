@@ -126,7 +126,7 @@ const th = {
   docs_view_report: "ดูรายงาน",
   docs_tasks_suffix: "งาน",
   docs_about_title: "เกี่ยวกับเอกสาร",
-  docs_about_body: "รายงานประจำเดือนสรุปงานที่ทีม DoAction ดำเนินการให้คุณในแต่ละเดือน คุณสามารถดูรายละเอียดหรือ Export เป็น PDF ได้ หากต้องการเอกสารเพิ่มเติม กรุณา",
+  docs_about_body: "รายงานประจำเดือนสรุปงานที่ทีม do action ดำเนินการให้คุณในแต่ละเดือน คุณสามารถดูรายละเอียดหรือ Export เป็น PDF ได้ หากต้องการเอกสารเพิ่มเติม กรุณา",
   docs_contact_link: "แจ้งทีมงาน",
 
   // ─── Settings ─────────────────────────────────────────
@@ -142,7 +142,7 @@ const th = {
   settings_website_label: "เว็บไซต์",
   settings_contract_end: "สิ้นสุดสัญญา",
   settings_contract_no_expiry: "รายเดือน (ไม่มีวันหมดอายุ)",
-  settings_company_edit_note: "หากต้องการแก้ไขข้อมูลบริษัท กรุณาติดต่อทีมงาน DoAction",
+  settings_company_edit_note: "หากต้องการแก้ไขข้อมูลบริษัท กรุณาติดต่อทีมงาน do action",
   settings_contact_team_title: "ติดต่อทีม",
   settings_contact_team_hint: "เลือกช่องทางที่สะดวก — ทีมพร้อมช่วยเหลือ",
   settings_contact_line: "LINE",
@@ -192,6 +192,10 @@ const th = {
   admin_label_package: "แพ็กเกจ",
   admin_reports_total: "รายงานทั้งหมด",
   admin_tickets_total_label: "Tickets ทั้งหมด",
+  admin_send_magic_link_title: "ส่ง Magic Link",
+  admin_send_magic_link_desc: "ส่งลิ้งก์เข้าสู่ระบบให้ลูกค้าทางอีเมล มีอายุ 15 นาที",
+  admin_send_magic_link_btn: "ส่ง Magic Link",
+  admin_send_magic_link_success: "ส่ง Magic Link เรียบร้อยแล้ว",
   admin_impersonate_title: "สวมสิทธิ์ลูกค้า",
   admin_impersonate_desc:
     "เข้าระบบเป็นลูกค้าคนนี้เพื่อช่วยตรวจสอบปัญหาในมุมมองลูกค้า",
@@ -468,7 +472,7 @@ const en: Record<keyof typeof th, string> = {
   docs_view_report: "View report",
   docs_tasks_suffix: "tasks",
   docs_about_title: "About documents",
-  docs_about_body: "Monthly reports summarize the work DoAction did for you each month. You can view the details or export as PDF. For additional documents, please",
+  docs_about_body: "Monthly reports summarize the work do action did for you each month. You can view the details or export as PDF. For additional documents, please",
   docs_contact_link: "contact our team",
 
   // ─── Settings ─────────────────────────────────────────
@@ -484,7 +488,7 @@ const en: Record<keyof typeof th, string> = {
   settings_website_label: "Website",
   settings_contract_end: "Contract end",
   settings_contract_no_expiry: "Monthly plan (no expiry date)",
-  settings_company_edit_note: "To edit company information, please contact the DoAction team.",
+  settings_company_edit_note: "To edit company information, please contact the do action team.",
   settings_contact_team_title: "Contact the team",
   settings_contact_team_hint: "Reach us on the channel you prefer.",
   settings_contact_line: "LINE",
@@ -534,6 +538,10 @@ const en: Record<keyof typeof th, string> = {
   admin_label_package: "Package",
   admin_reports_total: "Total reports",
   admin_tickets_total_label: "All tickets",
+  admin_send_magic_link_title: "Send Magic Link",
+  admin_send_magic_link_desc: "Send a login link to the client's email. Expires in 15 minutes.",
+  admin_send_magic_link_btn: "Send Magic Link",
+  admin_send_magic_link_success: "Magic link sent successfully",
   admin_impersonate_title: "Impersonate client",
   admin_impersonate_desc:
     "Sign in as this client to troubleshoot from their view",

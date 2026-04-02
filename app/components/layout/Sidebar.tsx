@@ -80,10 +80,10 @@ function LogoBlock({ companyName }: { companyName?: string | null }) {
         <div className="flex items-center gap-3">
           <img
             src="/logo-white.svg"
-            alt="DoAction"
+            alt="do action"
             className="object-cover w-[150px] mx-auto block"
           />
-          {/* <span className="font-bold text-2xl text-slate-900 tracking-tight">DoAction</span> */}
+          {/* <span className="font-bold text-2xl text-slate-900 tracking-tight">do action</span> */}
         </div>
         <p className="block text-center text-[10px] text-white mt-0 tracking-widest font-bold">CLIENT PORTAL</p>
       </div>

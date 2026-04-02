@@ -1,8 +1,9 @@
 import { Form, redirect, useActionData } from "react-router";
 import { z } from "zod";
 import { useState, type FormEvent } from "react";
-import { requireAdmin, startImpersonation } from "~/lib/auth.server";
+import { requireAdmin, startImpersonation, generateMagicToken } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
+import { generateId } from "~/lib/utils";
 import { useT } from "~/lib/i18n";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
@@ -87,6 +88,34 @@ export async function action({ request, params, context }: any) {
     return redirect(`/admin/clients/${params.clientId}`);
   }
 
+  if (intent === "send_magic_link") {
+    const user = await db.getUserById(client.user_id);
+    if (!user?.email) throw new Response("No email", { status: 400 });
+
+    const { id, token, expires_at } = generateMagicToken();
+    await db.createMagicLinkToken({ id, user_id: user.id, token, expires_at, used: 0 });
+
+    const origin = env.APP_URL || new URL(request.url).origin;
+    const magicUrl = `${origin}/magic-link?token=${token}`;
+
+    if (env.SMTP2GO_API_KEY) {
+      const { sendMagicLinkEmail } = await import("~/lib/email.server");
+      context.cloudflare.ctx.waitUntil(
+        sendMagicLinkEmail({
+          to: user.email,
+          toName: user.name,
+          magicUrl,
+          apiKey: env.SMTP2GO_API_KEY,
+          db,
+          source: "admin_send_magic_link",
+          lang: user.language === "en" ? "en" : "th",
+        }).catch(console.error)
+      );
+    }
+
+    return { success: { magic_link: true, email: user.email } };
+  }
+
   if (intent === "impersonate") {
     const sessionCookie = await startImpersonation(
       request,
@@ -121,6 +150,7 @@ type ActionData = {
     contract_end: string;
     notes: string;
   };
+  success?: { magic_link: true; email: string };
 };
 
 export default function AdminClientDetailPage({ loaderData }: any) {
@@ -266,6 +296,26 @@ export default function AdminClientDetailPage({ loaderData }: any) {
           <p className="text-xs text-slate-400">{t("admin_tickets_total_label")}</p>
           <p className="text-2xl font-semibold text-slate-900 mt-1">{ticketsCount}</p>
         </div>
+      </div>
+
+      {/* Send Magic Link */}
+      <div className="bg-violet-50 border border-violet-200 rounded-xl p-5">
+        <p className="text-sm text-violet-900 font-medium">{t("admin_send_magic_link_title")}</p>
+        <p className="text-xs text-violet-700 mt-1">{t("admin_send_magic_link_desc")}</p>
+        {actionData?.success?.magic_link && (
+          <p className="mt-2 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+            ✓ {t("admin_send_magic_link_success")} — {actionData.success.email}
+          </p>
+        )}
+        <Form method="post" className="mt-3">
+          <input type="hidden" name="intent" value="send_magic_link" />
+          <button
+            type="submit"
+            className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 transition-colors"
+          >
+            {t("admin_send_magic_link_btn")}
+          </button>
+        </Form>
       </div>
 
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">

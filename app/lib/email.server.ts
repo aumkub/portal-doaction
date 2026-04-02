@@ -88,25 +88,25 @@ const magicLinkStrings = {
     subject: "ลิ้งก์เข้าสู่ระบบ do action portal",
     title: "เข้าสู่ระบบ do action portal",
     greeting: (name: string) => `สวัสดีคุณ ${name}`,
-    body: "ทีม DoAction ได้รับคำขอเข้าสู่ระบบจากอีเมลของคุณ<br>คลิกปุ่มด้านล่างเพื่อเข้าสู่ระบบ Client Portal",
+    body: "ทีม do action ได้รับคำขอเข้าสู่ระบบจากอีเมลของคุณ<br>คลิกปุ่มด้านล่างเพื่อเข้าสู่ระบบ Client Portal",
     cta: "เข้าสู่ระบบ &rarr;",
     fallback: "หากปุ่มด้านบนไม่ทำงาน ให้คัดลอก URL นี้ไปวางในเบราว์เซอร์:",
     expiry: "ลิ้งก์นี้จะหมดอายุใน <strong style=\"color:#64748b;\">15 นาที</strong>",
     ignore: "หากคุณไม่ได้ขอลิ้งก์นี้ กรุณาเพิกเฉยต่ออีเมลฉบับนี้",
     textBody: (name: string, url: string) =>
-      `สวัสดีคุณ ${name}\n\nคลิกลิ้งก์ด้านล่างเพื่อเข้าสู่ระบบ (หมดอายุใน 15 นาที)\n\n${url}\n\nหากคุณไม่ได้ขอลิ้งก์นี้ กรุณาเพิกเฉย\n\n— ทีม DoAction`,
+      `สวัสดีคุณ ${name}\n\nคลิกลิ้งก์ด้านล่างเพื่อเข้าสู่ระบบ (หมดอายุใน 15 นาที)\n\n${url}\n\nหากคุณไม่ได้ขอลิ้งก์นี้ กรุณาเพิกเฉย\n\n— ทีม do action`,
   },
   en: {
     subject: "Your login link for do action portal",
     title: "Sign in to do action portal",
     greeting: (name: string) => `Hello ${name}`,
-    body: "DoAction received a sign-in request for your email address.<br>Click the button below to access your Client Portal.",
+    body: "do action received a sign-in request for your email address.<br>Click the button below to access your Client Portal.",
     cta: "Sign in &rarr;",
     fallback: "If the button above doesn't work, copy and paste this URL into your browser:",
     expiry: "This link expires in <strong style=\"color:#64748b;\">15 minutes</strong>",
     ignore: "If you didn't request this link, you can safely ignore this email.",
     textBody: (name: string, url: string) =>
-      `Hello ${name}\n\nClick the link below to sign in (expires in 15 minutes)\n\n${url}\n\nIf you didn't request this, please ignore it.\n\n— DoAction Team`,
+      `Hello ${name}\n\nClick the link below to sign in (expires in 15 minutes)\n\n${url}\n\nIf you didn't request this, please ignore it.\n\n— do action Team`,
   },
 } as const;
 
@@ -178,7 +178,7 @@ function magicLinkHtml({
                     <span style="font-weight:700;font-size:14px;color:#0f172a;">D</span>
                   </td>
                   <td style="padding-left:10px;vertical-align:middle;">
-                    <span style="font-size:20px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;">DoAction</span>
+                    <span style="font-size:20px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;">do action</span>
                     <span style="font-size:13px;color:#64748b;margin-left:6px;">Client Portal</span>
                   </td>
                 </tr>
@@ -235,7 +235,7 @@ function magicLinkHtml({
                 ${s.ignore}
               </p>
               <p style="margin:16px 0 0;font-size:12px;color:#cbd5e1;">
-                DoAction Co., Ltd. &nbsp;|&nbsp; aum@doaction.co.th
+                do action Co., Ltd. &nbsp;|&nbsp; aum@doaction.co.th
               </p>
             </td>
           </tr>

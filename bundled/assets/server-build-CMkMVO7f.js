@@ -14698,7 +14698,7 @@ const th = {
   docs_view_report: "ดูรายงาน",
   docs_tasks_suffix: "งาน",
   docs_about_title: "เกี่ยวกับเอกสาร",
-  docs_about_body: "รายงานประจำเดือนสรุปงานที่ทีม DoAction ดำเนินการให้คุณในแต่ละเดือน คุณสามารถดูรายละเอียดหรือ Export เป็น PDF ได้ หากต้องการเอกสารเพิ่มเติม กรุณา",
+  docs_about_body: "รายงานประจำเดือนสรุปงานที่ทีม do action ดำเนินการให้คุณในแต่ละเดือน คุณสามารถดูรายละเอียดหรือ Export เป็น PDF ได้ หากต้องการเอกสารเพิ่มเติม กรุณา",
   docs_contact_link: "แจ้งทีมงาน",
   // ─── Settings ─────────────────────────────────────────
   settings_title: "Settings",
@@ -14713,7 +14713,7 @@ const th = {
   settings_website_label: "เว็บไซต์",
   settings_contract_end: "สิ้นสุดสัญญา",
   settings_contract_no_expiry: "รายเดือน (ไม่มีวันหมดอายุ)",
-  settings_company_edit_note: "หากต้องการแก้ไขข้อมูลบริษัท กรุณาติดต่อทีมงาน DoAction",
+  settings_company_edit_note: "หากต้องการแก้ไขข้อมูลบริษัท กรุณาติดต่อทีมงาน do action",
   settings_contact_team_title: "ติดต่อทีม",
   settings_contact_team_hint: "เลือกช่องทางที่สะดวก — ทีมพร้อมช่วยเหลือ",
   settings_contact_line: "LINE",
@@ -14978,7 +14978,7 @@ const en = {
   docs_view_report: "View report",
   docs_tasks_suffix: "tasks",
   docs_about_title: "About documents",
-  docs_about_body: "Monthly reports summarize the work DoAction did for you each month. You can view the details or export as PDF. For additional documents, please",
+  docs_about_body: "Monthly reports summarize the work do action did for you each month. You can view the details or export as PDF. For additional documents, please",
   docs_contact_link: "contact our team",
   // ─── Settings ─────────────────────────────────────────
   settings_title: "Settings",
@@ -14993,7 +14993,7 @@ const en = {
   settings_website_label: "Website",
   settings_contract_end: "Contract end",
   settings_contract_no_expiry: "Monthly plan (no expiry date)",
-  settings_company_edit_note: "To edit company information, please contact the DoAction team.",
+  settings_company_edit_note: "To edit company information, please contact the do action team.",
   settings_contact_team_title: "Contact the team",
   settings_contact_team_hint: "Reach us on the channel you prefer.",
   settings_contact_line: "LINE",
@@ -15315,7 +15315,7 @@ const route0 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProper
 }, Symbol.toStringTag, { value: "Module" }));
 function meta$j({}) {
   return [{
-    title: "DoAction Client Portal"
+    title: "do action Client Portal"
   }];
 }
 async function loader$n({
@@ -23651,7 +23651,7 @@ ${magicUrl}
 
 หากคุณไม่ได้ขอลิ้งก์นี้ กรุณาเพิกเฉย
 
-— ทีม DoAction`,
+— ทีม do action`,
     html: magicLinkHtml({ displayName, magicUrl })
   });
 }
@@ -23688,7 +23688,7 @@ function magicLinkHtml({
                     <span style="font-weight:700;font-size:14px;color:#0f172a;">D</span>
                   </td>
                   <td style="padding-left:10px;vertical-align:middle;">
-                    <span style="font-size:20px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;">DoAction</span>
+                    <span style="font-size:20px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;">do action</span>
                     <span style="font-size:13px;color:#64748b;margin-left:6px;">Client Portal</span>
                   </td>
                 </tr>
@@ -23703,7 +23703,7 @@ function magicLinkHtml({
                 สวัสดีคุณ ${displayName}
               </p>
               <p style="margin:0 0 28px;font-size:14px;color:#475569;line-height:1.7;">
-                ทีม DoAction ได้รับคำขอเข้าสู่ระบบจากอีเมลของคุณ<br>
+                ทีม do action ได้รับคำขอเข้าสู่ระบบจากอีเมลของคุณ<br>
                 คลิกปุ่มด้านล่างเพื่อเข้าสู่ระบบ Client Portal
               </p>
 
@@ -23746,7 +23746,7 @@ function magicLinkHtml({
                 หากคุณไม่ได้ขอลิ้งก์นี้ กรุณาเพิกเฉยต่ออีเมลฉบับนี้
               </p>
               <p style="margin:16px 0 0;font-size:12px;color:#cbd5e1;">
-                DoAction Co., Ltd. &nbsp;|&nbsp; aum@doaction.co.th
+                do action Co., Ltd. &nbsp;|&nbsp; aum@doaction.co.th
               </p>
             </td>
           </tr>
@@ -28044,7 +28044,7 @@ const login = withComponentProps(function LoginPage() {
           })
         }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", {
           className: "font-bold text-2xl text-slate-900 tracking-tight",
-          children: "DoAction"
+          children: "do action"
         })]
       }), /* @__PURE__ */ jsxRuntimeExports.jsx("p", {
         className: "text-sm text-slate-500 ml-10",
@@ -28334,7 +28334,7 @@ function LogoBlock({ companyName }) {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-7 h-7 bg-[#F0D800] rounded-lg flex items-center justify-center shadow-sm shrink-0", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-slate-900 font-bold text-xs leading-none", children: "D" }) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-white font-semibold text-sm leading-tight", children: "DoAction" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-white font-semibold text-sm leading-tight", children: "do action" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-slate-500 text-xs leading-tight", children: "Client Portal" })
       ] })
     ] }),
@@ -32776,7 +32776,7 @@ async function action$8({
         user_id: client.user_id,
         type: "report_published",
         title: `รายงานประจำเดือน ${getThaiMonth(month)} ${year + 543} พร้อมแล้ว`,
-        body: "ทีม DoAction ได้เผยแพร่รายงานสรุปงานสำหรับเดือนนี้แล้ว",
+        body: "ทีม do action ได้เผยแพร่รายงานสรุปงานสำหรับเดือนนี้แล้ว",
         link: `/reports/${reportId}`,
         read: 0
       });
@@ -32931,7 +32931,7 @@ async function action$7({
         user_id: client.user_id,
         type: "report_published",
         title: `รายงานประจำเดือน ${getThaiMonth(existing.month)} ${existing.year + 543} พร้อมแล้ว`,
-        body: "ทีม DoAction ได้เผยแพร่รายงานสรุปงานสำหรับเดือนนี้แล้ว",
+        body: "ทีม do action ได้เผยแพร่รายงานสรุปงานสำหรับเดือนนี้แล้ว",
         link: `/reports/${existing.id}`,
         read: 0
       });
@@ -33366,7 +33366,7 @@ function buildReportCustomerNotification(opts) {
           </tr>
           <tr>
             <td style="padding:28px 28px 8px;">
-              <p style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#64748b;">DoAction · Client Portal</p>
+              <p style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#64748b;">do action · Client Portal</p>
               <h1 style="margin:12px 0 0;font-size:22px;line-height:1.3;color:#0f172a;">รายงานประจำเดือนพร้อมแล้ว</h1>
               <p style="margin:12px 0 0;font-size:15px;line-height:1.6;color:#475569;">
                 สวัสดีคุณ <strong style="color:#0f172a;">${escapeHtml(opts.contactName)}</strong><br />
@@ -33401,7 +33401,7 @@ function buildReportCustomerNotification(opts) {
             <td style="padding:16px 28px 24px;border-top:1px solid #e2e8f0;background:#fafafa;">
               <p style="margin:0;font-size:12px;color:#94a3b8;line-height:1.5;">
                 อีเมลนี้ส่งจาก do action portal แจ้งเตือนรายงานประจำเดือน<br />
-                หากมีคำถาม ติดต่อทีม DoAction ได้ตามช่องทางที่คุณคุ้นเคย
+                หากมีคำถาม ติดต่อทีม do action ได้ตามช่องทางที่คุณคุ้นเคย
               </p>
             </td>
           </tr>
@@ -33420,7 +33420,7 @@ ${opts.summary}
 ` : "",
     `เปิดรายงาน: ${opts.reportUrl}`,
     "",
-    "— DoAction"
+    "— do action"
   ].filter(Boolean).join("\n");
   return { subject, html, text };
 }
