@@ -28,6 +28,13 @@ const ContractWarningSchema = z.object({
   third_days: z.coerce.number().int().min(0).default(1),
 });
 
+const TicketReminderSchema = z.object({
+  intent: z.literal("ticket_reminder"),
+  enabled: z.string().optional().default("0"),
+  days: z.coerce.number().int().min(1).max(30).default(1),
+  hour: z.coerce.number().int().min(0).max(23).default(9),
+});
+
 export async function loader({ request, context }: any) {
   const env = context.cloudflare.env;
   const admin = await requireAdmin(request, env.DB, env.SESSIONPORTAL);
@@ -45,6 +52,9 @@ export async function loader({ request, context }: any) {
   );
   const uptimeKey =
     (env as any).UPTIMEROBOT_API_KEY ?? "ur2618139-5281beb51ff9820a629669c2";
+  const ticketReminderEnabled = (await db.getAppSetting("ticket_reminder_enabled")) !== "0";
+  const ticketReminderDays = Number((await db.getAppSetting("ticket_reminder_days")) ?? "1");
+  const ticketReminderHour = Number((await db.getAppSetting("ticket_reminder_hour")) ?? "9");
   return {
     admin,
     adminUsers,
@@ -53,6 +63,9 @@ export async function loader({ request, context }: any) {
     contractWarningFirstDays,
     contractWarningSecondDays,
     contractWarningThirdDays,
+    ticketReminderEnabled,
+    ticketReminderDays,
+    ticketReminderHour,
   };
 }
 
@@ -92,6 +105,17 @@ export async function action({ request, context }: any) {
     return redirect("/admin/settings");
   }
 
+  if (intent === "ticket_reminder") {
+    const parsed = TicketReminderSchema.safeParse(raw);
+    if (!parsed.success) {
+      return { errors: parsed.error.flatten().fieldErrors };
+    }
+    await db.setAppSetting("ticket_reminder_enabled", parsed.data.enabled === "1" ? "1" : "0");
+    await db.setAppSetting("ticket_reminder_days", String(parsed.data.days));
+    await db.setAppSetting("ticket_reminder_hour", String(parsed.data.hour));
+    return { success: { ticket_reminder: true } };
+  }
+
   if (intent === "telegram_test") {
     const token = await db.getAppSetting("telegram_bot_token");
     if (!token) {
@@ -129,9 +153,13 @@ export default function AdminSettingsPage({ loaderData, actionData }: any) {
     contractWarningFirstDays,
     contractWarningSecondDays,
     contractWarningThirdDays,
+    ticketReminderEnabled,
+    ticketReminderDays,
+    ticketReminderHour,
   } = loaderData;
   const errors = actionData?.errors;
   const telegramTestSuccess = Boolean(actionData?.success?.telegram);
+  const ticketReminderSaved = Boolean(actionData?.success?.ticket_reminder);
   const { t } = useT();
 
   const maskedKey =
@@ -338,6 +366,68 @@ export default function AdminSettingsPage({ loaderData, actionData }: any) {
             />
           </div>
           <div className="sm:col-span-3 flex justify-end">
+            <button
+              type="submit"
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 transition-colors"
+            >
+              {t("save")}
+            </button>
+          </div>
+        </Form>
+      </section>
+
+      {/* Ticket reminder */}
+      <section className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
+        <h2 className="text-sm font-semibold text-slate-900">{t("admin_ticket_reminder_title")}</h2>
+        <p className="text-xs text-slate-500">{t("admin_ticket_reminder_desc")}</p>
+        {ticketReminderSaved && (
+          <p className="text-xs text-emerald-600">{t("admin_ticket_reminder_saved")}</p>
+        )}
+        <Form method="post" className="space-y-4">
+          <input type="hidden" name="intent" value="ticket_reminder" />
+          {/* Enabled toggle */}
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              name="enabled"
+              value="1"
+              defaultChecked={ticketReminderEnabled}
+              className="rounded border-slate-300 accent-violet-600"
+            />
+            <span className="text-sm text-slate-700">{t("admin_ticket_reminder_enabled")}</span>
+          </label>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-slate-600">
+                {t("admin_ticket_reminder_days")}
+              </label>
+              <input
+                name="days"
+                type="number"
+                min={1}
+                max={30}
+                defaultValue={ticketReminderDays}
+                className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-slate-600">
+                {t("admin_ticket_reminder_hour")}
+              </label>
+              <select
+                name="hour"
+                defaultValue={ticketReminderHour}
+                className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
+              >
+                {Array.from({ length: 24 }, (_, i) => (
+                  <option key={i} value={i}>
+                    {String(i).padStart(2, "0")}:00
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="flex justify-end">
             <button
               type="submit"
               className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 transition-colors"

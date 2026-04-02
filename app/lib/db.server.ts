@@ -320,6 +320,20 @@ export function createDB(d1: D1Database) {
       return result.results;
     },
 
+    async listAllOpenTickets(): Promise<(SupportTicket & { company_name: string })[]> {
+      const result = await d1
+        .prepare(
+          `SELECT st.*, c.company_name
+           FROM support_tickets st
+           LEFT JOIN clients c ON c.id = st.client_id
+           WHERE st.status IN ('open', 'in_progress', 'waiting')
+             AND (c.deleted_at IS NULL OR c.deleted_at = 0)
+           ORDER BY st.created_at ASC`
+        )
+        .all<SupportTicket & { company_name: string }>();
+      return result.results;
+    },
+
     async getTicket(id: string): Promise<SupportTicket | null> {
       return d1
         .prepare("SELECT * FROM support_tickets WHERE id = ?")

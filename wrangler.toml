@@ -16,6 +16,9 @@ id = "5223ac89a8474cd4b972b490f357bdd5"
 binding = "ATTACHMENTS"
 bucket_name = "portal-attachments"
 
+[triggers]
+crons = ["0 * * * *"]
+
 [vars]
 SMTP2GO_API_KEY = "api-EA966EF08F334828ABB31EB240C5647D"
 APP_URL = "https://portal.doaction.co.th"
