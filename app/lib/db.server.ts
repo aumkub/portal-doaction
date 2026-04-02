@@ -52,7 +52,7 @@ export function createDB(d1: D1Database) {
 
     async updateUser(
       id: string,
-      data: Partial<Pick<User, "name" | "avatar_url" | "language" | "first_login_at">>
+      data: Partial<Pick<User, "name" | "email" | "avatar_url" | "language" | "first_login_at">>
     ): Promise<void> {
       const fields = Object.keys(data)
         .map((k) => `${k} = ?`)

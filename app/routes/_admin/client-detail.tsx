@@ -88,6 +88,19 @@ export async function action({ request, params, context }: any) {
     return redirect(`/admin/clients/${params.clientId}`);
   }
 
+  if (intent === "update_email") {
+    const newEmail = String(formData.get("email") ?? "").trim().toLowerCase();
+    if (!newEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+      return { errors: { email: ["อีเมลไม่ถูกต้อง / Invalid email"] } };
+    }
+    const existing = await db.getUserByEmail(newEmail);
+    if (existing && existing.id !== client.user_id) {
+      return { errors: { email: ["admin_change_email_duplicate"] }, emailDuplicate: true };
+    }
+    await db.updateUser(client.user_id, { email: newEmail });
+    return { success: { email_changed: true, email: newEmail } };
+  }
+
   if (intent === "send_magic_link") {
     const user = await db.getUserById(client.user_id);
     if (!user?.email) throw new Response("No email", { status: 400 });
@@ -150,7 +163,8 @@ type ActionData = {
     contract_end: string;
     notes: string;
   };
-  success?: { magic_link: true; email: string };
+  emailDuplicate?: boolean;
+  success?: { magic_link: true; email: string } | { email_changed: true; email: string };
 };
 
 export default function AdminClientDetailPage({ loaderData }: any) {
@@ -298,13 +312,46 @@ export default function AdminClientDetailPage({ loaderData }: any) {
         </div>
       </div>
 
+      {/* Change Email */}
+      <div className="bg-sky-50 border border-sky-200 rounded-xl p-5">
+        <p className="text-sm text-sky-900 font-medium">{t("admin_change_email_title")}</p>
+        <p className="text-xs text-sky-700 mt-1">{t("admin_change_email_desc")}</p>
+        {"email_changed" in (actionData?.success ?? {}) && (
+          <p className="mt-2 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+            ✓ {t("admin_change_email_success")} — {(actionData!.success as any).email}
+          </p>
+        )}
+        {actionData?.errors?.email && (
+          <p className="mt-2 text-xs font-medium text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+            {actionData.emailDuplicate ? t("admin_change_email_duplicate") : actionData.errors.email[0]}
+          </p>
+        )}
+        <Form method="post" className="mt-3 flex items-end gap-2">
+          <input type="hidden" name="intent" value="update_email" />
+          <div className="space-y-1">
+            <Label htmlFor="change_email">{t("admin_change_email_label")}</Label>
+            <Input
+              id="change_email"
+              name="email"
+              type="email"
+              defaultValue={user?.email ?? ""}
+              className="w-72"
+              required
+            />
+          </div>
+          <Button type="submit" className="bg-sky-600 hover:bg-sky-700 text-white">
+            {t("admin_change_email_btn")}
+          </Button>
+        </Form>
+      </div>
+
       {/* Send Magic Link */}
       <div className="bg-violet-50 border border-violet-200 rounded-xl p-5">
         <p className="text-sm text-violet-900 font-medium">{t("admin_send_magic_link_title")}</p>
         <p className="text-xs text-violet-700 mt-1">{t("admin_send_magic_link_desc")}</p>
-        {actionData?.success?.magic_link && (
+        {"magic_link" in (actionData?.success ?? {}) && (
           <p className="mt-2 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
-            ✓ {t("admin_send_magic_link_success")} — {actionData.success.email}
+            ✓ {t("admin_send_magic_link_success")} — {(actionData!.success as any).email}
           </p>
         )}
         <Form method="post" className="mt-3">
