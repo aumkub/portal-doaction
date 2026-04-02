@@ -6,6 +6,9 @@ import { createDB } from "~/lib/db.server";
 import { generateId, getThaiMonth } from "~/lib/utils";
 import { sendTelegramNotification } from "~/lib/telegram.server";
 import { fetchUptimeForWebsite } from "~/lib/uptime.server";
+import { sendEmail } from "~/lib/email.server";
+import { buildReportCustomerNotification } from "~/lib/report-customer-email.server";
+import { createReportAccessToken } from "~/lib/report-access.server";
 import PageHeader from "~/components/layout/PageHeader";
 import ReportEditor from "~/routes/_admin/reports-editor";
 import { useT } from "~/lib/i18n";
@@ -35,6 +38,7 @@ const ReportSchema = z.object({
   speed_score: z.coerce.number().int().min(0).max(100).optional().nullable(),
   tasks_json: z.string().default("[]"),
   intent: z.enum(["draft", "publish"]).default("draft"),
+  send_email: z.string().optional().default("0"),
 });
 
 export async function loader({ request, context }: Route.LoaderArgs) {
@@ -60,7 +64,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   const {
     client_id, client_ids_json, uptime_overrides_json, year, month, title, summary,
-    uptime_percent, speed_score, tasks_json, intent,
+    uptime_percent, speed_score, tasks_json, intent, send_email,
   } = parsed.data;
 
   // Parse tasks
@@ -178,6 +182,65 @@ export async function action({ request, context }: Route.ActionArgs) {
         appUrl: env.APP_URL,
         notification,
       });
+
+      // Send email notification to client if requested
+      if (send_email === "1" && env.SMTP2GO_API_KEY) {
+        const clientUser = await db.getUserById(client.user_id);
+        if (clientUser?.email) {
+          const origin = env.APP_URL || new URL(request.url).origin;
+          const secret = env.SESSION_SECRET || "doaction-report-link-secret";
+          const exp = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 14;
+          const token = await createReportAccessToken(
+            { reportId, email: clientUser.email.toLowerCase(), exp },
+            secret
+          );
+          const reportUrl = `${String(origin).replace(/\/$/, "")}/public/report/${reportId}?t=${encodeURIComponent(token)}`;
+          const lang = clientUser.language === "en" ? "en" : "th";
+          const { subject, html, text } = buildReportCustomerNotification({
+            companyName: client.company_name,
+            contactName: clientUser.name,
+            reportTitle: title,
+            year,
+            month,
+            summary: summary ?? null,
+            reportUrl,
+            lang,
+          });
+          const now = Math.floor(Date.now() / 1000);
+          context.cloudflare.ctx.waitUntil(
+            (async () => {
+              try {
+                await sendEmail({
+                  to: clientUser.email!,
+                  toName: clientUser.name,
+                  subject,
+                  html,
+                  text,
+                  apiKey: env.SMTP2GO_API_KEY,
+                  db,
+                  source: "report_notify",
+                });
+                await db.updateReport(reportId, {
+                  client_notified_at: now,
+                  client_notification_subject: subject,
+                  client_notification_html: html,
+                });
+                await sendTelegramNotification({
+                  db,
+                  appUrl: env.APP_URL,
+                  notification: {
+                    title: `📧 ส่งอีเมลรายงานให้ ${client.company_name} แล้ว`,
+                    body: `${clientUser.email} — ${title}`,
+                    link: `/admin/reports/${reportId}`,
+                  },
+                });
+              } catch (e) {
+                console.error("[report-notify on create]", e);
+              }
+            })()
+          );
+        }
+      }
     }
 
     createdReportIds.push(reportId);

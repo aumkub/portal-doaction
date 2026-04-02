@@ -113,6 +113,8 @@ export default function ReportEditor({
     !!(report?.title && report.title !== "")
   );
 
+  const [sendEmailOnPublish, setSendEmailOnPublish] = useState(true);
+
   const [uptimePercent, setUptimePercent] = useState<string>(
     report?.uptime_percent != null ? String(report.uptime_percent) : ""
   );
@@ -566,31 +568,59 @@ export default function ReportEditor({
       </section>
 
       {/* ── Actions ────────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-3 justify-end">
-        <a
-          href="/admin/reports"
-          className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
-        >
-          {t("cancel")}
-        </a>
-        <Button
-          type="submit"
-          name="intent"
-          value="draft"
-          variant="outline"
-          disabled={isNew && selectedClientIds.length === 0}
-        >
-          {t("admin_editor_save_draft")}
-        </Button>
-        <Button
-          type="submit"
-          name="intent"
-          value="publish"
-          className="bg-violet-600 hover:bg-violet-700 text-white"
-          disabled={isNew && selectedClientIds.length === 0}
-        >
-          {isNew ? t("admin_editor_publish_new") : t("admin_editor_publish")}
-        </Button>
+      {/* Hidden: send email flag (only meaningful on publish) */}
+      {isNew && (
+        <input type="hidden" name="send_email" value={sendEmailOnPublish ? "1" : "0"} />
+      )}
+
+      <div className="space-y-3">
+        {/* Send email toggle — only on new publish */}
+        {isNew && (
+          <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+            <input
+              id="send_email_toggle"
+              type="checkbox"
+              checked={sendEmailOnPublish}
+              onChange={(e) => setSendEmailOnPublish(e.target.checked)}
+              className="mt-0.5 rounded border-slate-300 accent-violet-600 cursor-pointer"
+            />
+            <label htmlFor="send_email_toggle" className="cursor-pointer">
+              <span className="block text-sm font-medium text-slate-800">
+                {t("admin_editor_send_email_on_publish")}
+              </span>
+              <span className="block text-xs text-slate-500 mt-0.5">
+                {t("admin_editor_send_email_hint")}
+              </span>
+            </label>
+          </div>
+        )}
+
+        <div className="flex items-center gap-3 justify-end">
+          <a
+            href="/admin/reports"
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            {t("cancel")}
+          </a>
+          <Button
+            type="submit"
+            name="intent"
+            value="draft"
+            variant="outline"
+            disabled={isNew && selectedClientIds.length === 0}
+          >
+            {t("admin_editor_save_draft")}
+          </Button>
+          <Button
+            type="submit"
+            name="intent"
+            value="publish"
+            className="bg-violet-600 hover:bg-violet-700 text-white"
+            disabled={isNew && selectedClientIds.length === 0}
+          >
+            {isNew ? t("admin_editor_publish_new") : t("admin_editor_publish")}
+          </Button>
+        </div>
       </div>
     </Form>
   );

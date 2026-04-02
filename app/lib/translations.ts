@@ -349,6 +349,8 @@ const th = {
   admin_editor_save_draft: "บันทึก Draft",
   admin_editor_publish_new: "สร้างและเผยแพร่",
   admin_editor_publish: "เผยแพร่รายงาน",
+  admin_editor_send_email_on_publish: "ส่งอีเมลแจ้งลูกค้าทันที",
+  admin_editor_send_email_hint: "จะส่งอีเมลพร้อมลิ้งก์รายงานไปยังอีเมลของลูกค้าโดยอัตโนมัติ",
   status_closed_short: "ปิดแล้ว",
 };
 
@@ -702,6 +704,8 @@ const en: Record<keyof typeof th, string> = {
   admin_editor_save_draft: "Save draft",
   admin_editor_publish_new: "Create & publish",
   admin_editor_publish: "Publish report",
+  admin_editor_send_email_on_publish: "Send email notification to client",
+  admin_editor_send_email_hint: "Automatically emails the client a link to their report.",
   status_closed_short: "Closed",
 };
 
