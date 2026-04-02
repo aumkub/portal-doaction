@@ -105,21 +105,16 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
 		stack = error.stack;
 	}
 
-	// For infra errors (D1 / KV failures), auto-redirect to login and wipe session
+	// For infra errors (D1 / KV failures), redirect home so the user can retry
 	// eslint-disable-next-line react-hooks/rules-of-hooks
 	useEffect(() => {
 		if (isInfraError) {
-			document.cookie = "doaction_session=; Path=/; Max-Age=0; SameSite=Lax";
-			window.location.replace("/login");
+			window.location.replace("/");
 		}
 	}, [isInfraError]);
 
 	return (
 		<main className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-			{/* SSR fallback: meta refresh for infra errors */}
-			{isInfraError && (
-				<meta httpEquiv="refresh" content="0;url=/login" />
-			)}
 			<div className="bg-white rounded-2xl border border-slate-200 p-10 max-w-md w-full text-center space-y-4">
 				<p className="text-5xl font-bold text-slate-200">{status}</p>
 				<h1 className="text-xl font-semibold text-slate-900">{title}</h1>
@@ -130,10 +125,10 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
 					</pre>
 				)}
 				<a
-					href={isInfraError ? "/login" : "/"}
+					href="/"
 					className="inline-block mt-2 px-5 py-2.5 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 transition-colors"
 				>
-					{isInfraError ? "เข้าสู่ระบบใหม่" : "กลับหน้าหลัก"}
+					กลับหน้าหลัก
 				</a>
 			</div>
 		</main>

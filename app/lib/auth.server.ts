@@ -274,12 +274,10 @@ export async function requireUser(
   const user = await getAuthenticatedUser(request, d1, kv);
   if (!user) {
     const pathname = new URL(request.url).pathname;
-    // Clear the session cookie so a bad/expired token doesn't loop forever
     throw new Response(null, {
       status: 302,
       headers: {
         Location: `/login?redirect=${encodeURIComponent(pathname)}`,
-        "Set-Cookie": "doaction_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax",
       },
     });
   }
