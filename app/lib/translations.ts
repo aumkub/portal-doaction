@@ -16,6 +16,13 @@ const th = {
   nav_email_logs: "อีเมลล็อก",
   nav_logout: "ออกจากระบบ",
 
+  // ─── Auth Button Labels ─────────────────────────────
+  auth_btn_sign_in: "เข้าสู่ระบบ",
+  auth_btn_sign_up: "สมัครสมาชิก",
+  auth_btn_continue_with: "ดำเนินการต่อด้วย",
+  auth_btn_connect_with: "เชื่อมต่อด้วย",
+  auth_btn_send_magic_link: "ส่งลิงก์เข้าสู่ระบบ",
+
   // ─── Topbar ────────────────────────────────────────────
   topbar_notifications: "การแจ้งเตือน",
   topbar_mark_all_read: "อ่านทั้งหมด",
@@ -365,6 +372,16 @@ const en: Record<keyof typeof th, string> = {
   nav_dashboard: "Dashboard",
   nav_reports: "Monthly Reports",
   nav_tickets: "Support Tickets",
+  nav_attachments: "Attachments",
+  nav_email_logs: "Email logs",
+  nav_logout: "Logout",
+
+  // ─── Auth Button Labels ─────────────────────────────
+  auth_btn_sign_in: "Sign In",
+  auth_btn_sign_up: "Sign Up",
+  auth_btn_continue_with: "Continue with",
+  auth_btn_connect_with: "Connect with",
+  auth_btn_send_magic_link: "Send Magic Link",
   nav_documents: "Documents",
   nav_settings: "Settings",
   nav_contact_team: "Contact team",

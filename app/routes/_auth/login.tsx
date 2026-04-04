@@ -6,6 +6,7 @@ import { Label } from "~/components/ui/label";
 import { createDB } from "~/lib/db.server";
 import { verifyPassword, createAuth, generateMagicToken } from "~/lib/auth.server";
 import { sendMagicLinkEmail } from "~/lib/email.server";
+import { useT } from "~/lib/i18n";
 import { z } from "zod";
 
 export function meta() {
@@ -78,6 +79,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 export default function LoginPage() {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
+  const { t } = useT?.() ?? { t: (key: string) => key }; // Fallback for SSR
   const isSubmitting = navigation.state === "submitting";
   const submittingMode = navigation.formData?.get("mode");
   const isSubmittingMagic = isSubmitting && submittingMode === "magic";
@@ -103,7 +105,7 @@ export default function LoginPage() {
             type="submit"
             className="text-sm text-violet-600 hover:text-violet-700 underline underline-offset-2"
           >
-            ส่งลิ้งก์ใหม่
+            {t("auth_btn_send_magic_link")}
           </button>
         </Form>
       </div>
@@ -158,7 +160,7 @@ export default function LoginPage() {
           disabled={isSubmittingMagic}
           className="w-full h-11 bg-violet-600 hover:bg-violet-700 text-white"
         >
-          {isSubmittingMagic ? "กำลังส่ง…" : "ส่ง Magic Link"}
+          {isSubmittingMagic ? "กำลังส่ง…" : t("auth_btn_send_magic_link")}
         </Button>
       </Form>
 
@@ -190,7 +192,7 @@ export default function LoginPage() {
               className="w-full h-11"
               disabled={isSubmittingAdmin}
             >
-              {isSubmittingAdmin ? "กำลังเข้าสู่ระบบ…" : "เข้าสู่ระบบ (Admin)"}
+              {isSubmittingAdmin ? "กำลังเข้าสู่ระบบ…" : `${t("auth_btn_sign_in")} (Admin)`}
             </Button>
           </Form>
         </details>
