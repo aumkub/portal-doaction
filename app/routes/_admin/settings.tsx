@@ -21,6 +21,13 @@ const TelegramSchema = z.object({
   intent: z.literal("telegram"),
 });
 
+const LineLoginSchema = z.object({
+  intent: z.literal("line_login"),
+  sign_in_label: z.string().optional().default("เข้าสู่ระบบด้วย LINE"),
+  sign_up_label: z.string().optional().default("สมัครสมาชิกด้วย LINE"),
+  connect_label: z.string().optional().default("เชื่อมต่อด้วย LINE"),
+});
+
 const ContractWarningSchema = z.object({
   intent: z.literal("contract_warning"),
   first_days: z.coerce.number().int().min(0).default(14),
@@ -55,6 +62,9 @@ export async function loader({ request, context }: any) {
   const ticketReminderEnabled = (await db.getAppSetting("ticket_reminder_enabled")) !== "0";
   const ticketReminderDays = Number((await db.getAppSetting("ticket_reminder_days")) ?? "1");
   const ticketReminderHour = Number((await db.getAppSetting("ticket_reminder_hour")) ?? "9");
+  const lineSignInLabel = (await db.getAppSetting("line_sign_in_label")) ?? "เข้าสู่ระบบด้วย LINE";
+  const lineSignUpLabel = (await db.getAppSetting("line_sign_up_label")) ?? "สมัครสมาชิกด้วย LINE";
+  const lineConnectLabel = (await db.getAppSetting("line_connect_label")) ?? "เชื่อมต่อด้วย LINE";
   return {
     admin,
     adminUsers,
@@ -66,6 +76,9 @@ export async function loader({ request, context }: any) {
     ticketReminderEnabled,
     ticketReminderDays,
     ticketReminderHour,
+    lineSignInLabel,
+    lineSignUpLabel,
+    lineConnectLabel,
   };
 }
 
@@ -116,6 +129,17 @@ export async function action({ request, context }: any) {
     return { success: { ticket_reminder: true } };
   }
 
+  if (intent === "line_login") {
+    const parsed = LineLoginSchema.safeParse(raw);
+    if (!parsed.success) {
+      return { errors: parsed.error.flatten().fieldErrors };
+    }
+    await db.setAppSetting("line_sign_in_label", parsed.data.sign_in_label.trim());
+    await db.setAppSetting("line_sign_up_label", parsed.data.sign_up_label.trim());
+    await db.setAppSetting("line_connect_label", parsed.data.connect_label.trim());
+    return { success: { line_login: true } };
+  }
+
   if (intent === "telegram_test") {
     const token = await db.getAppSetting("telegram_bot_token");
     if (!token) {
@@ -156,10 +180,14 @@ export default function AdminSettingsPage({ loaderData, actionData }: any) {
     ticketReminderEnabled,
     ticketReminderDays,
     ticketReminderHour,
+    lineSignInLabel,
+    lineSignUpLabel,
+    lineConnectLabel,
   } = loaderData;
   const errors = actionData?.errors;
   const telegramTestSuccess = Boolean(actionData?.success?.telegram);
   const ticketReminderSaved = Boolean(actionData?.success?.ticket_reminder);
+  const lineLoginSaved = Boolean(actionData?.success?.line_login);
   const { t } = useT();
 
   const maskedKey =
@@ -320,6 +348,58 @@ export default function AdminSettingsPage({ loaderData, actionData }: any) {
                 {t("admin_settings_telegram_test")}
               </button>
             </Form>
+            <button
+              type="submit"
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 transition-colors"
+            >
+              {t("save")}
+            </button>
+          </div>
+        </Form>
+      </section>
+
+      {/* LINE Login Button Labels */}
+      <section className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
+        <h2 className="text-sm font-semibold text-slate-900">LINE Login — ปุ่มกด</h2>
+        <p className="text-xs text-slate-500">กำหนดข้อความบนปุ่มเข้าสู่ระบบด้วย LINE สำหรับหน้า WordPress ของคุณ</p>
+        {lineLoginSaved && (
+          <p className="text-xs text-emerald-600">บันทึกการตั้งค่าเรียบร้อยแล้ว</p>
+        )}
+        <Form method="post" className="space-y-4">
+          <input type="hidden" name="intent" value="line_login" />
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-slate-600">ปุ่ม "เข้าสู่ระบบ"</label>
+              <input
+                name="sign_in_label"
+                type="text"
+                defaultValue={lineSignInLabel}
+                placeholder="เข้าสู่ระบบด้วย LINE"
+                className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-slate-600">ปุ่ม "สมัครสมาชิก"</label>
+              <input
+                name="sign_up_label"
+                type="text"
+                defaultValue={lineSignUpLabel}
+                placeholder="สมัครสมาชิกด้วย LINE"
+                className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-slate-600">ปุ่ม "เชื่อมต่อ"</label>
+              <input
+                name="connect_label"
+                type="text"
+                defaultValue={lineConnectLabel}
+                placeholder="เชื่อมต่อด้วย LINE"
+                className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end">
             <button
               type="submit"
               className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 transition-colors"
