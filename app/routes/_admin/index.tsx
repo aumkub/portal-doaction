@@ -1,5 +1,5 @@
 import { Link } from "react-router";
-import { requireAdmin } from "~/lib/auth.server";
+import { requireCoAdminOrAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { useT } from "~/lib/i18n";
 
@@ -16,28 +16,60 @@ export function meta() {
 }
 
 export async function loader({ request, context }: any) {
-  await requireAdmin(request, context.cloudflare.env.DB, context.cloudflare.env.SESSIONPORTAL);
+  const user = await requireCoAdminOrAdmin(request, context.cloudflare.env.DB, context.cloudflare.env.SESSIONPORTAL);
   const db = createDB(context.cloudflare.env.DB);
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
 
-  const [clients, dueReports, openTicketsResult] = await Promise.all([
-    db.listClients(),
-    context.cloudflare.env.DB.prepare(
-      "SELECT COUNT(*) as count FROM monthly_reports WHERE year = ? AND month = ?"
-    )
-      .bind(year, month)
-      .first(),
-    context.cloudflare.env.DB.prepare(
-      `SELECT t.id, t.title, t.priority, t.status, c.company_name
+  // For Co-Admins, get their assigned client IDs
+  let assignedClientIds: string[] = [];
+  if (user.role === "co-admin") {
+    const assignments = await db.listCoAdminClients(user.id);
+    assignedClientIds = assignments.map((a) => a.client_id);
+  }
+
+  // Filter clients for Co-Admins
+  const allClients = await db.listClients();
+  const clients = user.role === "co-admin"
+    ? allClients.filter((c) => assignedClientIds.includes(c.id))
+    : allClients;
+
+  // Filter reports due for Co-Admins
+  const dueReportsQuery = user.role === "co-admin"
+    ? `SELECT COUNT(*) as count FROM monthly_reports WHERE year = ? AND month = ? AND client_id IN (${assignedClientIds.map(() => "?").join(",")})`
+    : "SELECT COUNT(*) as count FROM monthly_reports WHERE year = ? AND month = ?";
+
+  const dueReportsParams = user.role === "co-admin"
+    ? [year, month, ...assignedClientIds]
+    : [year, month];
+
+  const dueReports = await context.cloudflare.env.DB.prepare(dueReportsQuery)
+    .bind(...dueReportsParams)
+    .first();
+
+  // Filter tickets for Co-Admins
+  const openTicketsQuery = user.role === "co-admin"
+    ? `SELECT t.id, t.title, t.priority, t.status, c.company_name
+       FROM support_tickets t
+       JOIN clients c ON c.id = t.client_id
+       WHERE t.status IN ('open', 'in_progress') AND t.client_id IN (${assignedClientIds.map(() => "?").join(",")})
+       ORDER BY t.created_at DESC
+       LIMIT 6`
+    : `SELECT t.id, t.title, t.priority, t.status, c.company_name
        FROM support_tickets t
        JOIN clients c ON c.id = t.client_id
        WHERE t.status IN ('open', 'in_progress')
        ORDER BY t.created_at DESC
-       LIMIT 6`
-    ).all(),
-  ]);
+       LIMIT 6`;
+
+  const openTicketsParams = user.role === "co-admin"
+    ? [...assignedClientIds]
+    : [];
+
+  const openTicketsResult = await context.cloudflare.env.DB.prepare(openTicketsQuery)
+    .bind(...openTicketsParams)
+    .all();
 
   const dueReportCount = (dueReports as { count?: number } | null)?.count ?? 0;
   const urgentTickets = (openTicketsResult as { results?: DashboardTicket[] }).results ?? [];
@@ -48,6 +80,7 @@ export async function loader({ request, context }: any) {
     openTickets: urgentTickets.length,
     urgentTickets,
     clients: clients.slice(0, 6),
+    userRole: user.role,
   };
 }
 
@@ -59,10 +92,12 @@ export default function AdminOverviewPage({ loaderData }: any) {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold text-slate-900">
-          {t("admin_overview_title")}
+          {data.userRole === "co-admin" ? "ภาพรวม Co-Admin" : t("admin_overview_title")}
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          {t("admin_overview_subtitle")}
+          {data.userRole === "co-admin"
+            ? "ข้อมูลสำหรับลูกค้าที่คุณดูแล"
+            : t("admin_overview_subtitle")}
         </p>
       </div>
 

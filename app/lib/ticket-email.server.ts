@@ -57,6 +57,7 @@ const clientStrings = {
 export async function sendTicketEmailToClient(params: {
   to: string;
   toName?: string;
+  cc?: Array<{ email: string; name?: string }>;
   ticketTitle: string;
   message: string;
   ticketUrl: string;
@@ -64,7 +65,7 @@ export async function sendTicketEmailToClient(params: {
   db?: DB;
   lang?: EmailLanguage;
 }) {
-  const { to, toName, ticketTitle, message, ticketUrl, apiKey, db, lang = "th" } = params;
+  const { to, toName, cc, ticketTitle, message, ticketUrl, apiKey, db, lang = "th" } = params;
   const s = clientStrings[lang];
   const displayName = toName ?? to;
 
@@ -88,7 +89,7 @@ export async function sendTicketEmailToClient(params: {
     <p><a href="${ticketUrl}">${s.openBtn}</a></p>
     <p style="color:#64748b;">— do action</p>
   </body></html>`;
-  await sendEmail({ to, toName, subject, html, text, apiKey, db, source: "ticket_reply_to_client" });
+  await sendEmail({ to, toName, cc, subject, html, text, apiKey, db, source: "ticket_reply_to_client" });
 }
 
 // Admin notification emails stay in Thai (admin is always Thai-speaking)
@@ -129,13 +130,14 @@ export async function sendTicketEmailToAdmin(params: {
 export async function sendTicketClosedEmailToClient(params: {
   to: string;
   toName?: string;
+  cc?: Array<{ email: string; name?: string }>;
   ticketTitle: string;
   ticketUrl: string;
   apiKey: string;
   db?: DB;
   lang?: EmailLanguage;
 }) {
-  const { to, toName, ticketTitle, ticketUrl, apiKey, db, lang = "th" } = params;
+  const { to, toName, cc, ticketTitle, ticketUrl, apiKey, db, lang = "th" } = params;
   const s = clientStrings[lang];
   const displayName = toName ?? to;
 
@@ -158,5 +160,5 @@ export async function sendTicketClosedEmailToClient(params: {
     <p><a href="${ticketUrl}">${s.viewBtn}</a></p>
     <p style="color:#64748b;">— do action</p>
   </body></html>`;
-  await sendEmail({ to, toName, subject, html, text, apiKey, db, source: "ticket_closed_to_client" });
+  await sendEmail({ to, toName, cc, subject, html, text, apiKey, db, source: "ticket_closed_to_client" });
 }

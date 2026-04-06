@@ -10,6 +10,7 @@ const th = {
   nav_contact_team: "ติดต่อทีม",
   nav_overview: "ภาพรวม",
   nav_clients: "ลูกค้า",
+  nav_co_admins: "Co-Admins",
   nav_admin_reports: "รายงาน",
   nav_all_tickets: "Tickets",
   nav_attachments: "ไฟล์แนบ",
@@ -40,6 +41,7 @@ const th = {
   set: "ตั้งค่าแล้ว",
   not_expired: "ยังไม่หมดอายุ",
   view_all: "ดูทั้งหมด →",
+  view_only: "ดูอย่างเดียว",
 
   // ─── Ticket status ────────────────────────────────────
   status_open: "เปิด",

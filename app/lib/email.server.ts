@@ -9,6 +9,7 @@ export type EmailLanguage = "th" | "en";
 interface SendEmailOptions {
   to: string;
   toName?: string;
+  cc?: Array<{ email: string; name?: string }>;
   subject: string;
   html: string;
   text: string;
@@ -20,6 +21,7 @@ interface SendEmailOptions {
 export async function sendEmail({
   to,
   toName,
+  cc,
   subject,
   html,
   text,
@@ -28,12 +30,14 @@ export async function sendEmail({
   source,
 }: SendEmailOptions): Promise<void> {
   try {
+    const ccRecipients = cc?.map((c) => c.name ? `${c.name} <${c.email}>` : c.email) ?? [];
     const res = await fetch("https://api.smtp2go.com/v3/email/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         api_key: apiKey,
         to: [toName ? `${toName} <${to}>` : to],
+        cc: ccRecipients,
         sender: "do action portal <aum@doaction.co.th>",
         subject,
         html_body: html,

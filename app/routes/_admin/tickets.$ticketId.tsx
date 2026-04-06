@@ -1,7 +1,7 @@
 import { Form, redirect, useNavigation } from "react-router";
 import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
-import { requireAdmin } from "~/lib/auth.server";
+import { requireCoAdminOrAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { formatDate, generateId } from "~/lib/utils";
 import { sendTelegramNotification } from "~/lib/telegram.server";
@@ -45,23 +45,34 @@ export function meta({ data }: any) {
 
 export async function loader({ request, context, params }: any) {
   const env = context.cloudflare.env;
-  const admin = await requireAdmin(request, env.DB, env.SESSIONPORTAL);
+  const currentUser = await requireCoAdminOrAdmin(request, env.DB, env.SESSIONPORTAL);
   const db = createDB(env.DB);
 
   const ticket = await db.getTicket(params.ticketId);
   if (!ticket) throw new Response("Ticket not found", { status: 404 });
 
-  const [messages, attachments, admins, client] = await Promise.all([
+  // For Co-Admins, verify they have access to this ticket's client
+  if (currentUser.role === "co-admin") {
+    const assignments = await db.listCoAdminClients(currentUser.id);
+    const assignedClientIds = assignments.map((a) => a.client_id);
+    if (!assignedClientIds.includes(ticket.client_id)) {
+      throw new Response("You don't have access to this ticket", { status: 403 });
+    }
+  }
+
+  const [messages, attachments, admins, coAdmins, client] = await Promise.all([
     db.listMessagesByTicket(ticket.id),
     db.listAttachmentsByTicket(ticket.id),
     db.listAdminUsers(),
+    db.listCoAdminUsers(),
     db.getClientById(ticket.client_id),
   ]);
 
   const usersById: Record<string, User> = {};
   for (const a of admins) usersById[a.id] = a;
+  for (const a of coAdmins) usersById[a.id] = a;
 
-  return { ticket, messages, attachments, usersById, client, admin };
+  return { ticket, messages, attachments, usersById, client, currentUser };
 }
 
 const STATUSES = [
@@ -88,11 +99,20 @@ const STATUS_LABEL_TH: Record<string, string> = {
 
 export async function action({ request, context, params }: any) {
   const env = context.cloudflare.env;
-  const admin = await requireAdmin(request, env.DB, env.SESSIONPORTAL);
+  const currentUser = await requireCoAdminOrAdmin(request, env.DB, env.SESSIONPORTAL);
   const db = createDB(env.DB);
 
   const ticket = await db.getTicket(params.ticketId);
   if (!ticket) throw new Response("Ticket not found", { status: 404 });
+
+  // For Co-Admins, verify they have access to this ticket's client
+  if (currentUser.role === "co-admin") {
+    const assignments = await db.listCoAdminClients(currentUser.id);
+    const assignedClientIds = assignments.map((a) => a.client_id);
+    if (!assignedClientIds.includes(ticket.client_id)) {
+      throw new Response("You don't have access to this ticket", { status: 403 });
+    }
+  }
 
   const formData = await request.formData();
   const raw = Object.fromEntries(formData);
@@ -129,6 +149,10 @@ export async function action({ request, context, params }: any) {
         read: 0,
       } as const;
       await db.createNotification(notification);
+
+      // Get co-admins for CC
+      const coAdmins = await db.getCoAdminEmailsForClient(client.id);
+
       context.cloudflare.ctx.waitUntil(
         Promise.allSettled([
           sendTelegramNotification({
@@ -143,6 +167,7 @@ export async function action({ request, context, params }: any) {
                 ticketTitle: ticket.title,
                 ticketUrl: `${env.APP_URL}/tickets/${ticket.id}`,
                 apiKey: env.SMTP2GO_API_KEY,
+                cc: coAdmins,
                 db,
                 lang: clientUser.language === "en" ? "en" : "th",
               })
@@ -159,7 +184,7 @@ export async function action({ request, context, params }: any) {
   await db.createTicketMessage({
     id: messageId,
     ticket_id: ticket.id,
-    user_id: admin.id,
+    user_id: currentUser.id,
     message,
     is_internal: isInternal,
   });
@@ -179,7 +204,7 @@ export async function action({ request, context, params }: any) {
           id: generateId(),
           ticket_id: ticket.id,
           message_id: messageId,
-          uploader_user_id: admin.id,
+          uploader_user_id: currentUser.id,
           file_key: item.fileKey,
           file_name: item.fileName || "attachment",
           mime_type: item.mimeType || "application/octet-stream",
@@ -212,6 +237,10 @@ export async function action({ request, context, params }: any) {
       } as const;
       await db.createNotification(notification);
       const messageSnapshot = message;
+
+      // Get co-admins for CC
+      const coAdmins = await db.getCoAdminEmailsForClient(client.id);
+
       context.cloudflare.ctx.waitUntil(
         Promise.allSettled([
           sendTelegramNotification({
@@ -227,6 +256,7 @@ export async function action({ request, context, params }: any) {
                 message: messageSnapshot,
                 ticketUrl: `${env.APP_URL}/tickets/${ticket.id}`,
                 apiKey: env.SMTP2GO_API_KEY,
+                cc: coAdmins,
                 db,
                 lang: clientUser.language === "en" ? "en" : "th",
               })
@@ -240,7 +270,7 @@ export async function action({ request, context, params }: any) {
 }
 
 export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
-  const { ticket, messages, attachments, usersById, client, admin } = loaderData as {
+  const { ticket, messages, attachments, usersById, client, currentUser } = loaderData as {
     ticket: SupportTicket;
     messages: TicketMessage[];
     attachments: TicketAttachment[];
@@ -388,21 +418,25 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
       {/* Message thread */}
       <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
         <MessageBubble message={ticket.description} isClient={false} isInternal={false} />
-        {messages.map((msg) => (
-          <div key={msg.id} id={`msg-${msg.id}`}>
-            <MessageBubble
-              message={msg.message}
-              isClient={usersById[msg.user_id]?.role === "admin"}
-              isInternal={msg.is_internal === 1}
-              authorName={usersById[msg.user_id]?.name}
-              attachments={(attachmentsByMessage[msg.id] ?? []).map((att) => ({
-                id: att.id,
-                name: att.file_name,
-                href: `/api/attachments/${encodeURIComponent(att.file_key)}`,
-              }))}
-            />
-          </div>
-        ))}
+        {messages.map((msg) => {
+          const userRole = usersById[msg.user_id]?.role;
+          const isFromAdminOrCoAdmin = userRole === "admin" || userRole === "co-admin";
+          return (
+            <div key={msg.id} id={`msg-${msg.id}`}>
+              <MessageBubble
+                message={msg.message}
+                isClient={isFromAdminOrCoAdmin}
+                isInternal={msg.is_internal === 1}
+                authorName={usersById[msg.user_id]?.name}
+                attachments={(attachmentsByMessage[msg.id] ?? []).map((att) => ({
+                  id: att.id,
+                  name: att.file_name,
+                  href: `/api/attachments/${encodeURIComponent(att.file_key)}`,
+                }))}
+              />
+            </div>
+          );
+        })}
       </div>
 
       {/* Reply form */}

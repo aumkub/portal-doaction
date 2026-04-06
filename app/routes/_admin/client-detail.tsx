@@ -1,13 +1,14 @@
-import { Form, redirect, useActionData } from "react-router";
+import { Form, redirect, useActionData, type FormEvent } from "react-router";
 import { z } from "zod";
-import { useState, type FormEvent } from "react";
-import { requireAdmin, startImpersonation, generateMagicToken } from "~/lib/auth.server";
+import { useState, type FormEvent as ReactFormEvent } from "react";
+import { requireCoAdminOrAdmin, startImpersonation, generateMagicToken } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { generateId } from "~/lib/utils";
 import { useT } from "~/lib/i18n";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Button } from "~/components/ui/button";
+import { FaTrash } from "react-icons/fa6";
 
 export function meta() {
   return [{ title: "รายละเอียดลูกค้า — Admin" }];
@@ -25,30 +26,48 @@ const UpdateSchema = z.object({
 
 export async function loader({ request, params, context }: any) {
   const env = context.cloudflare.env;
-  await requireAdmin(request, env.DB, env.SESSIONPORTAL);
+  const currentUser = await requireCoAdminOrAdmin(request, env.DB, env.SESSIONPORTAL);
   const db = createDB(env.DB);
 
   const client = await db.getClientById(params.clientId);
   if (!client) throw new Response("Not Found", { status: 404 });
 
+  // For Co-Admins, verify they have access to this client
+  let canImpersonate = false;
+  if (currentUser.role === "co-admin") {
+    const assignments = await db.listCoAdminClients(currentUser.id);
+    const assignedClientIds = assignments.map((a) => a.client_id);
+    if (!assignedClientIds.includes(client.id)) {
+      throw new Response("You don't have access to this client", { status: 403 });
+    }
+  } else if (currentUser.role === "admin") {
+    canImpersonate = true; // Only admins can impersonate clients
+  }
+
   const user = await db.getUserById(client.user_id);
-  const [reports, tickets] = await Promise.all([
+  const [reports, tickets, notes] = await Promise.all([
     db.listReportsByClient(client.id),
     db.listTicketsByClient(client.id),
+    db.listCustomerNotes(client.id),
   ]);
 
-  return { client, user, reportsCount: reports.length, ticketsCount: tickets.length };
+  return { client, user, reportsCount: reports.length, ticketsCount: tickets.length, notes, currentUser, canImpersonate };
 }
 
 export async function action({ request, params, context }: any) {
   const env = context.cloudflare.env;
-  const admin = await requireAdmin(request, env.DB, env.SESSIONPORTAL);
+  const currentUser = await requireCoAdminOrAdmin(request, env.DB, env.SESSIONPORTAL);
   const db = createDB(env.DB);
   const client = await db.getClientById(params.clientId);
   if (!client) throw new Response("Not Found", { status: 404 });
 
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "");
+
+  // Co-Admins can only add notes - reject all other intents
+  if (currentUser.role === "co-admin" && intent !== "add_note") {
+    throw new Response("Forbidden", { status: 403 });
+  }
 
   if (intent === "update_client") {
     const parsed = UpdateSchema.safeParse(Object.fromEntries(formData));
@@ -130,12 +149,17 @@ export async function action({ request, params, context }: any) {
   }
 
   if (intent === "impersonate") {
+    // Only admins can impersonate clients
+    if (currentUser.role !== "admin") {
+      return { errors: { general: ["You don't have permission to impersonate clients"] } };
+    }
+
     const sessionCookie = await startImpersonation(
       request,
       env.DB,
       env.SESSIONPORTAL,
       client.user_id,
-      admin.id
+      currentUser.id
     );
 
     return redirect("/dashboard", {
@@ -146,6 +170,39 @@ export async function action({ request, params, context }: any) {
   if (intent === "delete_client") {
     await db.softDeleteClient(client.id);
     return redirect("/admin/clients");
+  }
+
+  if (intent === "add_note") {
+    const note = String(formData.get("note") ?? "").trim();
+    if (!note) {
+      return { errors: { note: ["กรุณาระบุข้อความ"] } };
+    }
+
+    await db.createCustomerNote({
+      id: generateId(),
+      client_id: client.id,
+      user_id: currentUser.id,
+      note,
+    });
+
+    return { success: { note_added: true } };
+  }
+
+  if (intent === "delete_note") {
+    const noteId = String(formData.get("note_id") ?? "");
+    const note = await db.getCustomerNoteById(noteId);
+
+    if (!note) {
+      return { errors: { general: ["Note not found"] } };
+    }
+
+    // Only admins or the note creator can delete
+    if (currentUser.role !== "admin" && note.user_id !== currentUser.id) {
+      return { errors: { general: ["You don't have permission to delete this note"] } };
+    }
+
+    await db.deleteCustomerNote(noteId);
+    return { success: { note_deleted: true } };
   }
 
   throw new Response("Bad Request", { status: 400 });
@@ -164,7 +221,11 @@ type ActionData = {
     notes: string;
   };
   emailDuplicate?: boolean;
-  success?: { magic_link: true; email: string } | { email_changed: true; email: string };
+  success?:
+    | { magic_link: true; email: string }
+    | { email_changed: true; email: string }
+    | { note_added: true }
+    | { note_deleted: true };
 };
 
 const PKG_BADGE: Record<string, string> = {
@@ -174,9 +235,10 @@ const PKG_BADGE: Record<string, string> = {
 };
 
 export default function AdminClientDetailPage({ loaderData }: any) {
-  const { client, user, reportsCount, ticketsCount } = loaderData;
+  const { client, user, reportsCount, ticketsCount, notes, currentUser, canImpersonate } = loaderData;
   const { t } = useT();
   const actionData = useActionData() as ActionData | undefined;
+  const isViewOnly = currentUser.role === "co-admin";
 
   const v =
     actionData?.values ?? {
@@ -205,7 +267,10 @@ export default function AdminClientDetailPage({ loaderData }: any) {
     : user?.email ?? "";
 
   return (
-    <div className="space-y-5 max-w-3xl">
+    <div className="grid grid-cols-12 max-w-6xl gap-6 space-y-5">
+      <div className="flex gap-6 col-span-8">
+        {/* Main column */}
+        <div className="flex-1 space-y-5">
 
       {/* ── Header ── */}
       <div className="flex items-start justify-between">
@@ -260,17 +325,24 @@ export default function AdminClientDetailPage({ loaderData }: any) {
         className="bg-white rounded-xl border border-slate-200 p-5 space-y-4"
       >
         <input type="hidden" name="intent" value="update_client" />
-        <h2 className="text-sm font-semibold text-slate-900">{t("admin_client_edit_heading")}</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-slate-900">{t("admin_client_edit_heading")}</h2>
+          {isViewOnly && (
+            <span className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded-full font-medium">
+              {t("view_only")}
+            </span>
+          )}
+        </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label htmlFor="name">{t("admin_client_new_name")}</Label>
-            <Input id="name" name="name" defaultValue={v.name} required />
+            <Input id="name" name="name" defaultValue={v.name} required disabled={isViewOnly} className={isViewOnly ? "bg-slate-50 text-slate-500" : ""} />
             {errors?.name && <p className="text-red-500 text-xs">{errors.name[0]}</p>}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="company_name">{t("admin_client_new_company_name")}</Label>
-            <Input id="company_name" name="company_name" defaultValue={v.company_name} required />
+            <Input id="company_name" name="company_name" defaultValue={v.company_name} required disabled={isViewOnly} className={isViewOnly ? "bg-slate-50 text-slate-500" : ""} />
             {errors?.company_name && <p className="text-red-500 text-xs">{errors.company_name[0]}</p>}
           </div>
           <div className="space-y-1.5 col-span-2">
@@ -281,6 +353,8 @@ export default function AdminClientDetailPage({ loaderData }: any) {
               type="url"
               defaultValue={v.website_url}
               placeholder="https://example.com"
+              disabled={isViewOnly}
+              className={isViewOnly ? "bg-slate-50 text-slate-500" : ""}
             />
             {errors?.website_url && <p className="text-red-500 text-xs">{errors.website_url[0]}</p>}
           </div>
@@ -290,7 +364,8 @@ export default function AdminClientDetailPage({ loaderData }: any) {
               id="package"
               name="package"
               defaultValue={v.package}
-              className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
+              disabled={isViewOnly}
+              className={`w-full h-10 rounded-lg border border-slate-200 px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 ${isViewOnly ? "bg-slate-50 text-slate-500" : ""}`}
             >
               <option value="basic">{t("admin_pkg_basic")}</option>
               <option value="standard">{t("admin_pkg_standard")}</option>
@@ -299,7 +374,7 @@ export default function AdminClientDetailPage({ loaderData }: any) {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="contract_start">{t("admin_client_new_contract_start")}</Label>
-            <Input id="contract_start" name="contract_start" type="date" defaultValue={v.contract_start} />
+            <Input id="contract_start" name="contract_start" type="date" defaultValue={v.contract_start} disabled={isViewOnly} className={isViewOnly ? "bg-slate-50 text-slate-500" : ""} />
           </div>
           <div className="space-y-1.5 col-span-2">
             <Label htmlFor="contract_end">{t("admin_client_new_contract_end")}</Label>
@@ -308,7 +383,8 @@ export default function AdminClientDetailPage({ loaderData }: any) {
               name="contract_end"
               type="date"
               defaultValue={v.contract_end}
-              disabled={noContractEnd}
+              disabled={noContractEnd || isViewOnly}
+              className={isViewOnly ? "bg-slate-50 text-slate-500" : ""}
             />
             <label className="mt-2 inline-flex items-center gap-2 text-xs text-slate-600">
               <input
@@ -317,6 +393,7 @@ export default function AdminClientDetailPage({ loaderData }: any) {
                 value="1"
                 checked={noContractEnd}
                 onChange={(e) => setNoContractEnd(e.target.checked)}
+                disabled={isViewOnly}
                 className="rounded accent-violet-600"
               />
               {t("admin_client_new_monthly_no_end")}
@@ -329,20 +406,24 @@ export default function AdminClientDetailPage({ loaderData }: any) {
               name="notes"
               rows={2}
               defaultValue={v.notes}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 resize-none"
+              disabled={isViewOnly}
+              className={`w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 resize-none ${isViewOnly ? "bg-slate-50 text-slate-500" : ""}`}
             />
           </div>
         </div>
 
-        <div className="flex justify-end pt-1">
-          <Button type="submit" className="bg-violet-600 hover:bg-violet-700 text-white">
-            {t("save")}
-          </Button>
-        </div>
+        {!isViewOnly && (
+          <div className="flex justify-end pt-1">
+            <Button type="submit" className="bg-violet-600 hover:bg-violet-700 text-white">
+              {t("save")}
+            </Button>
+          </div>
+        )}
       </Form>
 
       {/* ── Account Access (change email + magic link) ── */}
-      <div className="grid grid-cols-2 gap-4">
+      {!isViewOnly && (
+        <div className="grid grid-cols-2 gap-4">
         {/* Change Email */}
         <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
           <div>
@@ -393,45 +474,136 @@ export default function AdminClientDetailPage({ loaderData }: any) {
           </Form>
         </div>
       </div>
+      )}
 
       {/* ── Impersonate ── */}
-      <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 flex items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold text-amber-900">{t("admin_impersonate_title")}</p>
-          <p className="text-xs text-amber-800 mt-0.5">{t("admin_impersonate_desc")}</p>
+      {canImpersonate && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-amber-900">{t("admin_impersonate_title")}</p>
+            <p className="text-xs text-amber-800 mt-0.5">{t("admin_impersonate_desc")}</p>
+          </div>
+          <Form method="post" className="shrink-0">
+            <input type="hidden" name="intent" value="impersonate" />
+            <button
+              type="submit"
+              className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 transition-colors whitespace-nowrap"
+            >
+              {t("admin_impersonate_btn")}
+            </button>
+          </Form>
         </div>
-        <Form method="post" className="shrink-0">
-          <input type="hidden" name="intent" value="impersonate" />
-          <button
-            type="submit"
-            className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 transition-colors whitespace-nowrap"
-          >
-            {t("admin_impersonate_btn")}
-          </button>
-        </Form>
-      </div>
+      )}
 
       {/* ── Danger zone ── */}
-      <div className="bg-rose-50 border border-rose-200 rounded-xl p-5 flex items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold text-rose-900">{t("admin_client_delete_title")}</p>
-          <p className="text-xs text-rose-800 mt-0.5">{t("admin_client_delete_desc")}</p>
-        </div>
-        <Form
-          method="post"
-          className="shrink-0"
-          onSubmit={(e: FormEvent<HTMLFormElement>) => {
-            if (!confirm(t("admin_client_delete_confirm"))) e.preventDefault();
-          }}
-        >
-          <input type="hidden" name="intent" value="delete_client" />
-          <button
-            type="submit"
-            className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 transition-colors"
+      {!isViewOnly && (
+        <div className="bg-rose-50 border border-rose-200 rounded-xl p-5 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-rose-900">{t("admin_client_delete_title")}</p>
+            <p className="text-xs text-rose-800 mt-0.5">{t("admin_client_delete_desc")}</p>
+          </div>
+          <Form
+            method="post"
+            className="shrink-0"
+            onSubmit={(e: ReactFormEvent<HTMLFormElement>) => {
+              if (!confirm(t("admin_client_delete_confirm"))) e.preventDefault();
+            }}
           >
-            {t("admin_client_delete_btn")}
-          </button>
-        </Form>
+            <input type="hidden" name="intent" value="delete_client" />
+            <button
+              type="submit"
+              className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 transition-colors"
+            >
+              {t("admin_client_delete_btn")}
+            </button>
+          </Form>
+        </div>
+      )}
+        </div>
+      </div>
+
+      {/* Sidebar - Internal Notes */}
+      <div className="col-span-4">
+        <div className="sticky top-6 space-y-5">
+          <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">บันทึกภายใน (Internal Notes)</p>
+                <p className="text-xs text-slate-500 mt-0.5">บันทึกเกี่ยวกับลูกค้า สำหรับ Admin และ Co-Admin</p>
+              </div>
+              <span className="text-xs text-slate-400">{notes.length} บันทึก</span>
+            </div>
+
+            {/* Add note form */}
+            <Form method="post" className="space-y-2">
+              <input type="hidden" name="intent" value="add_note" />
+              <textarea
+                name="note"
+                rows={3}
+                placeholder="เพิ่มบันทึกใหม่..."
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 resize-none"
+              />
+              {actionData?.errors?.note && (
+                <p className="text-xs text-red-500">{actionData.errors.note[0]}</p>
+              )}
+              <div className="flex justify-end">
+                <Button
+                  type="submit"
+                  className="bg-slate-900 hover:bg-slate-700 text-white text-sm"
+                >
+                  เพิ่มบันทึก
+                </Button>
+              </div>
+            </Form>
+
+            {/* Notes list */}
+            <div className="space-y-3 max-h-96 overflow-y-auto">
+              {notes.length === 0 ? (
+                <p className="text-xs text-slate-400 text-center py-4">ยังไม่มีบันทึก</p>
+          ) : (
+            notes.map((note: any) => {
+              const canDelete = currentUser?.role === "admin" || note.user_id === currentUser?.id;
+              return (
+                <div key={note.id} className="bg-slate-50 rounded-lg p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-medium text-slate-700">{note.user_name}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                          note.user_role === "admin" ? "bg-violet-100 text-violet-700" : "bg-emerald-100 text-emerald-700"
+                        }`}>
+                          {note.user_role === "admin" ? "Admin" : "Co-Admin"}
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          {new Date(note.created_at * 1000).toLocaleString("th-TH")}
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-700 whitespace-pre-wrap">{note.note}</p>
+                    </div>
+                    {(currentUser.role === "admin" || note.user_id === currentUser.id) && (
+                      <Form method="post">
+                        <input type="hidden" name="intent" value="delete_note" />
+                        <input type="hidden" name="note_id" value={note.id} />
+                        <button
+                          type="submit"
+                          onClick={(e) => {
+                            if (!confirm("ลบบันทึกนี้?")) e.preventDefault();
+                          }}
+                          className="text-slate-400 hover:text-red-600 transition-colors p-1"
+                          title="ลบบันทึก"
+                        >
+                          <FaTrash className="w-4 h-4" />
+                        </button>
+                      </Form>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

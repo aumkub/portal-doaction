@@ -10,6 +10,9 @@ import type {
   MagicLinkToken,
   TicketAttachment,
   EmailLog,
+  CoAdminClient,
+  CustomerNote,
+  CustomerNoteWithUser,
 } from "~/types";
 
 // ─── DB wrapper ───────────────────────────────────────────────────────────────
@@ -37,13 +40,14 @@ export function createDB(d1: D1Database) {
     ): Promise<void> {
       await d1
         .prepare(
-          "INSERT INTO users (id, email, name, role, avatar_url, first_login_at) VALUES (?, ?, ?, ?, ?, ?)"
+          "INSERT INTO users (id, email, name, role, password_hash, avatar_url, first_login_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch(), unixepoch())"
         )
         .bind(
           user.id,
           user.email,
           user.name,
           user.role,
+          user.password_hash ?? null,
           user.avatar_url,
           user.first_login_at ?? null
         )
@@ -69,6 +73,13 @@ export function createDB(d1: D1Database) {
     async listAdminUsers(): Promise<User[]> {
       const result = await d1
         .prepare("SELECT * FROM users WHERE role = 'admin' ORDER BY name")
+        .all<User>();
+      return result.results;
+    },
+
+    async listCoAdminUsers(): Promise<User[]> {
+      const result = await d1
+        .prepare("SELECT * FROM users WHERE role = 'co-admin' ORDER BY name")
         .all<User>();
       return result.results;
     },
@@ -575,6 +586,133 @@ export function createDB(d1: D1Database) {
     async deleteAppSetting(key: string): Promise<void> {
       await d1.prepare("DELETE FROM app_settings WHERE key = ?").bind(key).run();
     },
+
+    // ── Co-Admin Clients (Many-to-Many) ────────────────────────────────────────
+
+    async listCoAdminClients(co_admin_id: string): Promise<(CoAdminClient & { telegram_group_id: string | null })[]> {
+      const result = await d1
+        .prepare("SELECT * FROM co_admin_clients WHERE co_admin_id = ?")
+        .bind(co_admin_id)
+        .all<CoAdminClient & { telegram_group_id: string | null }>();
+      return result.results;
+    },
+
+    async listCoAdminsForClient(client_id: string): Promise<(User & { telegram_group_id: string | null })[]> {
+      const result = await d1
+        .prepare(`
+          SELECT u.*, cac.telegram_group_id FROM users u
+          INNER JOIN co_admin_clients cac ON u.id = cac.co_admin_id
+          WHERE cac.client_id = ? AND u.role = 'co-admin'
+          ORDER BY u.name
+        `)
+        .bind(client_id)
+        .all<(User & { telegram_group_id: string | null })>();
+      return result.results;
+    },
+
+    async addCoAdminClient(
+      co_admin_id: string,
+      client_id: string,
+      telegram_group_id?: string | null
+    ): Promise<void> {
+      const id = crypto.randomUUID();
+      await d1
+        .prepare(
+          "INSERT INTO co_admin_clients (id, co_admin_id, client_id, telegram_group_id) VALUES (?, ?, ?, ?)"
+        )
+        .bind(id, co_admin_id, client_id, telegram_group_id ?? null)
+        .run();
+    },
+
+    async removeCoAdminClient(co_admin_id: string, client_id: string): Promise<void> {
+      await d1
+        .prepare("DELETE FROM co_admin_clients WHERE co_admin_id = ? AND client_id = ?")
+        .bind(co_admin_id, client_id)
+        .run();
+    },
+
+    async removeAllCoAdminAssignments(co_admin_id: string): Promise<void> {
+      await d1
+        .prepare("DELETE FROM co_admin_clients WHERE co_admin_id = ?")
+        .bind(co_admin_id)
+        .run();
+    },
+
+    async updateCoAdminClientTelegramGroup(
+      co_admin_id: string,
+      client_id: string,
+      telegram_group_id: string | null
+    ): Promise<void> {
+      await d1
+        .prepare("UPDATE co_admin_clients SET telegram_group_id = ? WHERE co_admin_id = ? AND client_id = ?")
+        .bind(telegram_group_id, co_admin_id, client_id)
+        .run();
+    },
+
+    async getCoAdminClientTelegramGroup(
+      co_admin_id: string,
+      client_id: string
+    ): Promise<string | null> {
+      const row = await d1
+        .prepare("SELECT telegram_group_id FROM co_admin_clients WHERE co_admin_id = ? AND client_id = ?")
+        .bind(co_admin_id, client_id)
+        .first<{ telegram_group_id: string | null }>();
+      return row?.telegram_group_id ?? null;
+    },
+
+    // ── Customer Notes ──────────────────────────────────────────────────────────
+
+    async listCustomerNotes(client_id: string): Promise<CustomerNoteWithUser[]> {
+      const result = await d1
+        .prepare(`
+          SELECT cn.*, u.name as user_name, u.role as user_role
+          FROM customer_notes cn
+          JOIN users u ON u.id = cn.user_id
+          WHERE cn.client_id = ?
+          ORDER BY cn.created_at DESC
+        `)
+        .bind(client_id)
+        .all<CustomerNoteWithUser>();
+      return result.results;
+    },
+
+    async createCustomerNote(note: Omit<CustomerNote, "created_at" | "updated_at">): Promise<void> {
+      await d1
+        .prepare(
+          "INSERT INTO customer_notes (id, client_id, user_id, note) VALUES (?, ?, ?, ?)"
+        )
+        .bind(note.id, note.client_id, note.user_id, note.note)
+        .run();
+    },
+
+    async deleteCustomerNote(id: string): Promise<void> {
+      await d1
+        .prepare("DELETE FROM customer_notes WHERE id = ?")
+        .bind(id)
+        .run();
+    },
+
+    async getCustomerNoteById(id: string): Promise<CustomerNote | null> {
+      return d1
+        .prepare("SELECT * FROM customer_notes WHERE id = ?")
+        .bind(id)
+        .first<CustomerNote>();
+    },
+
+    async getCoAdminEmailsForClient(client_id: string): Promise<Array<{ email: string; name: string }>> {
+      const result = await d1
+        .prepare(`
+          SELECT u.email, u.name
+          FROM users u
+          INNER JOIN co_admin_clients cac ON u.id = cac.co_admin_id
+          WHERE cac.client_id = ? AND u.role = 'co-admin'
+        `)
+        .bind(client_id)
+        .all<{ email: string; name: string }>();
+      return result.results;
+    },
+
+    // ── Email Logs ─────────────────────────────────────────────────────────────
 
     async createEmailLog(log: {
       id: string;

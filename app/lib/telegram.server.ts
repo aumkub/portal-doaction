@@ -30,6 +30,30 @@ async function getLatestChatId(token: string): Promise<number | null> {
   return null;
 }
 
+async function sendToTelegramChat(
+  token: string,
+  chatId: number | string,
+  notification: TelegramNotification,
+  appUrl: string
+): Promise<void> {
+  const absoluteLink = toAbsoluteUrl(appUrl, notification.link);
+  const lines = [
+    `[Notification] ${notification.title}`,
+    notification.body || "",
+    absoluteLink ? `\n${absoluteLink}` : "",
+  ].filter(Boolean);
+
+  await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text: lines.join("\n"),
+      disable_web_page_preview: true,
+    }),
+  });
+}
+
 export async function sendTelegramNotification(params: {
   db: DB;
   appUrl: string;
@@ -43,22 +67,51 @@ export async function sendTelegramNotification(params: {
     const chatId = await getLatestChatId(token);
     if (!chatId) return;
 
-    const absoluteLink = toAbsoluteUrl(appUrl, notification.link);
-    const lines = [
-      `[Notification] ${notification.title}`,
-      notification.body || "",
-      absoluteLink ? `\n${absoluteLink}` : "",
-    ].filter(Boolean);
+    await sendToTelegramChat(token, chatId, notification, appUrl);
+  } catch {
+    // Do not block app notifications when Telegram fails.
+  }
+}
 
-    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: lines.join("\n"),
-        disable_web_page_preview: true,
-      }),
-    });
+/**
+ * Send Telegram notification to Co-Admin specific groups for a client.
+ * If a Co-Admin is assigned to the client with a telegram_group_id,
+ * the notification will be sent to that group.
+ * Falls back to default Telegram behavior if no Co-Admin group is configured.
+ */
+export async function sendTelegramNotificationForClient(params: {
+  db: DB;
+  appUrl: string;
+  notification: TelegramNotification;
+  clientId: string;
+}): Promise<void> {
+  const { db, appUrl, notification, clientId } = params;
+  const token = await db.getAppSetting("telegram_bot_token");
+  if (!token) return;
+
+  try {
+    // Get Co-Admins assigned to this client with telegram groups
+    const coAdmins = await db.listCoAdminsForClient(clientId);
+    const coAdminsWithGroups = coAdmins.filter((ca) => ca.telegram_group_id);
+
+    // Send to each Co-Admin's specific group
+    for (const coAdmin of coAdminsWithGroups) {
+      if (coAdmin.telegram_group_id) {
+        try {
+          await sendToTelegramChat(token, coAdmin.telegram_group_id, notification, appUrl);
+        } catch {
+          // Continue to next Co-Admin if one fails
+        }
+      }
+    }
+
+    // If no Co-Admin groups configured, fall back to default behavior
+    if (coAdminsWithGroups.length === 0) {
+      const chatId = await getLatestChatId(token);
+      if (chatId) {
+        await sendToTelegramChat(token, chatId, notification, appUrl);
+      }
+    }
   } catch {
     // Do not block app notifications when Telegram fails.
   }

@@ -21,6 +21,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     throw redirect("/admin/clients");
   }
 
+  // Redirect co-admins to admin interface - they should never access customer routes
+  if (user.role === "co-admin") {
+    throw redirect("/admin");
+  }
+
   const db = createDB(env.DB);
   const [client, notifications] = await Promise.all([
     db.getClientByUserId(user.id),

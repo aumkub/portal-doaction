@@ -1,6 +1,6 @@
 import type { Route } from "./+types/tickets";
 import { useState } from "react";
-import { requireAdmin } from "~/lib/auth.server";
+import { requireCoAdminOrAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { formatRelativeTime } from "~/lib/utils";
 import PageHeader from "~/components/layout/PageHeader";
@@ -14,10 +14,19 @@ export function meta() {
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = context.cloudflare.env;
-  await requireAdmin(request, env.DB, env.SESSIONPORTAL);
+  const user = await requireCoAdminOrAdmin(request, env.DB, env.SESSIONPORTAL);
   const db = createDB(env.DB);
 
-  const clients = await db.listClients();
+  let clients;
+  if (user.role === "co-admin") {
+    // Co-admins only see their assigned clients
+    const assignments = await db.listCoAdminClients(user.id);
+    const clientIds = assignments.map((a) => a.client_id);
+    clients = (await db.listClients()).filter((c) => clientIds.includes(c.id));
+  } else {
+    // Admins see all clients
+    clients = await db.listClients();
+  }
 
   // Load tickets for every client in parallel to reduce total latency.
   const ticketBuckets = await Promise.all(
@@ -35,7 +44,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     counts[t.status] = (counts[t.status] ?? 0) + 1;
   }
 
-  return { tickets: allTickets, counts };
+  return { tickets: allTickets, counts, userRole: user.role };
 }
 
 const statusColors: Record<string, string> = {

@@ -1,7 +1,7 @@
 import { Form } from "react-router";
 import type { FormEvent } from "react";
 import type { Route } from "./+types/clients";
-import { requireAdmin } from "~/lib/auth.server";
+import { requireCoAdminOrAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { formatRelativeTime } from "~/lib/utils";
 import type { Client } from "~/types";
@@ -14,9 +14,17 @@ export function meta() {
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
-  await requireAdmin(request, context.cloudflare.env.DB, context.cloudflare.env.SESSIONPORTAL);
+  const user = await requireCoAdminOrAdmin(request, context.cloudflare.env.DB, context.cloudflare.env.SESSIONPORTAL);
   const db = createDB(context.cloudflare.env.DB);
-  const clients = await db.listClients();
+
+  // For Co-Admins, get only their assigned clients
+  let clients = await db.listClients();
+  if (user.role === "co-admin") {
+    const assignments = await db.listCoAdminClients(user.id);
+    const assignedClientIds = assignments.map((a) => a.client_id);
+    clients = clients.filter((c) => assignedClientIds.includes(c.id));
+  }
+
   const clientsWithStatus = await Promise.all(
     clients.map(async (client) => {
       const user = await db.getUserById(client.user_id);
@@ -26,7 +34,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       };
     })
   );
-  return { clients: clientsWithStatus };
+
+  return { clients: clientsWithStatus, userRole: user.role };
 }
 
 const packageKeys: Record<Client["package"], TranslationKey> = {
@@ -41,8 +50,9 @@ const packageColors = {
 };
 
 export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
-  const { clients } = loaderData as {
+  const { clients, userRole } = loaderData as {
     clients: Array<Client & { first_login_at: number | null }>;
+    userRole: string;
   };
   const { t, lang } = useT();
 
@@ -51,19 +61,23 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">
-            {t("admin_clients_title")}
+            {userRole === "co-admin" ? "ลูกค้าที่ดูแล" : t("admin_clients_title")}
           </h1>
           <p className="text-slate-500 text-sm mt-1">
-            {t("admin_clients_subtitle").replace("{count}", String(clients.length))}
+            {userRole === "co-admin"
+              ? `รายการลูกค้าที่คุณรับผิดชอบ (${clients.length})`
+              : t("admin_clients_subtitle").replace("{count}", String(clients.length))}
           </p>
         </div>
-        <a
-          href="/admin/clients/new"
-          className="flex items-center gap-2 bg-[#F0D800] text-slate-900 rounded-lg px-4 py-2 text-sm font-medium hover:bg-yellow-400 transition-colors"
-        >
-          <FaCirclePlus aria-hidden="true" />
-          {t("admin_clients_add")}
-        </a>
+        {userRole !== "co-admin" && (
+          <a
+            href="/admin/clients/new"
+            className="flex items-center gap-2 bg-[#F0D800] text-slate-900 rounded-lg px-4 py-2 text-sm font-medium hover:bg-yellow-400 transition-colors"
+          >
+            <FaCirclePlus aria-hidden="true" />
+            {t("admin_clients_add")}
+          </a>
+        )}
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden overflow-x-auto">
@@ -156,28 +170,30 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
                         <FaEye aria-hidden="true" />
                         {t("admin_view_details")}
                       </a>
-                      <Form
-                        method="post"
-                        action={`/admin/clients/${client.id}`}
-                        onSubmit={(e: FormEvent<HTMLFormElement>) => {
-                          if (
-                            !confirm(
-                              `${t("admin_impersonate_confirm")} ${client.company_name}?`
-                            )
-                          ) {
-                            e.preventDefault();
-                          }
-                        }}
-                      >
-                        <input type="hidden" name="intent" value="impersonate" />
-                        <button
-                          type="submit"
-                          className="inline-flex items-center gap-1 text-xs text-amber-600 hover:text-amber-700 font-medium transition-colors border border-amber-200 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg cursor-pointer"
+                      {userRole !== "co-admin" && (
+                        <Form
+                          method="post"
+                          action={`/admin/clients/${client.id}`}
+                          onSubmit={(e: FormEvent<HTMLFormElement>) => {
+                            if (
+                              !confirm(
+                                `${t("admin_impersonate_confirm")} ${client.company_name}?`
+                              )
+                            ) {
+                              e.preventDefault();
+                            }
+                          }}
                         >
-                          <FaUserSecret aria-hidden="true" />
-                          {t("admin_impersonate")}
-                        </button>
-                      </Form>
+                          <input type="hidden" name="intent" value="impersonate" />
+                          <button
+                            type="submit"
+                            className="inline-flex items-center gap-1 text-xs text-amber-600 hover:text-amber-700 font-medium transition-colors border border-amber-200 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg cursor-pointer"
+                          >
+                            <FaUserSecret aria-hidden="true" />
+                            {t("admin_impersonate")}
+                          </button>
+                        </Form>
+                      )}
                     </div>
                   </td>
                 </tr>

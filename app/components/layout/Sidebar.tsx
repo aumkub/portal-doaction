@@ -16,10 +16,11 @@ import {
   FaHouse,
   FaPaperclip,
   FaTicket,
+  FaUserSecret,
   FaUsers,
 } from "react-icons/fa6";
 
-type NavItem = { labelKey: TranslationKey; href: string; icon: IconType; end?: boolean };
+type NavItem = { labelKey: TranslationKey; href: string; icon: IconType; end?: boolean; roles?: ("admin" | "co-admin")[] };
 
 const clientNav: NavItem[] = [
   { labelKey: "nav_dashboard", href: "/dashboard", icon: FaChartColumn, end: true },
@@ -32,6 +33,7 @@ const clientNav: NavItem[] = [
 const adminNav: NavItem[] = [
   { labelKey: "nav_overview", href: "/admin", icon: FaHouse, end: true },
   { labelKey: "nav_clients", href: "/admin/clients", icon: FaUsers },
+  { labelKey: "nav_co_admins", href: "/admin/co-admins", icon: FaUserSecret },
   { labelKey: "nav_admin_reports", href: "/admin/reports", icon: FaFileLines },
   { labelKey: "nav_all_tickets", href: "/admin/tickets", icon: FaTicket },
   { labelKey: "nav_attachments", href: "/admin/attachments", icon: FaPaperclip },
@@ -39,8 +41,15 @@ const adminNav: NavItem[] = [
   { labelKey: "nav_settings", href: "/admin/settings", icon: FaGear },
 ];
 
+const coAdminNav: NavItem[] = [
+  { labelKey: "nav_overview", href: "/admin", icon: FaHouse, end: true },
+  { labelKey: "nav_clients", href: "/admin/clients", icon: FaUsers },
+  { labelKey: "nav_admin_reports", href: "/admin/reports", icon: FaFileLines },
+  { labelKey: "nav_all_tickets", href: "/admin/tickets", icon: FaTicket },
+];
+
 interface SidebarProps {
-  role: "client" | "admin";
+  role: "client" | "admin" | "co-admin";
   companyName?: string | null;
 }
 
@@ -68,6 +77,36 @@ function NavItems({ nav, onNavigate }: { nav: NavItem[]; onNavigate?: () => void
           {t(item.labelKey)}
         </NavLink>
       ))}
+    </nav>
+  );
+}
+
+function NavItemsWithRole({ nav, userRole, onNavigate }: { nav: NavItem[]; userRole?: string; onNavigate?: () => void }) {
+  const { t } = useT();
+  return (
+    <nav className="flex-1 py-4 px-3 space-y-0.5">
+      {nav
+        .filter((item) => !item.roles || item.roles.includes(userRole as any))
+        .map((item) => (
+          <NavLink
+            key={item.href}
+            to={item.href}
+            end={item.end}
+            prefetch="intent"
+            onClick={onNavigate}
+            className={({ isActive }) =>
+              cn(
+                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                isActive
+                  ? "bg-[#EED900] text-black"
+                  : "text-slate-400 hover:text-white hover:bg-white/5"
+              )
+            }
+          >
+            <item.icon className="text-base leading-none" aria-hidden="true" />
+            {t(item.labelKey)}
+          </NavLink>
+        ))}
     </nav>
   );
 }
@@ -141,14 +180,16 @@ function SidebarContent({
   onNavigate,
 }: SidebarProps & { onNavigate?: () => void }) {
   const { t } = useT();
-  const nav = role === "admin" ? adminNav : clientNav;
+  const nav = role === "co-admin" ? coAdminNav : role === "admin" ? adminNav : clientNav;
   return (
-    <div className={`flex h-full flex-col ${role === "admin" ? "bg-black/90" : "bg-black/90"}`}>
+    <div className={`flex h-full flex-col ${role === "admin" || role === "co-admin" ? "bg-black/90" : "bg-black/90"}`}>
       <LogoBlock companyName={companyName} />
-      {role === "admin" ? (
+      {role === "admin" || role === "co-admin" ? (
         <div className="px-5 pt-3">
-          <span className="inline-flex rounded-full bg-violet-600/20 px-2.5 py-1 text-[11px] font-semibold text-violet-300">
-            {t("nav_badge_admin")}
+          <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+            role === "co-admin" ? "bg-emerald-600/20 text-emerald-300" : "bg-violet-600/20 text-violet-300"
+          }`}>
+            {role === "co-admin" ? "CO-ADMIN" : t("nav_badge_admin")}
           </span>
         </div>
       ) : null}

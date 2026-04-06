@@ -35,21 +35,34 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   // ── Admin password login ──────────────────────────────────────────────────
   if (mode === "password") {
-    if (!password || !user || user.role !== "admin") {
+    if (!password || !user || (user.role !== "admin" && user.role !== "co-admin")) {
       return { errors: { email: ["อีเมลหรือรหัสผ่านไม่ถูกต้อง"] }, sent: false };
     }
-    const storedHash = await env.SESSIONPORTAL.get(`pw:${user.id}`);
+    // Co-admins use password_hash from users table
+    // Admins use password_hash from KV (legacy)
+    let storedHash: string | null = null;
+    if (user.role === "co-admin") {
+      storedHash = user.password_hash;
+    } else {
+      storedHash = await env.SESSIONPORTAL.get(`pw:${user.id}`);
+    }
     if (!storedHash || !(await verifyPassword(password, storedHash))) {
       return { errors: { email: ["อีเมลหรือรหัสผ่านไม่ถูกต้อง"] }, sent: false };
     }
     const { lucia } = createAuth(env.DB, env.SESSIONPORTAL);
     const session = await lucia.createSession(user.id, {});
     const cookie = lucia.createSessionCookie(session.id);
-    const dest = new URL(request.url).searchParams.get("redirect") ?? "/admin/clients";
+    // Redirect co-admins and admins to their respective pages
+    const dest = new URL(request.url).searchParams.get("redirect") ??
+      (user.role === "co-admin" ? "/admin" : "/admin/clients");
     return redirect(dest, { headers: { "Set-Cookie": cookie.serialize() } });
   }
 
   // ── Magic link (default) ───────────────────────────────────────────────────
+  // Co-admins cannot use magic link
+  if (user && user.role === "co-admin") {
+    return { errors: { email: ["Co-admins must use password login. Magic link is not supported for co-admins."] }, sent: false };
+  }
   if (user) {
     const { id, token, expires_at } = generateMagicToken();
     await db.createMagicLinkToken({ id, user_id: user.id, token, expires_at, used: 0 });
@@ -164,11 +177,11 @@ export default function LoginPage() {
         </Button>
       </Form>
 
-      {/* Admin divider */}
+      {/* Admin / Co-Admin divider */}
       <div className="mt-6 pt-6 border-t border-slate-100">
         <details className="group">
           <summary className="text-xs text-slate-400 cursor-pointer hover:text-slate-600 transition-colors list-none text-center">
-            ผู้ดูแลระบบ? เข้าสู่ระบบด้วยรหัสผ่าน
+            ผู้ดูแลระบบ / Co-Admin? เข้าสู่ระบบด้วยรหัสผ่าน
           </summary>
           <Form method="post" className="mt-4 space-y-3">
             <input type="hidden" name="mode" value="password" />
@@ -192,7 +205,7 @@ export default function LoginPage() {
               className="w-full h-11"
               disabled={isSubmittingAdmin}
             >
-              {isSubmittingAdmin ? "กำลังเข้าสู่ระบบ…" : `${t("auth_btn_sign_in")} (Admin)`}
+              {isSubmittingAdmin ? "กำลังเข้าสู่ระบบ…" : `${t("auth_btn_sign_in")} (Admin / Co-Admin)`}
             </Button>
           </Form>
         </details>

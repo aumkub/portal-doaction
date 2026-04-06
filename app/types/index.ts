@@ -1,6 +1,6 @@
 // ─── User & Auth ─────────────────────────────────────────────────────────────
 
-export type UserRole = "admin" | "client";
+export type UserRole = "admin" | "client" | "co-admin";
 
 export type UserLanguage = "th" | "en";
 
@@ -9,6 +9,7 @@ export interface User {
   email: string;
   name: string;
   role: UserRole;
+  password_hash: string | null;
   avatar_url: string | null;
   language?: UserLanguage | null;
   first_login_at?: number | null;
@@ -148,6 +149,31 @@ export interface Notification {
   read: number;
   created_at: number;
 }
+
+// ─── Co-Admin ─────────────────────────────────────────────────────────────────
+
+export interface CoAdminClient {
+  id: string;
+  co_admin_id: string;
+  client_id: string;
+  created_at: number;
+}
+
+export interface CustomerNote {
+  id: string;
+  client_id: string;
+  user_id: string;
+  note: string;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface CustomerNoteWithUser extends CustomerNote {
+  user_name: string;
+  user_role: UserRole;
+}
+
+// ─── Email Log ───────────────────────────────────────────────────────────────
 
 export interface EmailLog {
   id: string;

@@ -296,6 +296,18 @@ export async function requireAdmin(
   return user;
 }
 
+export async function requireCoAdminOrAdmin(
+  request: Request,
+  d1: D1Database,
+  kv: KVNamespace
+): Promise<User> {
+  const user = await requireUser(request, d1, kv);
+  if (user.role !== "admin" && user.role !== "co-admin") {
+    throw new Response("Forbidden", { status: 403 });
+  }
+  return user;
+}
+
 // ─── Password hashing (Web Crypto — Cloudflare Workers compatible) ────────────
 
 export async function hashPassword(password: string): Promise<string> {

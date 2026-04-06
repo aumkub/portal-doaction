@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Route } from "./+types/reports";
-import { requireAdmin } from "~/lib/auth.server";
+import { requireCoAdminOrAdmin } from "~/lib/auth.server";
 import ReportCustomerEmailDialog, {
   type ReportRowForEmail,
 } from "~/components/reports/ReportCustomerEmailDialog";
@@ -13,9 +13,20 @@ export function meta() {
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
-  await requireAdmin(request, context.cloudflare.env.DB, context.cloudflare.env.SESSIONPORTAL);
-  const db = createDB(context.cloudflare.env.DB);
-  const clients = await db.listClients();
+  const env = context.cloudflare.env;
+  const user = await requireCoAdminOrAdmin(request, env.DB, env.SESSIONPORTAL);
+  const db = createDB(env.DB);
+
+  let clients;
+  if (user.role === "co-admin") {
+    // Co-admins only see their assigned clients
+    const assignments = await db.listCoAdminClients(user.id);
+    const clientIds = assignments.map((a) => a.client_id);
+    clients = (await db.listClients()).filter((c) => clientIds.includes(c.id));
+  } else {
+    // Admins see all clients
+    clients = await db.listClients();
+  }
 
   const allReports: ReportRowForEmail[] = [];
   for (const client of clients) {
@@ -39,6 +50,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   return {
     reports: allReports.slice(0, 20),
     clients,
+    userRole: user.role,
     bulkResult: {
       created: Number.isNaN(bulkCreated) ? 0 : bulkCreated,
       failed: Number.isNaN(bulkFailed) ? 0 : bulkFailed,
@@ -52,11 +64,13 @@ const statusStyle = {
 };
 
 export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
-  const { reports, bulkResult } = loaderData as {
+  const { reports, bulkResult, userRole } = loaderData as {
     reports: ReportRowForEmail[];
     bulkResult: { created: number; failed: number };
+    userRole: "admin" | "co-admin";
   };
   const { t, lang } = useT();
+  const isCoAdmin = userRole === "co-admin";
 
   const [emailDialog, setEmailDialog] = useState<{
     report: ReportRowForEmail;
@@ -80,13 +94,15 @@ export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
             {t("admin_reports_page_subtitle")}
           </p>
         </div>
-        <a
-          href="/admin/reports/new"
-          className="flex items-center gap-2 bg-[#F0D800] text-slate-900 rounded-lg px-4 py-2 text-sm font-medium hover:bg-yellow-400 transition-colors"
-        >
-          <FaFileCirclePlus aria-hidden="true" />
-          {t("admin_reports_new_btn")}
-        </a>
+        {!isCoAdmin && (
+          <a
+            href="/admin/reports/new"
+            className="flex items-center gap-2 bg-[#F0D800] text-slate-900 rounded-lg px-4 py-2 text-sm font-medium hover:bg-yellow-400 transition-colors"
+          >
+            <FaFileCirclePlus aria-hidden="true" />
+            {t("admin_reports_new_btn")}
+          </a>
+        )}
       </div>
 
       <ReportCustomerEmailDialog
@@ -196,7 +212,7 @@ export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
                       </td>
                       <td className="px-5 py-4 text-right">
                         <div className="flex flex-col sm:flex-row items-stretch sm:items-start justify-end gap-2">
-                          {isPublished && (
+                          {isPublished && !isCoAdmin && (
                             <>
                               {!notified ? (
                                 <button
@@ -236,13 +252,6 @@ export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
                             </>
                           )}
                           <a
-                            href={`/admin/reports/${report.id}`}
-                            className="inline-flex items-center justify-center gap-1 rounded-lg border border-transparent text-xs text-slate-500 hover:text-slate-900 transition-colors p-2"
-                          >
-                            <FaPenToSquare aria-hidden="true" />
-                            {t("admin_reports_edit")}
-                          </a>
-                          <a
                             href={`/reports/${report.id}`}
                             target="_blank"
                             rel="noopener noreferrer"
@@ -251,6 +260,15 @@ export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
                             <FaMagnifyingGlass aria-hidden="true" />
                             {t("admin_reports_preview")}
                           </a>
+                          {!isCoAdmin && (
+                            <a
+                              href={`/admin/reports/${report.id}`}
+                              className="inline-flex items-center justify-center gap-1 rounded-lg border border-transparent text-xs text-slate-500 hover:text-slate-900 transition-colors p-2"
+                            >
+                              <FaPenToSquare aria-hidden="true" />
+                              {t("admin_reports_edit")}
+                            </a>
+                          )}
                         </div>
                       </td>
                     </tr>
