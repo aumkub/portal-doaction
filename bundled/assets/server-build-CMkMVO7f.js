@@ -14755,7 +14755,7 @@ const th = {
   admin_pkg_premium: "Premium",
   admin_client_detail_subtitle: "รายละเอียดลูกค้า",
   admin_client_edit_heading: "แก้ไขข้อมูลลูกค้า",
-  admin_back_clients: "← กลับไปหน้าลูกค้า",
+  admin_back_clients: "กลับไปหน้าลูกค้า",
   admin_label_user_email: "อีเมลผู้ใช้",
   admin_label_website: "เว็บไซต์",
   admin_label_package: "แพ็กเกจ",
