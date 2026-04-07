@@ -5,7 +5,7 @@ import { requireAdmin, hashPassword, startImpersonation } from "~/lib/auth.serve
 import { createDB } from "~/lib/db.server";
 import { generateId } from "~/lib/utils";
 import { useT } from "~/lib/i18n";
-import { sendTelegramNotificationToGroup } from "~/lib/telegram.server";
+import { sendTelegramNotificationForClient } from "~/lib/telegram.server";
 import { FaCirclePlus, FaTrash, FaUserSecret, FaTelegram, FaUserCheck, FaPaperPlane } from "react-icons/fa6";
 import PageHeader from "~/components/layout/PageHeader";
 import { Input } from "~/components/ui/input";
@@ -170,42 +170,44 @@ export async function action({ request, context }: Route.ActionArgs) {
 
     const { co_admin_id, client_id } = parsed.data;
 
-    // Get the co-admin client assignment to check if telegram_group_id is set
-    const assignments = await db.listCoAdminClients(co_admin_id);
-    const assignment = assignments.find((a) => a.client_id === client_id);
-
-    if (!assignment || !assignment.telegram_group_id) {
-      return { errors: { general: ["กรุณาระบุ Telegram Group ID ก่อนทดสอบ"] } };
-    }
-
     // Get client info for the notification
     const client = await db.getClientById(client_id);
     if (!client) {
       return { errors: { general: ["ไม่พบข้อมูลลูกค้า"] } };
     }
 
-    // Send test notification to Co-Admin's specific Telegram group
+    // Get the co-admin client assignment to see if telegram_group_id is set
+    const assignments = await db.listCoAdminClients(co_admin_id);
+    const assignment = assignments.find((a) => a.client_id === client_id);
+
+    // Send test notification
     const testNotification = {
       id: generateId(),
       user_id: co_admin_id,
       type: "ticket_update" as const,
       title: "🧪 ทดสอบการแจ้งเตือน",
-      body: `ทดสอบการส่งการแจ้งเตือนสำหรับลูกค้า: ${client.company_name}\n\nTelegram Group ID: ${assignment.telegram_group_id}`,
+      body: `ทดสอบการส่งการแจ้งเตือนสำหรับลูกค้า: ${client.company_name}${
+        assignment?.telegram_group_id
+          ? `\nTelegram Group ID: ${assignment.telegram_group_id}`
+          : "\n(ไม่ได้ระบุ Group ID เฉพาะ - ใช้การตั้งค่าทั่วไป)"
+      }`,
       link: `/admin/clients/${client_id}`,
       read: 0,
     } as const;
 
     try {
-      // Send test notification ONLY to this specific Co-Admin's Telegram group
-      await sendTelegramNotificationToGroup({
+      // Send using sendTelegramNotificationForClient which handles both cases:
+      // - If Co-Admin has telegram_group_id, sends to that specific group
+      // - If no telegram_group_id, falls back to default Telegram behavior
+      await sendTelegramNotificationForClient({
         db,
         appUrl: env.APP_URL,
         notification: testNotification,
-        telegramGroupId: assignment.telegram_group_id,
+        clientId,
       });
     } catch (error) {
       console.error("Test notification failed:", error);
-      return { errors: { general: ["ส่งการแจ้งเตือนไม่สำเร็จ กรุณาตรวจสอบ Telegram Group ID"] } };
+      return { errors: { general: ["ส่งการแจ้งเตือนไม่สำเร็จ"] } };
     }
 
     return { success: { test_fire: true } };
@@ -473,27 +475,28 @@ export default function CoAdminsPage({ loaderData, actionData }: Route.Component
                                   บันทึก
                                 </Button>
                               </Form>
-                              {client.telegram_group_id && (
-                                <Form method="post">
-                                  <input type="hidden" name="intent" value="test_fire" />
-                                  <input type="hidden" name="co_admin_id" value={coAdmin.id} />
-                                  <input type="hidden" name="client_id" value={client.id} />
-                                  <Button
-                                    type="submit"
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-8 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                                    onClick={(e) => {
-                                      if (!confirm(`ทดสอบส่งการแจ้งเตือนไปยัง Telegram Group สำหรับ ${client.company_name}?`)) {
-                                        e.preventDefault();
-                                      }
-                                    }}
-                                  >
-                                    <FaPaperPlane className="mr-1" />
-                                    ทดสอบ
-                                  </Button>
-                                </Form>
-                              )}
+                              <Form method="post">
+                                <input type="hidden" name="intent" value="test_fire" />
+                                <input type="hidden" name="co_admin_id" value={coAdmin.id} />
+                                <input type="hidden" name="client_id" value={client.id} />
+                                <Button
+                                  type="submit"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                  onClick={(e) => {
+                                    const msg = client.telegram_group_id
+                                      ? `ทดสอบส่งการแจ้งเตือนไปยัง Telegram Group สำหรับ ${client.company_name}?`
+                                      : `ทดสอบส่งการแจ้งเตือน (ไม่ได้ระบุ Group ID เฉพาะ) สำหรับ ${client.company_name}?`;
+                                    if (!confirm(msg)) {
+                                      e.preventDefault();
+                                    }
+                                  }}
+                                >
+                                  <FaPaperPlane className="mr-1" />
+                                  ทดสอบ
+                                </Button>
+                              </Form>
                             </div>
                           </div>
                           <Form method="post">
