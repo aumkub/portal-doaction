@@ -32,7 +32,7 @@ export function createLanguageCookie(language: Language): string {
 interface I18nContextType {
   lang: Lang;
   setLang: (lang: Lang) => void;
-  t: (key: TranslationKey) => string;
+  t: (key: TranslationKey, params?: Record<string, string | number>) => string;
 }
 
 const I18nContext = createContext<I18nContextType>({
@@ -60,8 +60,15 @@ export function I18nProvider({
 
   const t = useMemo(
     () =>
-      (key: TranslationKey): string =>
-        translations[lang][key] ?? translations.th[key] ?? key,
+      (key: TranslationKey, params?: Record<string, string | number>): string => {
+        let str = translations[lang][key] ?? translations.th[key] ?? key;
+        if (params) {
+          Object.entries(params).forEach(([placeholder, value]) => {
+            str = str.replace(new RegExp(`\\{${placeholder}\\}`, 'g'), String(value));
+          });
+        }
+        return str;
+      },
     [lang]
   );
 

@@ -3,7 +3,7 @@ import { FaCircleCheck, FaRotateRight } from "react-icons/fa6";
 import type { Route } from "./+types/dashboard";
 import { requireUser } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
-import { formatRelativeTime } from "~/lib/utils";
+import { formatDate, formatRelativeTime } from "~/lib/utils";
 import { useT } from "~/lib/i18n";
 import TeamContactPanel from "~/components/contact/TeamContactPanel";
 import StatsCard from "~/components/dashboard/StatsCard";
@@ -311,6 +311,58 @@ export default function DashboardPage({ loaderData }: Route.ComponentProps) {
               </div>
             ) : (
               <p className="text-slate-400 text-sm">{t("dash_no_website")}</p>
+            )}
+          </div>
+
+          {/* Contract Status */}
+          <div className="bg-white rounded-xl border border-slate-200 p-5">
+            <h2 className="text-sm font-semibold text-slate-900 mb-3">
+              {t("dash_contract_expiry")}
+            </h2>
+            {client?.contract_end ? (
+              <div>
+                {(() => {
+                  const expiryDate = new Date(client.contract_end);
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  expiryDate.setHours(0, 0, 0, 0);
+                  
+                  const diffTime = expiryDate.getTime() - today.getTime();
+                  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                  if (diffDays < 0) {
+                    return (
+                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
+                        {t("dash_contract_expired")}
+                      </span>
+                    );
+                  } else if (diffDays <= 30) {
+                    return (
+                      <div className="space-y-2">
+                        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+                          {t("dash_contract_days_left", { days: diffDays })}
+                        </span>
+                        <p className="text-xs text-slate-600">
+                          {formatDate(expiryDate.getTime() / 1000, lang)}
+                        </p>
+                      </div>
+                    );
+                  } else {
+                    return (
+                      <div className="space-y-2">
+                        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                          {t("dash_contract_days_left", { days: diffDays })}
+                        </span>
+                        <p className="text-xs text-slate-600">
+                          {formatDate(expiryDate.getTime() / 1000, lang)}
+                        </p>
+                      </div>
+                    );
+                  }
+                })()}
+              </div>
+            ) : (
+              <p className="text-slate-400 text-sm">{t("dash_contract_no_expiry")}</p>
             )}
           </div>
 
