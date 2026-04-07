@@ -5,7 +5,7 @@ import { requireAdmin, hashPassword, startImpersonation } from "~/lib/auth.serve
 import { createDB } from "~/lib/db.server";
 import { generateId } from "~/lib/utils";
 import { useT } from "~/lib/i18n";
-import { sendTelegramNotificationForClient } from "~/lib/telegram.server";
+import { sendTelegramNotificationToGroup } from "~/lib/telegram.server";
 import { FaCirclePlus, FaTrash, FaUserSecret, FaTelegram, FaUserCheck, FaPaperPlane } from "react-icons/fa6";
 import PageHeader from "~/components/layout/PageHeader";
 import { Input } from "~/components/ui/input";
@@ -196,11 +196,12 @@ export async function action({ request, context }: Route.ActionArgs) {
     } as const;
 
     try {
-      await sendTelegramNotificationForClient({
+      // Send test notification ONLY to this specific Co-Admin's Telegram group
+      await sendTelegramNotificationToGroup({
         db,
         appUrl: env.APP_URL,
         notification: testNotification,
-        clientId,
+        telegramGroupId: assignment.telegram_group_id,
       });
     } catch (error) {
       console.error("Test notification failed:", error);

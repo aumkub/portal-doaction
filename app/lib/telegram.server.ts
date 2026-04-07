@@ -116,3 +116,24 @@ export async function sendTelegramNotificationForClient(params: {
     // Do not block app notifications when Telegram fails.
   }
 }
+
+/**
+ * Send Telegram notification to a specific chat/group ID.
+ * Used for testing or sending to a specific known group.
+ */
+export async function sendTelegramNotificationToGroup(params: {
+  db: DB;
+  appUrl: string;
+  notification: TelegramNotification;
+  telegramGroupId: string;
+}): Promise<void> {
+  const { db, appUrl, notification, telegramGroupId } = params;
+  const token = await db.getAppSetting("telegram_bot_token");
+  if (!token) return;
+
+  try {
+    await sendToTelegramChat(token, telegramGroupId, notification, appUrl);
+  } catch {
+    // Do not block app notifications when Telegram fails.
+  }
+}
