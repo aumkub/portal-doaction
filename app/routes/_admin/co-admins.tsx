@@ -5,7 +5,8 @@ import { requireAdmin, hashPassword, startImpersonation } from "~/lib/auth.serve
 import { createDB } from "~/lib/db.server";
 import { generateId } from "~/lib/utils";
 import { useT } from "~/lib/i18n";
-import { FaCirclePlus, FaTrash, FaUserSecret, FaTelegram, FaUserCheck } from "react-icons/fa6";
+import { sendTelegramNotificationForClient } from "~/lib/telegram.server";
+import { FaCirclePlus, FaTrash, FaUserSecret, FaTelegram, FaUserCheck, FaPaperPlane } from "react-icons/fa6";
 import PageHeader from "~/components/layout/PageHeader";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
@@ -50,6 +51,12 @@ const UpdateTelegramSchema = z.object({
   client_id: z.string().min(1, "กรุณาระบุลูกค้า"),
   telegram_group_id: z.string().optional(),
   intent: z.literal("update_telegram"),
+});
+
+const TestFireSchema = z.object({
+  co_admin_id: z.string().min(1, "กรุณาระบุ Co-Admin"),
+  client_id: z.string().min(1, "กรุณาระบุลูกค้า"),
+  intent: z.literal("test_fire"),
 });
 
 export async function loader({ request, context }: Route.LoaderArgs) {
@@ -153,6 +160,54 @@ export async function action({ request, context }: Route.ActionArgs) {
     await db.updateCoAdminClientTelegramGroup(co_admin_id, client_id, telegram_group_id || null);
 
     return { success: { telegram_updated: true } };
+  }
+
+  if (intent === "test_fire") {
+    const parsed = TestFireSchema.safeParse(raw);
+    if (!parsed.success) {
+      return { errors: parsed.error.flatten().fieldErrors };
+    }
+
+    const { co_admin_id, client_id } = parsed.data;
+
+    // Get the co-admin client assignment to check if telegram_group_id is set
+    const assignments = await db.listCoAdminClients(co_admin_id);
+    const assignment = assignments.find((a) => a.client_id === client_id);
+
+    if (!assignment || !assignment.telegram_group_id) {
+      return { errors: { general: ["กรุณาระบุ Telegram Group ID ก่อนทดสอบ"] } };
+    }
+
+    // Get client info for the notification
+    const client = await db.getClientById(client_id);
+    if (!client) {
+      return { errors: { general: ["ไม่พบข้อมูลลูกค้า"] } };
+    }
+
+    // Send test notification to Co-Admin's specific Telegram group
+    const testNotification = {
+      id: generateId(),
+      user_id: co_admin_id,
+      type: "ticket_update" as const,
+      title: "🧪 ทดสอบการแจ้งเตือน",
+      body: `ทดสอบการส่งการแจ้งเตือนสำหรับลูกค้า: ${client.company_name}\n\nTelegram Group ID: ${assignment.telegram_group_id}`,
+      link: `/admin/clients/${client_id}`,
+      read: 0,
+    } as const;
+
+    try {
+      await sendTelegramNotificationForClient({
+        db,
+        appUrl: env.APP_URL,
+        notification: testNotification,
+        clientId,
+      });
+    } catch (error) {
+      console.error("Test notification failed:", error);
+      return { errors: { general: ["ส่งการแจ้งเตือนไม่สำเร็จ กรุณาตรวจสอบ Telegram Group ID"] } };
+    }
+
+    return { success: { test_fire: true } };
   }
 
   if (intent === "impersonate") {
@@ -265,6 +320,11 @@ export default function CoAdminsPage({ loaderData, actionData }: Route.Component
         {success?.assigned && (
           <p className="text-xs text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
             ✓ เพิ่ม Co-Admin ใหม่เรียบร้อยแล้ว
+          </p>
+        )}
+        {success?.test_fire && (
+          <p className="text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+            ✓ ส่งการแจ้งเตือนทดสอบเรียบร้อยแล้ว
           </p>
         )}
       </div>
@@ -391,26 +451,49 @@ export default function CoAdminsPage({ loaderData, actionData }: Route.Component
                                 </div>
                               )}
                             </div>
-                            <Form method="post" className="flex items-center gap-2">
-                              <input type="hidden" name="intent" value="update_telegram" />
-                              <input type="hidden" name="co_admin_id" value={coAdmin.id} />
-                              <input type="hidden" name="client_id" value={client.id} />
-                              <Input
-                                type="text"
-                                name="telegram_group_id"
-                                placeholder="Telegram Group ID"
-                                defaultValue={client.telegram_group_id ?? ""}
-                                className="h-8 text-xs flex-1"
-                              />
-                              <Button
-                                type="submit"
-                                size="sm"
-                                variant="outline"
-                                className="h-8 text-xs"
-                              >
-                                บันทึก
-                              </Button>
-                            </Form>
+                            <div className="flex items-center gap-2">
+                              <Form method="post" className="flex items-center gap-2 flex-1">
+                                <input type="hidden" name="intent" value="update_telegram" />
+                                <input type="hidden" name="co_admin_id" value={coAdmin.id} />
+                                <input type="hidden" name="client_id" value={client.id} />
+                                <Input
+                                  type="text"
+                                  name="telegram_group_id"
+                                  placeholder="Telegram Group ID"
+                                  defaultValue={client.telegram_group_id ?? ""}
+                                  className="h-8 text-xs flex-1"
+                                />
+                                <Button
+                                  type="submit"
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 text-xs"
+                                >
+                                  บันทึก
+                                </Button>
+                              </Form>
+                              {client.telegram_group_id && (
+                                <Form method="post">
+                                  <input type="hidden" name="intent" value="test_fire" />
+                                  <input type="hidden" name="co_admin_id" value={coAdmin.id} />
+                                  <input type="hidden" name="client_id" value={client.id} />
+                                  <Button
+                                    type="submit"
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-8 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                    onClick={(e) => {
+                                      if (!confirm(`ทดสอบส่งการแจ้งเตือนไปยัง Telegram Group สำหรับ ${client.company_name}?`)) {
+                                        e.preventDefault();
+                                      }
+                                    }}
+                                  >
+                                    <FaPaperPlane className="mr-1" />
+                                    ทดสอบ
+                                  </Button>
+                                </Form>
+                              )}
+                            </div>
                           </div>
                           <Form method="post">
                             <input type="hidden" name="intent" value="unassign" />

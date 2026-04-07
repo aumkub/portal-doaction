@@ -391,9 +391,6 @@ const en: Record<keyof typeof th, string> = {
   nav_clients: "Clients",
   nav_admin_reports: "Reports",
   nav_all_tickets: "All Tickets",
-  nav_attachments: "Attachments",
-  nav_email_logs: "Email logs",
-  nav_logout: "Logout",
 
   // ─── Topbar ────────────────────────────────────────────
   topbar_notifications: "Notifications",
