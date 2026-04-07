@@ -66,6 +66,7 @@ export async function loader({ request, context }: any) {
     adminUsers,
     uptimeKey,
     telegramBotToken,
+    telegramDefaultGroupId,
     contractWarningFirstDays,
     contractWarningSecondDays,
     contractWarningThirdDays,
