@@ -5,7 +5,7 @@ import { requireAdmin, hashPassword, startImpersonation } from "~/lib/auth.serve
 import { createDB } from "~/lib/db.server";
 import { generateId } from "~/lib/utils";
 import { useT } from "~/lib/i18n";
-import { sendTelegramNotificationForClient } from "~/lib/telegram.server";
+import { sendTelegramNotification, sendTelegramNotificationToGroup } from "~/lib/telegram.server";
 import { FaCirclePlus, FaTrash, FaUserSecret, FaTelegram, FaUserCheck, FaPaperPlane } from "react-icons/fa6";
 import PageHeader from "~/components/layout/PageHeader";
 import { Input } from "~/components/ui/input";
@@ -196,15 +196,23 @@ export async function action({ request, context }: Route.ActionArgs) {
     } as const;
 
     try {
-      // Send using sendTelegramNotificationForClient which handles both cases:
-      // - If Co-Admin has telegram_group_id, sends to that specific group
-      // - If no telegram_group_id, falls back to default Telegram behavior
-      await sendTelegramNotificationForClient({
-        db,
-        appUrl: env.APP_URL,
-        notification: testNotification,
-        clientId,
-      });
+      // Send test notification based on whether telegram_group_id is configured
+      if (assignment?.telegram_group_id) {
+        // Send to this specific Co-Admin's telegram group
+        await sendTelegramNotificationToGroup({
+          db,
+          appUrl: env.APP_URL,
+          notification: testNotification,
+          telegramGroupId: assignment.telegram_group_id,
+        });
+      } else {
+        // No specific group, use default behavior (default group ID from settings or latest chat)
+        await sendTelegramNotification({
+          db,
+          appUrl: env.APP_URL,
+          notification: testNotification,
+        });
+      }
     } catch (error) {
       console.error("Test notification failed:", error);
       return { errors: { general: ["ส่งการแจ้งเตือนไม่สำเร็จ"] } };
