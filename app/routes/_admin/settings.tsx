@@ -18,6 +18,7 @@ const ProfileSchema = z.object({
 
 const TelegramSchema = z.object({
   telegram_bot_token: z.string().optional().default(""),
+  telegram_default_group_id: z.string().optional().default(""),
   intent: z.literal("telegram"),
 });
 
@@ -41,6 +42,7 @@ export async function loader({ request, context }: any) {
   const db = createDB(env.DB);
   const adminUsers = await db.listAdminUsers();
   const telegramBotToken = await db.getAppSetting("telegram_bot_token");
+  const telegramDefaultGroupId = await db.getAppSetting("telegram_default_group_id");
   const contractWarningFirstDays = Number(
     (await db.getAppSetting("contract_warning_first_days")) ?? "14"
   );
@@ -93,6 +95,13 @@ export async function action({ request, context }: any) {
       await db.setAppSetting("telegram_bot_token", token);
     } else {
       await db.deleteAppSetting("telegram_bot_token");
+    }
+
+    const defaultGroupId = parsed.data.telegram_default_group_id.trim();
+    if (defaultGroupId) {
+      await db.setAppSetting("telegram_default_group_id", defaultGroupId);
+    } else {
+      await db.deleteAppSetting("telegram_default_group_id");
     }
 
     return redirect("/admin/settings");
@@ -154,6 +163,7 @@ export default function AdminSettingsPage({ loaderData, actionData }: any) {
     adminUsers,
     uptimeKey,
     telegramBotToken,
+    telegramDefaultGroupId,
     contractWarningFirstDays,
     contractWarningSecondDays,
     contractWarningThirdDays,
@@ -309,6 +319,24 @@ export default function AdminSettingsPage({ loaderData, actionData }: any) {
           {errors?.telegram_bot_token ? (
             <p className="text-xs text-rose-600">{errors.telegram_bot_token[0]}</p>
           ) : null}
+          <div className="mt-4">
+            <label className="text-xs text-slate-600 mb-1.5 block">
+              Default Telegram Group ID (optional)
+            </label>
+            <p className="text-xs text-slate-500 mb-2">
+              กลุ่มเริ่มต้นที่จะใช้ส่งการแจ้งเตือนเมื่อ Co-Admin ไม่ได้ระบุ Group ID เฉพาะ
+            </p>
+            <input
+              name="telegram_default_group_id"
+              type="text"
+              defaultValue={telegramDefaultGroupId ?? ""}
+              placeholder="-1001234567890"
+              className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-slate-900"
+            />
+            {errors?.telegram_default_group_id ? (
+              <p className="text-xs text-rose-600 mt-1">{errors.telegram_default_group_id[0]}</p>
+            ) : null}
+          </div>
           {telegramTestSuccess ? (
             <p className="text-xs text-emerald-600">
               {t("admin_settings_telegram_test_sent")}

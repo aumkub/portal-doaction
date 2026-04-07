@@ -64,10 +64,17 @@ export async function sendTelegramNotification(params: {
   if (!token) return;
 
   try {
-    const chatId = await getLatestChatId(token);
-    if (!chatId) return;
-
-    await sendToTelegramChat(token, chatId, notification, appUrl);
+    // Check if default group ID is set in settings
+    const defaultGroupId = await db.getAppSetting("telegram_default_group_id");
+    if (defaultGroupId) {
+      await sendToTelegramChat(token, defaultGroupId, notification, appUrl);
+    } else {
+      // Fall back to latest chat
+      const chatId = await getLatestChatId(token);
+      if (chatId) {
+        await sendToTelegramChat(token, chatId, notification, appUrl);
+      }
+    }
   } catch {
     // Do not block app notifications when Telegram fails.
   }
@@ -105,11 +112,18 @@ export async function sendTelegramNotificationForClient(params: {
       }
     }
 
-    // If no Co-Admin groups configured, fall back to default behavior
+    // If no Co-Admin groups configured, fall back to default group ID or latest chat
     if (coAdminsWithGroups.length === 0) {
-      const chatId = await getLatestChatId(token);
-      if (chatId) {
-        await sendToTelegramChat(token, chatId, notification, appUrl);
+      const defaultGroupId = await db.getAppSetting("telegram_default_group_id");
+      if (defaultGroupId) {
+        // Use default group ID from settings
+        await sendToTelegramChat(token, defaultGroupId, notification, appUrl);
+      } else {
+        // Fall back to latest chat
+        const chatId = await getLatestChatId(token);
+        if (chatId) {
+          await sendToTelegramChat(token, chatId, notification, appUrl);
+        }
       }
     }
   } catch {
