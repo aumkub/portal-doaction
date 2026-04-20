@@ -21,8 +21,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     return Response.json({ error: "missing_report" }, { status: 400 });
   }
 
-  const apiKey = env.SMTP2GO_API_KEY;
-  if (!apiKey) {
+  if (!env.SEND_EMAIL) {
     return Response.json({ error: "email_not_configured" }, { status: 503 });
   }
 
@@ -67,7 +66,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       subject,
       html,
       text,
-      apiKey,
+      sendEmail: env.SEND_EMAIL,
       db,
       source: "report_notify",
     });

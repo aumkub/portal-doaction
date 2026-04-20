@@ -163,13 +163,13 @@ export async function action({ request, context, params }: any) {
             appUrl: env.APP_URL,
             notification,
           }),
-          status === "closed" && clientUser?.email && env.SMTP2GO_API_KEY
+          status === "closed" && clientUser?.email && env.SEND_EMAIL
             ? sendTicketClosedEmailToClient({
                 to: clientUser.email,
                 toName: clientUser.name,
                 ticketTitle: ticket.title,
                 ticketUrl: `${env.APP_URL}/tickets/${ticket.id}`,
-                apiKey: env.SMTP2GO_API_KEY,
+                sendEmail: env.SEND_EMAIL,
                 cc: ccRecipients,
                 db,
                 lang: clientUser.language === "en" ? "en" : "th",
@@ -253,14 +253,14 @@ export async function action({ request, context, params }: any) {
             appUrl: env.APP_URL,
             notification,
           }),
-          clientUser?.email && env.SMTP2GO_API_KEY
+          clientUser?.email && env.SEND_EMAIL
             ? sendTicketEmailToClient({
                 to: clientUser.email,
                 toName: clientUser.name,
                 ticketTitle: ticket.title,
                 message: messageSnapshot,
                 ticketUrl: `${env.APP_URL}/tickets/${ticket.id}`,
-                apiKey: env.SMTP2GO_API_KEY,
+                sendEmail: env.SEND_EMAIL,
                 cc: ccRecipients,
                 db,
                 lang: clientUser.language === "en" ? "en" : "th",

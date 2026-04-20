@@ -4,8 +4,8 @@ interface CloudflareEnv {
   DB: D1Database;
   // KV namespace for sessions
   SESSIONPORTAL: KVNamespace;
-  // SMTP2GO API key for sending emails
-  SMTP2GO_API_KEY: string;
+  // Cloudflare Email Routing binding
+  SEND_EMAIL: SendEmail;
   // Public URL of the portal (e.g. https://portal.doaction.co.th)
   APP_URL: string;
   // Secret used for HMAC signing (magic link tokens, etc.)

@@ -41,7 +41,7 @@ export async function action({ request, context }: Route.ActionArgs) {
         to: email,
         toName: user.name,
         magicUrl,
-        apiKey: env.SMTP2GO_API_KEY,
+        sendEmail: env.SEND_EMAIL,
         db,
         source: "api_send_magic_link",
         lang: user.language === "en" ? "en" : "th",

@@ -153,7 +153,7 @@ export async function action({ request, context, params }: any) {
         },
       }),
       ...admins.map((admin) =>
-        env.SMTP2GO_API_KEY
+        env.SEND_EMAIL
           ? sendTicketEmailToAdmin({
               to: admin.email,
               toName: admin.name,
@@ -161,7 +161,7 @@ export async function action({ request, context, params }: any) {
               ticketTitle: ticket.title,
               message: msgSnapshot,
               ticketUrl,
-              apiKey: env.SMTP2GO_API_KEY,
+              sendEmail: env.SEND_EMAIL,
               db,
             })
           : Promise.resolve()

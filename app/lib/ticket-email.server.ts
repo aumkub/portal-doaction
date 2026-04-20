@@ -1,4 +1,4 @@
-import { sendEmail } from "~/lib/email.server";
+import { sendEmail as dispatchEmail } from "~/lib/email.server";
 import type { EmailLanguage } from "~/lib/email.server";
 import type { DB } from "~/lib/db.server";
 
@@ -61,11 +61,11 @@ export async function sendTicketEmailToClient(params: {
   ticketTitle: string;
   message: string;
   ticketUrl: string;
-  apiKey: string;
+  sendEmail: SendEmail;
   db?: DB;
   lang?: EmailLanguage;
 }) {
-  const { to, toName, cc, ticketTitle, message, ticketUrl, apiKey, db, lang = "th" } = params;
+  const { to, toName, cc, ticketTitle, message, ticketUrl, sendEmail, db, lang = "th" } = params;
   const s = clientStrings[lang];
   const displayName = toName ?? to;
 
@@ -89,7 +89,7 @@ export async function sendTicketEmailToClient(params: {
     <p><a href="${ticketUrl}">${s.openBtn}</a></p>
     <p style="color:#64748b;">— do action</p>
   </body></html>`;
-  await sendEmail({ to, toName, cc, subject, html, text, apiKey, db, source: "ticket_reply_to_client" });
+  await dispatchEmail({ to, toName, cc, subject, html, text, sendEmail, db, source: "ticket_reply_to_client" });
 }
 
 // Admin notification emails stay in Thai (admin is always Thai-speaking)
@@ -100,10 +100,10 @@ export async function sendTicketEmailToAdmin(params: {
   ticketTitle: string;
   message: string;
   ticketUrl: string;
-  apiKey: string;
+  sendEmail: SendEmail;
   db?: DB;
 }) {
-  const { to, toName, clientName, ticketTitle, message, ticketUrl, apiKey, db } = params;
+  const { to, toName, clientName, ticketTitle, message, ticketUrl, sendEmail, db } = params;
   const subject = `ลูกค้าตอบ Ticket: ${ticketTitle}`;
   const text = [
     `สวัสดีคุณ ${toName ?? to}`,
@@ -124,7 +124,7 @@ export async function sendTicketEmailToAdmin(params: {
     <p><a href="${ticketUrl}">เปิด Ticket ในระบบ</a></p>
     <p style="color:#64748b;">— do action</p>
   </body></html>`;
-  await sendEmail({ to, toName, subject, html, text, apiKey, db, source: "ticket_reply_to_admin" });
+  await dispatchEmail({ to, toName, subject, html, text, sendEmail, db, source: "ticket_reply_to_admin" });
 }
 
 export async function sendTicketClosedEmailToClient(params: {
@@ -133,11 +133,11 @@ export async function sendTicketClosedEmailToClient(params: {
   cc?: Array<{ email: string; name?: string }>;
   ticketTitle: string;
   ticketUrl: string;
-  apiKey: string;
+  sendEmail: SendEmail;
   db?: DB;
   lang?: EmailLanguage;
 }) {
-  const { to, toName, cc, ticketTitle, ticketUrl, apiKey, db, lang = "th" } = params;
+  const { to, toName, cc, ticketTitle, ticketUrl, sendEmail, db, lang = "th" } = params;
   const s = clientStrings[lang];
   const displayName = toName ?? to;
 
@@ -160,5 +160,5 @@ export async function sendTicketClosedEmailToClient(params: {
     <p><a href="${ticketUrl}">${s.viewBtn}</a></p>
     <p style="color:#64748b;">— do action</p>
   </body></html>`;
-  await sendEmail({ to, toName, cc, subject, html, text, apiKey, db, source: "ticket_closed_to_client" });
+  await dispatchEmail({ to, toName, cc, subject, html, text, sendEmail, db, source: "ticket_closed_to_client" });
 }

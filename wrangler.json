@@ -3,14 +3,15 @@
   "name": "portal-doaction",
   "main": "./workers/app.ts",
   "compatibility_date": "2025-10-08",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "observability": {
     "enabled": true
   },
   "upload_source_maps": true,
   "vars": {
     "VALUE_FROM_CLOUDFLARE": "Hello from Cloudflare",
-    "SMTP2GO_API_KEY": "api-EA966EF08F334828ABB31EB240C5647D",
     "APP_URL": "https://portal.doaction.co.th",
     "SESSION_SECRET": "y8N4vQ2mK7pLx3Rz9tW6cJ1hF5uD0sBa"
   },
@@ -19,7 +20,7 @@
       "binding": "DB",
       "database_name": "portal",
       "database_id": "b9e1971c-8c20-42ad-a0e6-5c28b38994a7",
-			"remote": true
+      "remote": true
     }
   ],
   "kv_namespaces": [
@@ -35,5 +36,11 @@
       "bucket_name": "portal",
       "remote": true
     }
-  ]
+  ],
+  "send_email": [
+    {
+      "name": "SEND_EMAIL",
+      "remote": true
+    }
+  ],
 }

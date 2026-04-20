@@ -185,7 +185,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       });
 
       // Send email notification to client if requested
-      if (send_email === "1" && env.SMTP2GO_API_KEY) {
+      if (send_email === "1" && env.SEND_EMAIL) {
         const clientUser = await db.getUserById(client.user_id);
         if (clientUser?.email) {
           const origin = env.APP_URL || new URL(request.url).origin;
@@ -219,7 +219,7 @@ export async function action({ request, context }: Route.ActionArgs) {
                   subject,
                   html,
                   text,
-                  apiKey: env.SMTP2GO_API_KEY,
+                  sendEmail: env.SEND_EMAIL,
                   db,
                   source: "report_notify",
                 });

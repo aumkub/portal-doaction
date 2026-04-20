@@ -1,10 +1,12 @@
-// ─── SMTP2GO REST API email sender ───────────────────────────────────────────
-// Docs: https://apidoc.smtp2go.com/documentation/#/POST%20/email/send
+// ─── Cloudflare Email Routing email sender ─────────────────────────────────────
+// Docs: https://developers.cloudflare.com/email-routing/email-workers/send-email-workers/
 
 import { generateId } from "~/lib/utils";
 import type { DB } from "~/lib/db.server";
+import { EmailMessage } from "cloudflare:email";
 
 export type EmailLanguage = "th" | "en";
+const MAIL_FROM = "aum@doaction.co.th";
 
 interface SendEmailOptions {
   to: string;
@@ -13,7 +15,7 @@ interface SendEmailOptions {
   subject: string;
   html: string;
   text: string;
-  apiKey: string;
+  sendEmail: SendEmail; // Cloudflare Email binding
   db?: DB;
   source?: string;
 }
@@ -25,7 +27,7 @@ export async function sendEmail({
   subject,
   html,
   text,
-  apiKey,
+  sendEmail,
   db,
   source,
 }: SendEmailOptions): Promise<void> {
@@ -39,30 +41,26 @@ export async function sendEmail({
   const uniqueCc = Array.from(new Map(normalizedCc.map((r) => [r.email, r])).values());
   const ccRecipients = uniqueCc.map((c) => (c.name ? `${c.name} <${c.email}>` : c.email));
 
+  // Build MIME message
+  const boundary = "boundary_" + generateId();
+  const emailBody = buildMimeMessage({
+    to,
+    toName,
+    cc: ccRecipients,
+    subject,
+    html,
+    text,
+    boundary,
+  });
+
+  const message = new EmailMessage(
+    MAIL_FROM,
+    to.trim(),
+    emailBody,
+  );
+
   try {
-    const res = await fetch("https://api.smtp2go.com/v3/email/send", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        api_key: apiKey,
-        to: [toName ? `${toName} <${to}>` : to],
-        cc: ccRecipients,
-        sender: "do action portal <aum@doaction.co.th>",
-        subject,
-        html_body: html,
-        text_body: text,
-      }),
-    });
-
-    if (!res.ok) {
-      const body = await res.text();
-      throw new Error(`SMTP2GO error ${res.status}: ${body}`);
-    }
-
-    const data = (await res.json()) as { data?: { succeeded: number } };
-    if (!data.data?.succeeded) {
-      throw new Error("SMTP2GO: email was not delivered");
-    }
+    await sendEmail.send(message);
 
     if (db) {
       await db.createEmailLog({
@@ -96,6 +94,55 @@ export async function sendEmail({
   }
 }
 
+function buildMimeMessage({
+  to,
+  toName,
+  cc,
+  subject,
+  html,
+  text,
+  boundary,
+}: {
+  to: string;
+  toName?: string;
+  cc: string[];
+  subject: string;
+  html: string;
+  text: string;
+  boundary: string;
+}): string {
+  const toAddr = toName ? `${toName} <${to}>` : to;
+  const messageId = `<${generateId()}@doaction.co.th>`;
+  const headers = [
+    `From: ${MAIL_FROM}`,
+    `To: ${toAddr}`,
+    ...(cc.length > 0 ? [`Cc: ${cc.join(", ")}`] : []),
+    `Subject: ${subject}`,
+    `Date: ${new Date().toUTCString()}`,
+    `Message-ID: ${messageId}`,
+    `MIME-Version: 1.0`,
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+  ];
+
+  return [
+    ...headers,
+    ``,
+    `--${boundary}`,
+    `Content-Type: text/plain; charset=UTF-8`,
+    `Content-Transfer-Encoding: 7bit`,
+    ``,
+    text,
+    ``,
+    `--${boundary}`,
+    `Content-Type: text/html; charset=UTF-8`,
+    `Content-Transfer-Encoding: 7bit`,
+    ``,
+    html,
+    ``,
+    `--${boundary}--`,
+  ].join("\r\n");
+}
+
 // ─── Magic Link Template ──────────────────────────────────────────────────────
 
 const magicLinkStrings = {
@@ -109,7 +156,7 @@ const magicLinkStrings = {
     expiry: "ลิ้งก์นี้จะหมดอายุใน <strong style=\"color:#64748b;\">15 นาที</strong>",
     ignore: "หากคุณไม่ได้ขอลิ้งก์นี้ กรุณาเพิกเฉยต่ออีเมลฉบับนี้",
     textBody: (name: string, url: string) =>
-      `สวัสดีคุณ ${name}\n\nคลิกลิ้งก์ด้านล่างเพื่อเข้าสู่ระบบ (หมดอายุใน 15 นาที)\n\n${url}\n\nหากคุณไม่ได้ขอลิ้งก์นี้ กรุณาเพิกเฉย\n\n— ทีม do action`,
+      `สวัสดีคุณ ${name}\\n\\nคลิกลิ้งก์ด้านล่างเพื่อเข้าสู่ระบบ (หมดอายุใน 15 นาที)\\n\\n${url}\\n\\nหากคุณไม่ได้ขอลิ้งก์นี้ กรุณาเพิกเฉย\\n\\n— ทีม do action`,
   },
   en: {
     subject: "Your login link for do action portal",
@@ -121,7 +168,7 @@ const magicLinkStrings = {
     expiry: "This link expires in <strong style=\"color:#64748b;\">15 minutes</strong>",
     ignore: "If you didn't request this link, you can safely ignore this email.",
     textBody: (name: string, url: string) =>
-      `Hello ${name}\n\nClick the link below to sign in (expires in 15 minutes)\n\n${url}\n\nIf you didn't request this, please ignore it.\n\n— do action Team`,
+      `Hello ${name}\\n\\nClick the link below to sign in (expires in 15 minutes)\\n\\n${url}\\n\\nIf you didn't request this, please ignore it.\\n\\n— do action Team`,
   },
 } as const;
 
@@ -129,7 +176,7 @@ export async function sendMagicLinkEmail({
   to,
   toName,
   magicUrl,
-  apiKey,
+  sendEmail: emailBinding,
   db,
   source,
   lang = "th",
@@ -137,7 +184,7 @@ export async function sendMagicLinkEmail({
   to: string;
   toName?: string;
   magicUrl: string;
-  apiKey: string;
+  sendEmail: SendEmail;
   db?: DB;
   source?: string;
   lang?: EmailLanguage;
@@ -149,7 +196,7 @@ export async function sendMagicLinkEmail({
     to,
     toName,
     subject: s.subject,
-    apiKey,
+    sendEmail: emailBinding,
     db,
     source: source ?? "magic_link",
     text: s.textBody(displayName, magicUrl),

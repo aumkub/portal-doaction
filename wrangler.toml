@@ -20,7 +20,6 @@ bucket_name = "portal-attachments"
 crons = ["0 * * * *"]
 
 [vars]
-SMTP2GO_API_KEY = "api-EA966EF08F334828ABB31EB240C5647D"
 APP_URL = "https://portal.doaction.co.th"
 SESSION_SECRET = "y8N4vQ2mK7pLx3Rz9tW6cJ1hF5uD0sBa"
 
@@ -39,7 +38,6 @@ SESSION_SECRET = "y8N4vQ2mK7pLx3Rz9tW6cJ1hF5uD0sBa"
 #    → นำ id ที่ได้มาใส่ใน kv_namespaces[0].id ด้านบน
 #
 # 4. ตั้งค่า secrets (อย่าใส่ลงใน wrangler.toml โดยตรง):
-#    npx wrangler pages secret put SMTP2GO_API_KEY
 #    npx wrangler pages secret put SESSION_SECRET
 #
 # 5. Build และ Deploy:

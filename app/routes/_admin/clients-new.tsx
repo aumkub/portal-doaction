@@ -84,7 +84,7 @@ export async function action({ request, context }: Route.ActionArgs) {
         to: email,
         toName: name,
         magicUrl: `${origin}/magic-link?token=${token}`,
-        apiKey: env.SMTP2GO_API_KEY,
+        sendEmail: env.SEND_EMAIL,
         db,
         source: "admin_client_invite",
       });

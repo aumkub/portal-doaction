@@ -155,14 +155,14 @@ export async function action({ request, params, context }: any) {
     const origin = env.APP_URL || new URL(request.url).origin;
     const magicUrl = `${origin}/magic-link?token=${token}`;
 
-    if (env.SMTP2GO_API_KEY) {
+    if (env.SEND_EMAIL) {
       const { sendMagicLinkEmail } = await import("~/lib/email.server");
       context.cloudflare.ctx.waitUntil(
         sendMagicLinkEmail({
           to: user.email,
           toName: user.name,
           magicUrl,
-          apiKey: env.SMTP2GO_API_KEY,
+          sendEmail: env.SEND_EMAIL,
           db,
           source: "admin_send_magic_link",
           lang: user.language === "en" ? "en" : "th",
