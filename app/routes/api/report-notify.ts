@@ -4,6 +4,7 @@ import { createDB } from "~/lib/db.server";
 import { sendEmail } from "~/lib/email.server";
 import { buildReportCustomerNotification } from "~/lib/report-customer-email.server";
 import { createReportAccessToken } from "~/lib/report-access.server";
+import { parseClientCcEmails } from "~/lib/client-cc";
 
 /** POST /api/report-notify — send report notification email to client user */
 export async function action({ request, context }: Route.ActionArgs) {
@@ -56,11 +57,13 @@ export async function action({ request, context }: Route.ActionArgs) {
     reportUrl,
     lang: user.language === "en" ? "en" : "th",
   });
+  const ccRecipients = parseClientCcEmails(client.cc_emails).map((email) => ({ email }));
 
   try {
     await sendEmail({
       to: user.email,
       toName: user.name,
+      cc: ccRecipients,
       subject,
       html,
       text,

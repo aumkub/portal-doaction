@@ -9,6 +9,7 @@ import {
   sendTicketClosedEmailToClient,
   sendTicketEmailToClient,
 } from "~/lib/ticket-email.server";
+import { parseClientCcEmails } from "~/lib/client-cc";
 import {
   isAllowedAttachment,
   isAttachmentTooLarge,
@@ -152,6 +153,8 @@ export async function action({ request, context, params }: any) {
 
       // Get co-admins for CC
       const coAdmins = await db.getCoAdminEmailsForClient(client.id);
+      const customerCcEmails = parseClientCcEmails(client.cc_emails).map((email) => ({ email }));
+      const ccRecipients = [...coAdmins, ...customerCcEmails];
 
       context.cloudflare.ctx.waitUntil(
         Promise.allSettled([
@@ -167,7 +170,7 @@ export async function action({ request, context, params }: any) {
                 ticketTitle: ticket.title,
                 ticketUrl: `${env.APP_URL}/tickets/${ticket.id}`,
                 apiKey: env.SMTP2GO_API_KEY,
-                cc: coAdmins,
+                cc: ccRecipients,
                 db,
                 lang: clientUser.language === "en" ? "en" : "th",
               })
@@ -240,6 +243,8 @@ export async function action({ request, context, params }: any) {
 
       // Get co-admins for CC
       const coAdmins = await db.getCoAdminEmailsForClient(client.id);
+      const customerCcEmails = parseClientCcEmails(client.cc_emails).map((email) => ({ email }));
+      const ccRecipients = [...coAdmins, ...customerCcEmails];
 
       context.cloudflare.ctx.waitUntil(
         Promise.allSettled([
@@ -256,7 +261,7 @@ export async function action({ request, context, params }: any) {
                 message: messageSnapshot,
                 ticketUrl: `${env.APP_URL}/tickets/${ticket.id}`,
                 apiKey: env.SMTP2GO_API_KEY,
-                cc: coAdmins,
+                cc: ccRecipients,
                 db,
                 lang: clientUser.language === "en" ? "en" : "th",
               })

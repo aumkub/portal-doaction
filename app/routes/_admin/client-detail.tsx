@@ -9,6 +9,11 @@ import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Button } from "~/components/ui/button";
 import { FaTrash } from "react-icons/fa6";
+import {
+  normalizeClientCcEmailsInput,
+  parseClientCcEmails,
+  stringifyClientCcEmails,
+} from "~/lib/client-cc";
 
 export function meta() {
   return [{ title: "รายละเอียดลูกค้า — Admin" }];
@@ -22,6 +27,7 @@ const UpdateSchema = z.object({
   contract_start: z.string().optional(),
   contract_end: z.string().optional(),
   notes: z.string().optional(),
+  cc_emails: z.string().optional(),
 });
 
 export async function loader({ request, params, context }: any) {
@@ -85,12 +91,30 @@ export async function action({ request, params, context }: any) {
           contract_start: String(formData.get("contract_start") ?? ""),
           contract_end: String(formData.get("contract_end") ?? ""),
           notes: String(formData.get("notes") ?? ""),
+          cc_emails: String(formData.get("cc_emails") ?? ""),
         },
       };
     }
 
-    const { name, company_name, website_url, package: pkg, contract_start, contract_end, notes } =
+    const { name, company_name, website_url, package: pkg, contract_start, contract_end, notes, cc_emails } =
       parsed.data;
+    const normalizedCcEmails = normalizeClientCcEmailsInput(cc_emails);
+    if (normalizedCcEmails.error) {
+      return {
+        errors: { cc_emails: [normalizedCcEmails.error] },
+        noContractEnd,
+        values: {
+          name,
+          company_name,
+          website_url: website_url ?? "",
+          package: pkg,
+          contract_start: contract_start ?? "",
+          contract_end: contract_end ?? "",
+          notes: notes ?? "",
+          cc_emails: cc_emails ?? "",
+        },
+      };
+    }
     const user = await db.getUserById(client.user_id);
     if (!user) throw new Response("Not Found", { status: 404 });
 
@@ -102,6 +126,7 @@ export async function action({ request, params, context }: any) {
       contract_start: contract_start || null,
       contract_end: noContractEnd ? null : contract_end || null,
       notes: notes || null,
+      cc_emails: stringifyClientCcEmails(normalizedCcEmails.emails),
     });
 
     return redirect(`/admin/clients/${params.clientId}`);
@@ -219,6 +244,7 @@ type ActionData = {
     contract_start: string;
     contract_end: string;
     notes: string;
+    cc_emails: string;
   };
   emailDuplicate?: boolean;
   success?:
@@ -249,6 +275,7 @@ export default function AdminClientDetailPage({ loaderData }: any) {
       contract_start: client.contract_start ?? "",
       contract_end: client.contract_end ?? "",
       notes: client.notes ?? "",
+      cc_emails: parseClientCcEmails(client.cc_emails).join(", "),
     };
 
   const errors = actionData?.errors;
@@ -357,6 +384,20 @@ export default function AdminClientDetailPage({ loaderData }: any) {
               className={isViewOnly ? "bg-slate-50 text-slate-500" : ""}
             />
             {errors?.website_url && <p className="text-red-500 text-xs">{errors.website_url[0]}</p>}
+          </div>
+          <div className="space-y-1.5 col-span-2">
+            <Label htmlFor="cc_emails">CC Email (สูงสุด 5)</Label>
+            <textarea
+              id="cc_emails"
+              name="cc_emails"
+              rows={2}
+              defaultValue={v.cc_emails}
+              placeholder="cc1@example.com, cc2@example.com"
+              disabled={isViewOnly}
+              className={`w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 resize-none ${isViewOnly ? "bg-slate-50 text-slate-500" : ""}`}
+            />
+            <p className="text-xs text-slate-500">คั่นด้วย comma หรือขึ้นบรรทัดใหม่</p>
+            {errors?.cc_emails && <p className="text-red-500 text-xs">{errors.cc_emails[0]}</p>}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="package">{t("settings_package_label")}</Label>

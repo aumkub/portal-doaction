@@ -5,6 +5,7 @@ import { generateId } from "~/lib/utils";
 import { requireAdmin, generateMagicToken } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { sendMagicLinkEmail } from "~/lib/email.server";
+import { normalizeClientCcEmailsInput, stringifyClientCcEmails } from "~/lib/client-cc";
 import PageHeader from "~/components/layout/PageHeader";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
@@ -25,6 +26,7 @@ const Schema = z.object({
   contract_start:  z.string().optional(),
   contract_end:    z.string().optional(),
   notes:           z.string().optional(),
+  cc_emails:       z.string().optional(),
   send_invite:     z.coerce.boolean().default(true),
 });
 
@@ -45,8 +47,12 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   const { name, email, company_name, website_url, package: pkg,
-          contract_start, contract_end, notes, send_invite } = parsed.data;
+          contract_start, contract_end, notes, cc_emails, send_invite } = parsed.data;
   const noContractEnd = formData.get("no_contract_end") === "1";
+  const normalizedCcEmails = normalizeClientCcEmailsInput(cc_emails);
+  if (normalizedCcEmails.error) {
+    return { errors: { cc_emails: [normalizedCcEmails.error] } };
+  }
 
   // Check existing email
   const existing = await db.getUserByEmail(email);
@@ -61,6 +67,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     user_id: userId,
     company_name,
     website_url: website_url || null,
+    cc_emails: stringifyClientCcEmails(normalizedCcEmails.emails),
     package: pkg,
     contract_start: contract_start || null,
     contract_end: noContractEnd ? null : (contract_end || null),
@@ -138,6 +145,18 @@ export default function AdminClientsNewPage({ actionData }: Route.ComponentProps
               <Label htmlFor="website_url">{t("admin_client_new_website")}</Label>
               <Input id="website_url" name="website_url" type="url" placeholder="https://example.com" />
               {errors?.website_url && <p className="text-red-500 text-xs">{errors.website_url[0]}</p>}
+            </div>
+            <div className="space-y-1.5 col-span-2">
+              <Label htmlFor="cc_emails">CC Email (สูงสุด 5)</Label>
+              <textarea
+                id="cc_emails"
+                name="cc_emails"
+                rows={2}
+                placeholder="cc1@example.com, cc2@example.com"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 resize-none"
+              />
+              <p className="text-xs text-slate-500">คั่นด้วย comma หรือขึ้นบรรทัดใหม่</p>
+              {errors?.cc_emails && <p className="text-red-500 text-xs">{errors.cc_emails[0]}</p>}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="package">{t("settings_package_label")}</Label>

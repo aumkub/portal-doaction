@@ -9,6 +9,7 @@ import { fetchUptimeForWebsite } from "~/lib/uptime.server";
 import { sendEmail } from "~/lib/email.server";
 import { buildReportCustomerNotification } from "~/lib/report-customer-email.server";
 import { createReportAccessToken } from "~/lib/report-access.server";
+import { parseClientCcEmails } from "~/lib/client-cc";
 import PageHeader from "~/components/layout/PageHeader";
 import ReportEditor from "~/routes/_admin/reports-editor";
 import { useT } from "~/lib/i18n";
@@ -206,6 +207,7 @@ export async function action({ request, context }: Route.ActionArgs) {
             reportUrl,
             lang,
           });
+          const ccRecipients = parseClientCcEmails(client.cc_emails).map((email) => ({ email }));
           const now = Math.floor(Date.now() / 1000);
           context.cloudflare.ctx.waitUntil(
             (async () => {
@@ -213,6 +215,7 @@ export async function action({ request, context }: Route.ActionArgs) {
                 await sendEmail({
                   to: clientUser.email!,
                   toName: clientUser.name,
+                  cc: ccRecipients,
                   subject,
                   html,
                   text,

@@ -29,8 +29,17 @@ export async function sendEmail({
   db,
   source,
 }: SendEmailOptions): Promise<void> {
+  const mainRecipient = to.trim().toLowerCase();
+  const normalizedCc = (cc ?? [])
+    .map((recipient) => ({
+      email: recipient.email.trim().toLowerCase(),
+      name: recipient.name,
+    }))
+    .filter((recipient) => recipient.email && recipient.email !== mainRecipient);
+  const uniqueCc = Array.from(new Map(normalizedCc.map((r) => [r.email, r])).values());
+  const ccRecipients = uniqueCc.map((c) => (c.name ? `${c.name} <${c.email}>` : c.email));
+
   try {
-    const ccRecipients = cc?.map((c) => c.name ? `${c.name} <${c.email}>` : c.email) ?? [];
     const res = await fetch("https://api.smtp2go.com/v3/email/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -60,6 +69,7 @@ export async function sendEmail({
         id: generateId(),
         to_email: to,
         to_name: toName ?? null,
+        cc_emails: ccRecipients.length > 0 ? JSON.stringify(uniqueCc.map(c => c.email)) : null,
         subject,
         html_body: html,
         text_body: text,
@@ -73,6 +83,7 @@ export async function sendEmail({
         id: generateId(),
         to_email: to,
         to_name: toName ?? null,
+        cc_emails: ccRecipients.length > 0 ? JSON.stringify(uniqueCc.map(c => c.email)) : null,
         subject,
         html_body: html,
         text_body: text,

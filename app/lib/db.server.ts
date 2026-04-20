@@ -174,8 +174,8 @@ export function createDB(d1: D1Database) {
     ): Promise<void> {
       await d1
         .prepare(
-          `INSERT INTO clients (id, user_id, company_name, website_url, package, contract_start, contract_end, notes)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO clients (id, user_id, company_name, website_url, cc_emails, package, contract_start, contract_end, notes)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .bind(
           client.id,
@@ -718,6 +718,7 @@ export function createDB(d1: D1Database) {
       id: string;
       to_email: string;
       to_name?: string | null;
+      cc_emails?: string | null;
       subject: string;
       html_body: string;
       text_body: string;
@@ -728,13 +729,14 @@ export function createDB(d1: D1Database) {
       await d1
         .prepare(
           `INSERT INTO email_logs
-            (id, to_email, to_name, subject, html_body, text_body, source, status, error_message)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            (id, to_email, to_name, cc_emails, subject, html_body, text_body, source, status, error_message)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .bind(
           log.id,
           log.to_email,
           log.to_name ?? null,
+          log.cc_emails ?? null,
           log.subject,
           log.html_body,
           log.text_body,

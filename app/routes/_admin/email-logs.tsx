@@ -4,6 +4,7 @@ import { createDB } from "~/lib/db.server";
 import { formatDate } from "~/lib/utils";
 import { useT } from "~/lib/i18n";
 import type { EmailLog } from "~/types";
+import { parseClientCcEmails } from "~/lib/client-cc";
 
 export function meta() {
   return [{ title: "Email Logs — Admin" }];
@@ -95,6 +96,11 @@ export default function AdminEmailLogsPage({ loaderData }: any) {
                 <p>
                   <strong>{t("admin_report_email_to")}:</strong> {selected.to_name ? `${selected.to_name} <${selected.to_email}>` : selected.to_email}
                 </p>
+                {selected.cc_emails && (
+                  <p>
+                    <strong>CC:</strong> {parseClientCcEmails(selected.cc_emails).join(", ")}
+                  </p>
+                )}
                 <p>
                   <strong>{t("admin_report_email_subject")}:</strong> {selected.subject}
                 </p>

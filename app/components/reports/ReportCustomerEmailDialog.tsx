@@ -24,6 +24,7 @@ type PreviewPayload = {
   html: string;
   to: string;
   toName: string;
+  cc: string[];
 };
 
 interface ReportCustomerEmailDialogProps {
@@ -89,6 +90,7 @@ export default function ReportCustomerEmailDialog({
             html: data.html,
             to: data.to,
             toName: data.toName,
+            cc: data.cc,
           });
         }
       })
@@ -187,6 +189,16 @@ export default function ReportCustomerEmailDialog({
                   <span className="text-slate-800">
                     {displayToName ? `${displayToName} ` : null}
                     <span className="text-slate-600">&lt;{displayTo}&gt;</span>
+                  </span>
+                </div>
+              )}
+              {preview?.cc && preview.cc.length > 0 && (
+                <div className="flex flex-col sm:flex-row sm:items-baseline gap-0.5 sm:gap-3">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-400 w-20 shrink-0">
+                    CC
+                  </span>
+                  <span className="text-slate-800">
+                    {preview.cc.join(", ")}
                   </span>
                 </div>
               )}

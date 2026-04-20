@@ -40,6 +40,7 @@ export interface Client {
   user_id: string;
   company_name: string;
   website_url: string | null;
+  cc_emails: string | null;
   package: ClientPackage;
   contract_start: string | null;
   contract_end: string | null;
@@ -179,6 +180,7 @@ export interface EmailLog {
   id: string;
   to_email: string;
   to_name: string | null;
+  cc_emails: string | null;
   subject: string;
   html_body: string;
   text_body: string;
