@@ -36,19 +36,23 @@ export async function action({ request, context }: Route.ActionArgs) {
     const origin = env.APP_URL || new URL(request.url).origin;
     const magicUrl = `${origin}/magic-link?token=${token}`;
 
-    try {
-      await sendMagicLinkEmail({
-        to: email,
-        toName: user.name,
-        magicUrl,
-        sendEmail: env.SEND_EMAIL,
-        db,
-        source: "api_send_magic_link",
-        lang: user.language === "en" ? "en" : "th",
-      });
-    } catch (err) {
-      // Log but don't leak SMTP errors to the client
-      console.error("[send-magic-link] email failed:", err);
+    if (env.SEND_EMAIL) {
+      try {
+        await sendMagicLinkEmail({
+          to: email,
+          toName: user.name,
+          magicUrl,
+          sendEmail: env.SEND_EMAIL,
+          db,
+          source: "api_send_magic_link",
+          lang: user.language === "en" ? "en" : "th",
+        });
+      } catch (err) {
+        // Log but don't leak SMTP errors to the client
+        console.error("[send-magic-link] email failed:", err);
+      }
+    } else {
+      console.warn("[send-magic-link] SEND_EMAIL binding not configured - magic link created but not sent");
     }
   }
 

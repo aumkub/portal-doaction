@@ -31,6 +31,11 @@ export async function sendEmail({
   db,
   source,
 }: SendEmailOptions): Promise<void> {
+  // Validate sendEmail binding exists
+  if (!sendEmail) {
+    throw new Error("sendEmail binding is not configured");
+  }
+
   const mainRecipient = to.trim().toLowerCase();
   const normalizedCc = (cc ?? [])
     .map((recipient) => ({
@@ -189,19 +194,65 @@ export async function sendMagicLinkEmail({
   source?: string;
   lang?: EmailLanguage;
 }): Promise<void> {
+  // Validate sendEmail binding exists
+  if (!emailBinding) {
+    throw new Error("sendEmail binding is required for sending magic link emails");
+  }
+
   const displayName = toName ?? to;
   const s = magicLinkStrings[lang];
 
-  await sendEmail({
+  const mainRecipient = to.trim().toLowerCase();
+  const boundary = "boundary_" + generateId();
+  const emailBody = buildMimeMessage({
     to,
     toName,
+    cc: [],
     subject: s.subject,
-    sendEmail: emailBinding,
-    db,
-    source: source ?? "magic_link",
-    text: s.textBody(displayName, magicUrl),
     html: magicLinkHtml({ displayName, magicUrl, s }),
+    text: s.textBody(displayName, magicUrl),
+    boundary,
   });
+
+  const message = new EmailMessage(
+    MAIL_FROM,
+    to.trim(),
+    emailBody,
+  );
+
+  try {
+    await emailBinding.send(message);
+
+    if (db) {
+      await db.createEmailLog({
+        id: generateId(),
+        to_email: to,
+        to_name: toName ?? null,
+        cc_emails: null,
+        subject: s.subject,
+        html_body: magicLinkHtml({ displayName, magicUrl, s }),
+        text_body: s.textBody(displayName, magicUrl),
+        source: source ?? "magic_link",
+        status: "sent",
+      });
+    }
+  } catch (error) {
+    if (db) {
+      await db.createEmailLog({
+        id: generateId(),
+        to_email: to,
+        to_name: toName ?? null,
+        cc_emails: null,
+        subject: s.subject,
+        html_body: magicLinkHtml({ displayName, magicUrl, s }),
+        text_body: s.textBody(displayName, magicUrl),
+        source: source ?? "magic_link",
+        status: "failed",
+        error_message: error instanceof Error ? error.message : String(error),
+      });
+    }
+    throw error;
+  }
 }
 
 function magicLinkHtml({

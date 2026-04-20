@@ -76,20 +76,24 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   // Send magic-link invite email
   if (send_invite) {
-    try {
-      const { id, token, expires_at } = generateMagicToken();
-      await db.createMagicLinkToken({ id, user_id: userId, token, expires_at, used: 0 });
-      const origin = env.APP_URL || new URL(request.url).origin;
-      await sendMagicLinkEmail({
-        to: email,
-        toName: name,
-        magicUrl: `${origin}/magic-link?token=${token}`,
-        sendEmail: env.SEND_EMAIL,
-        db,
-        source: "admin_client_invite",
-      });
-    } catch (err) {
-      console.error("[clients-new] invite email failed:", err);
+    if (!env.SEND_EMAIL) {
+      console.error("[clients-new] SEND_EMAIL binding not configured");
+    } else {
+      try {
+        const { id, token, expires_at } = generateMagicToken();
+        await db.createMagicLinkToken({ id, user_id: userId, token, expires_at, used: 0 });
+        const origin = env.APP_URL || new URL(request.url).origin;
+        await sendMagicLinkEmail({
+          to: email,
+          toName: name,
+          magicUrl: `${origin}/magic-link?token=${token}`,
+          sendEmail: env.SEND_EMAIL,
+          db,
+          source: "admin_client_invite",
+        });
+      } catch (err) {
+        console.error("[clients-new] invite email failed:", err);
+      }
     }
   }
 

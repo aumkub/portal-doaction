@@ -182,6 +182,7 @@ export function createDB(d1: D1Database) {
           client.user_id,
           client.company_name,
           client.website_url,
+          client.cc_emails ?? null,
           client.package,
           client.contract_start,
           client.contract_end,
