@@ -84,6 +84,13 @@ export function createDB(d1: D1Database) {
       return result.results;
     },
 
+    async updateUserPasswordHash(id: string, password_hash: string): Promise<void> {
+      await d1
+        .prepare("UPDATE users SET password_hash = ?, updated_at = unixepoch() WHERE id = ?")
+        .bind(password_hash, id)
+        .run();
+    },
+
     // ── Sessions ─────────────────────────────────────────────────────────────
 
     async getSession(id: string): Promise<Session | null> {

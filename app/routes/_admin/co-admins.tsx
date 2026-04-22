@@ -59,6 +59,12 @@ const TestFireSchema = z.object({
   intent: z.literal("test_fire"),
 });
 
+const ResetPasswordSchema = z.object({
+  co_admin_id: z.string().min(1, "กรุณาระบุ Co-Admin"),
+  new_password: z.string().min(6, "รหัสผ่านใหม่ต้องมีอย่างน้อย 6 ตัวอักษร"),
+  intent: z.literal("reset_password"),
+});
+
 export async function loader({ request, context }: Route.LoaderArgs) {
   await requireAdmin(request, context.cloudflare.env.DB, context.cloudflare.env.SESSIONPORTAL);
   const db = createDB(context.cloudflare.env.DB);
@@ -247,6 +253,24 @@ export async function action({ request, context }: Route.ActionArgs) {
     });
   }
 
+  if (intent === "reset_password") {
+    const parsed = ResetPasswordSchema.safeParse(raw);
+    if (!parsed.success) {
+      return { errors: parsed.error.flatten().fieldErrors };
+    }
+
+    const { co_admin_id, new_password } = parsed.data;
+    const coAdmin = await db.getUserById(co_admin_id);
+    if (!coAdmin || coAdmin.role !== "co-admin") {
+      return { errors: { co_admin_id: ["ไม่พบ Co-Admin ที่ต้องการเปลี่ยนรหัสผ่าน"] } };
+    }
+
+    const passwordHash = await hashPassword(new_password);
+    await db.updateUserPasswordHash(co_admin_id, passwordHash);
+
+    return { success: { password_reset: true } };
+  }
+
   if (intent === "delete") {
     const parsed = DeleteSchema.safeParse(raw);
     if (!parsed.success) {
@@ -338,6 +362,11 @@ export default function CoAdminsPage({ loaderData, actionData }: Route.Component
             ✓ ส่งการแจ้งเตือนทดสอบเรียบร้อยแล้ว
           </p>
         )}
+        {success?.password_reset && (
+          <p className="text-xs text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+            ✓ เปลี่ยนรหัสผ่าน Co-Admin เรียบร้อยแล้ว
+          </p>
+        )}
       </div>
 
       {/* Co-admins list */}
@@ -350,7 +379,7 @@ export default function CoAdminsPage({ loaderData, actionData }: Route.Component
           <div className="divide-y divide-slate-100">
             {coAdmins.map((coAdmin) => (
               <div key={coAdmin.id} className="p-6 space-y-5">
-                <div className="flex items-start justify-between">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
                       <FaUserSecret className="text-emerald-600" />
@@ -363,7 +392,7 @@ export default function CoAdminsPage({ loaderData, actionData }: Route.Component
                       Co-Admin
                     </span>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap sm:justify-end">
                     <Form method="post">
                       <input type="hidden" name="intent" value="impersonate" />
                       <input type="hidden" name="co_admin_id" value={coAdmin.id} />
@@ -386,30 +415,70 @@ export default function CoAdminsPage({ loaderData, actionData }: Route.Component
                       <input type="hidden" name="intent" value="delete" />
                       <input type="hidden" name="co_admin_id" value={coAdmin.id} />
                       <Button
+                        type="submit"
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        onClick={(e) => {
+                          if (!confirm("คุณแน่ใจหรือไม่ที่จะลบ Co-Admin นี้?")) {
+                            e.preventDefault();
+                          }
+                        }}
+                      >
+                        <FaTrash aria-hidden="true" className="mr-1.5" />
+                        ลบ
+                      </Button>
+                    </Form>
+                  </div>
+                </div>
+
+                <details className="rounded-lg border border-amber-100 bg-amber-50/50 p-3 group">
+                  <summary className="list-none flex items-center justify-between cursor-pointer">
+                    <p className="text-xs font-medium text-amber-800">ความปลอดภัยบัญชี</p>
+                    <span className="text-xs text-amber-700 border border-amber-300 rounded-md px-2 py-1 bg-white hover:bg-amber-100">
+                      เปลี่ยนรหัสผ่าน
+                    </span>
+                  </summary>
+                  <Form method="post" className="mt-3 flex flex-col sm:flex-row sm:items-end gap-2">
+                    <input type="hidden" name="intent" value="reset_password" />
+                    <input type="hidden" name="co_admin_id" value={coAdmin.id} />
+                    <div className="flex-1 space-y-1">
+                      <Label htmlFor={`reset-password-${coAdmin.id}`} className="text-xs text-amber-900">
+                        รหัสผ่านใหม่
+                      </Label>
+                      <Input
+                        id={`reset-password-${coAdmin.id}`}
+                        name="new_password"
+                        type="password"
+                        minLength={6}
+                        required
+                        placeholder="อย่างน้อย 6 ตัวอักษร"
+                        className="h-9 text-xs bg-white"
+                      />
+                    </div>
+                    <Button
                       type="submit"
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      className="h-9 text-xs border-amber-300 text-amber-700 hover:bg-amber-100"
                       onClick={(e) => {
-                        if (!confirm("คุณแน่ใจหรือไม่ที่จะลบ Co-Admin นี้?")) {
+                        if (!confirm(`เปลี่ยนรหัสผ่านของ "${coAdmin.name}" ใช่หรือไม่?`)) {
                           e.preventDefault();
                         }
                       }}
                     >
-                      <FaTrash aria-hidden="true" className="mr-1.5" />
-                      ลบ
+                      บันทึกรหัสผ่านใหม่
                     </Button>
                   </Form>
-                </div>
-                </div>
+                </details>
 
                 {/* Assigned clients */}
-                <div className="pl-13 space-y-4">
+                <div className="space-y-4">
                   <div>
                     <h4 className="text-xs font-medium text-slate-700 mb-3">
                       ลูกค้าที่ดูแล ({coAdmin.assigned_clients.length})
                     </h4>
-                    <Form method="post" className="flex items-center gap-2">
+                    <Form method="post" className="flex flex-col sm:flex-row sm:items-center gap-2">
                       <input type="hidden" name="intent" value="assign" />
                       <input type="hidden" name="co_admin_id" value={coAdmin.id} />
                       <select
@@ -455,7 +524,7 @@ export default function CoAdminsPage({ loaderData, actionData }: Route.Component
                               <p className="text-sm font-medium text-slate-700">{client.company_name}</p>
                               {client.telegram_group_id && (
                                 <div className="flex items-center gap-1.5 text-xs text-blue-600">
-                                  <FaTelegram className="flex-shrink-0" />
+                                  <FaTelegram className="shrink-0" />
                                   <span className="truncate max-w-[200px]" title={client.telegram_group_id}>
                                     {client.telegram_group_id}
                                   </span>
