@@ -7,6 +7,11 @@ import { EmailMessage } from "cloudflare:email";
 
 export type EmailLanguage = "th" | "en";
 const MAIL_FROM = "aum@doaction.co.th";
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function isValidEmail(email: string): boolean {
+  return EMAIL_REGEX.test(email.trim());
+}
 
 interface SendEmailOptions {
   to: string;
@@ -42,9 +47,19 @@ export async function sendEmail({
       email: recipient.email.trim().toLowerCase(),
       name: recipient.name,
     }))
-    .filter((recipient) => recipient.email && recipient.email !== mainRecipient);
+    .filter(
+      (recipient) =>
+        recipient.email &&
+        recipient.email !== mainRecipient &&
+        isValidEmail(recipient.email)
+    );
   const uniqueCc = Array.from(new Map(normalizedCc.map((r) => [r.email, r])).values());
   const ccRecipients = uniqueCc.map((c) => (c.name ? `${c.name} <${c.email}>` : c.email));
+  const primaryRecipient = to.trim().toLowerCase();
+  if (!isValidEmail(primaryRecipient)) {
+    throw new Error(`Invalid main recipient email: ${to}`);
+  }
+  const deliveryRecipients = [primaryRecipient, ...uniqueCc.map((c) => c.email)];
 
   // Build MIME message
   const boundary = "boundary_" + generateId();
@@ -58,14 +73,16 @@ export async function sendEmail({
     boundary,
   });
 
-  const message = new EmailMessage(
-    MAIL_FROM,
-    to.trim(),
-    emailBody,
-  );
-
   try {
-    await sendEmail.send(message);
+    const deliveryResults = await Promise.allSettled(
+      deliveryRecipients.map((recipient) =>
+        sendEmail.send(new EmailMessage(MAIL_FROM, recipient, emailBody))
+      )
+    );
+    const primaryResult = deliveryResults[0];
+    if (primaryResult.status === "rejected") {
+      throw primaryResult.reason;
+    }
 
     if (db) {
       await db.createEmailLog({
@@ -148,6 +165,8 @@ function buildMimeMessage({
   ].join("\r\n");
 }
 
+const LOGO_URL = "https://portal.doaction.co.th/logo-white.svg";
+
 // ─── Magic Link Template ──────────────────────────────────────────────────────
 
 const magicLinkStrings = {
@@ -180,6 +199,7 @@ const magicLinkStrings = {
 export async function sendMagicLinkEmail({
   to,
   toName,
+  cc,
   magicUrl,
   sendEmail: emailBinding,
   db,
@@ -188,6 +208,7 @@ export async function sendMagicLinkEmail({
 }: {
   to: string;
   toName?: string;
+  cc?: Array<{ email: string; name?: string }>;
   magicUrl: string;
   sendEmail: SendEmail;
   db?: DB;
@@ -203,32 +224,52 @@ export async function sendMagicLinkEmail({
   const s = magicLinkStrings[lang];
 
   const mainRecipient = to.trim().toLowerCase();
+  const normalizedCc = (cc ?? [])
+    .map((recipient) => ({
+      email: recipient.email.trim().toLowerCase(),
+      name: recipient.name,
+    }))
+    .filter(
+      (recipient) =>
+        recipient.email &&
+        recipient.email !== mainRecipient &&
+        isValidEmail(recipient.email)
+    );
+  const uniqueCc = Array.from(new Map(normalizedCc.map((r) => [r.email, r])).values());
+  const ccRecipients = uniqueCc.map((c) => (c.name ? `${c.name} <${c.email}>` : c.email));
+  const primaryRecipient = to.trim().toLowerCase();
+  if (!isValidEmail(primaryRecipient)) {
+    throw new Error(`Invalid main recipient email: ${to}`);
+  }
+  const deliveryRecipients = [primaryRecipient, ...uniqueCc.map((c) => c.email)];
   const boundary = "boundary_" + generateId();
   const emailBody = buildMimeMessage({
     to,
     toName,
-    cc: [],
+    cc: ccRecipients,
     subject: s.subject,
     html: magicLinkHtml({ displayName, magicUrl, s }),
     text: s.textBody(displayName, magicUrl),
     boundary,
   });
 
-  const message = new EmailMessage(
-    MAIL_FROM,
-    to.trim(),
-    emailBody,
-  );
-
   try {
-    await emailBinding.send(message);
+    const deliveryResults = await Promise.allSettled(
+      deliveryRecipients.map((recipient) =>
+        emailBinding.send(new EmailMessage(MAIL_FROM, recipient, emailBody))
+      )
+    );
+    const primaryResult = deliveryResults[0];
+    if (primaryResult.status === "rejected") {
+      throw primaryResult.reason;
+    }
 
     if (db) {
       await db.createEmailLog({
         id: generateId(),
         to_email: to,
         to_name: toName ?? null,
-        cc_emails: null,
+        cc_emails: ccRecipients.length > 0 ? JSON.stringify(uniqueCc.map(c => c.email)) : null,
         subject: s.subject,
         html_body: magicLinkHtml({ displayName, magicUrl, s }),
         text_body: s.textBody(displayName, magicUrl),
@@ -242,7 +283,7 @@ export async function sendMagicLinkEmail({
         id: generateId(),
         to_email: to,
         to_name: toName ?? null,
-        cc_emails: null,
+        cc_emails: ccRecipients.length > 0 ? JSON.stringify(uniqueCc.map(c => c.email)) : null,
         subject: s.subject,
         html_body: magicLinkHtml({ displayName, magicUrl, s }),
         text_body: s.textBody(displayName, magicUrl),
@@ -285,17 +326,7 @@ function magicLinkHtml({
           <!-- Logo row -->
           <tr>
             <td style="padding:32px 40px 0;">
-              <table cellpadding="0" cellspacing="0">
-                <tr>
-                  <td style="background:#f0d800;border-radius:8px;width:32px;height:32px;text-align:center;vertical-align:middle;">
-                    <span style="font-weight:700;font-size:14px;color:#0f172a;">D</span>
-                  </td>
-                  <td style="padding-left:10px;vertical-align:middle;">
-                    <span style="font-size:20px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;">do action</span>
-                    <span style="font-size:13px;color:#64748b;margin-left:6px;">Client Portal</span>
-                  </td>
-                </tr>
-              </table>
+              <img src="${LOGO_URL}" alt="do action" width="140" style="display:block;height:auto;border:0;outline:none;text-decoration:none;" />
             </td>
           </tr>
 
