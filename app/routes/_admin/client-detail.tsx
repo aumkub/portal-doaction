@@ -5,6 +5,7 @@ import { requireCoAdminOrAdmin, startImpersonation, generateMagicToken } from "~
 import { createDB } from "~/lib/db.server";
 import { generateId } from "~/lib/utils";
 import { useT } from "~/lib/i18n";
+import { sendTelegramNotificationForClient } from "~/lib/telegram.server";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Button } from "~/components/ui/button";
@@ -70,8 +71,8 @@ export async function action({ request, params, context }: any) {
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "");
 
-  // Co-Admins can only add notes - reject all other intents
-  if (currentUser.role === "co-admin" && intent !== "add_note") {
+  // Co-Admins can only add or delete notes - reject all other intents
+  if (currentUser.role === "co-admin" && intent !== "add_note" && intent !== "delete_note") {
     throw new Response("Forbidden", { status: 403 });
   }
 
@@ -210,6 +211,21 @@ export async function action({ request, params, context }: any) {
       note,
     });
 
+    // Send Telegram notification to co-admin groups or default group
+    const appUrl = env.APP_URL || new URL(request.url).origin;
+    context.cloudflare.ctx.waitUntil(
+      sendTelegramNotificationForClient({
+        db,
+        appUrl,
+        notification: {
+          title: `📝 Internal Note Added - ${client.company_name}`,
+          body: `${currentUser.name} (${currentUser.role}) added a note:\n\n${note.substring(0, 200)}${note.length > 200 ? '...' : ''}`,
+          link: `/admin/clients/${client.id}`,
+        },
+        clientId: client.id,
+      }).catch(console.error)
+    );
+
     return { success: { note_added: true } };
   }
 
@@ -221,8 +237,8 @@ export async function action({ request, params, context }: any) {
       return { errors: { general: ["Note not found"] } };
     }
 
-    // Only admins or the note creator can delete
-    if (currentUser.role !== "admin" && note.user_id !== currentUser.id) {
+    // Only admins, co-admins, or the note creator can delete
+    if (currentUser.role !== "admin" && currentUser.role !== "co-admin" && note.user_id !== currentUser.id) {
       return { errors: { general: ["You don't have permission to delete this note"] } };
     }
 
@@ -289,6 +305,7 @@ export default function AdminClientDetailPage({ loaderData }: any) {
 
   const emailChanged = actionData?.success && "email_changed" in actionData.success;
   const magicLinkSent = actionData?.success && "magic_link" in actionData.success;
+  const noteAdded = actionData?.success && "note_added" in actionData.success;
   const currentEmail = emailChanged
     ? (actionData!.success as any).email
     : user?.email ?? "";
@@ -576,7 +593,7 @@ export default function AdminClientDetailPage({ loaderData }: any) {
             </div>
 
             {/* Add note form */}
-            <Form method="post" className="space-y-2">
+            <Form method="post" className="space-y-2" key={`note-${notes.length}`}>
               <input type="hidden" name="intent" value="add_note" />
               <textarea
                 name="note"
@@ -603,7 +620,7 @@ export default function AdminClientDetailPage({ loaderData }: any) {
                 <p className="text-xs text-slate-400 text-center py-4">ยังไม่มีบันทึก</p>
           ) : (
             notes.map((note: any) => {
-              const canDelete = currentUser?.role === "admin" || note.user_id === currentUser?.id;
+              const canDelete = currentUser?.role === "admin" || currentUser?.role === "co-admin" || note.user_id === currentUser?.id;
               return (
                 <div key={note.id} className="bg-slate-50 rounded-lg p-3 space-y-2">
                   <div className="flex items-start justify-between gap-2">
@@ -621,7 +638,7 @@ export default function AdminClientDetailPage({ loaderData }: any) {
                       </div>
                       <p className="text-sm text-slate-700 whitespace-pre-wrap">{note.note}</p>
                     </div>
-                    {(currentUser.role === "admin" || note.user_id === currentUser.id) && (
+                    {(currentUser.role === "admin" || currentUser.role === "co-admin" || note.user_id === currentUser.id) && (
                       <Form method="post">
                         <input type="hidden" name="intent" value="delete_note" />
                         <input type="hidden" name="note_id" value={note.id} />

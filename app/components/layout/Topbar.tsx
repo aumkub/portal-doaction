@@ -227,13 +227,14 @@ export default function Topbar({
               </a>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <Form method="post" action="/logout" className="w-full">
-                <button type="submit" className="flex items-center gap-2 w-full text-red-500 text-sm">
-                  <span><FaArrowRightFromBracket aria-hidden="true" /></span> {t("topbar_logout")}
-                </button>
-              </Form>
-            </DropdownMenuItem>
+            <Form method="post" action="/logout">
+              <button
+                type="submit"
+                className="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-red-500 hover:bg-slate-100 rounded-md transition-colors text-left"
+              >
+                <span><FaArrowRightFromBracket aria-hidden="true" /></span> {t("topbar_logout")}
+              </button>
+            </Form>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
