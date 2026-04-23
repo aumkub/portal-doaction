@@ -158,10 +158,13 @@ export async function action({ request, params, context }: any) {
 
     if (env.SEND_EMAIL) {
       const { sendMagicLinkEmail } = await import("~/lib/email.server");
+      const { parseClientCcEmails } = await import("~/lib/client-cc");
+      const ccRecipients = parseClientCcEmails(client.cc_emails).map((ccEmail) => ({ email: ccEmail }));
       context.cloudflare.ctx.waitUntil(
         sendMagicLinkEmail({
           to: user.email,
           toName: user.name,
+          cc: ccRecipients.length > 0 ? ccRecipients : undefined,
           magicUrl,
           sendEmail: env.SEND_EMAIL,
           db,

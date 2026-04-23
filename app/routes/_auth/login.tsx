@@ -6,6 +6,7 @@ import { Label } from "~/components/ui/label";
 import { createDB } from "~/lib/db.server";
 import { verifyPassword, createAuth, generateMagicToken } from "~/lib/auth.server";
 import { sendMagicLinkEmail } from "~/lib/email.server";
+import { parseClientCcEmails } from "~/lib/client-cc";
 import { useT } from "~/lib/i18n";
 import { z } from "zod";
 
@@ -69,16 +70,20 @@ export async function action({ request, context }: Route.ActionArgs) {
 
     const origin = new URL(request.url).origin;
     const magicUrl = `${origin}/magic-link?token=${token}`;
+    const client = await db.getClientByUserId(user.id);
+    const ccRecipients = parseClientCcEmails(client?.cc_emails).map((ccEmail) => ({ email: ccEmail }));
 
     if (env.SEND_EMAIL) {
       try {
         await sendMagicLinkEmail({
           to: email,
           toName: user.name,
+          cc: ccRecipients.length > 0 ? ccRecipients : undefined,
           magicUrl,
           sendEmail: env.SEND_EMAIL,
           db,
           source: "login_magic_link",
+          lang: user.language === "en" ? "en" : "th",
         });
       } catch (err) {
         console.error("[magic-link] send failed:", err);
