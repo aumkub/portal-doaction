@@ -165,7 +165,7 @@ function buildMimeMessage({
   ].join("\r\n");
 }
 
-const LOGO_URL = "https://portal.doaction.co.th/logo-white.svg";
+const LOGO_URL = "https://portal.doaction.co.th/logo-black.svg";
 
 // ─── Magic Link Template ──────────────────────────────────────────────────────
 

@@ -763,6 +763,23 @@ export function createDB(d1: D1Database) {
       return result.results;
     },
 
+    async hasRecentMagicLinkSent(to_email: string, withinSeconds = 60): Promise<boolean> {
+      const row = await d1
+        .prepare(
+          `SELECT id
+           FROM email_logs
+           WHERE to_email = ?
+             AND source = 'api_send_magic_link'
+             AND status = 'sent'
+             AND created_at >= unixepoch() - ?
+           ORDER BY created_at DESC
+           LIMIT 1`
+        )
+        .bind(to_email.trim().toLowerCase(), withinSeconds)
+        .first<{ id: string }>();
+      return Boolean(row?.id);
+    },
+
     async hasContractWarningLog(
       client_id: string,
       warning_stage: "first" | "second" | "third",
