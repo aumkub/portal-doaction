@@ -17,7 +17,7 @@ export default function MessageBubble({
 }) {
   const shouldAlignRight = alignRight ?? isClient;
   const attachmentClass = isClient
-    ? "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+    ? "border-hairline bg-canvas text-charcoal hover:bg-surface"
     : "border-white/30 bg-white/10 text-white hover:bg-white/20";
 
   return (
@@ -25,8 +25,8 @@ export default function MessageBubble({
       <div
         className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm shadow-sm ${
           isClient
-            ? "bg-white text-slate-800 border border-slate-200"
-            : "bg-violet-600 text-white"
+            ? "bg-canvas text-ink border border-hairline"
+            : "bg-primary text-on-dark"
         }`}
       >
         {authorName ? (

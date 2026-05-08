@@ -4,7 +4,7 @@ import { cn } from "~/lib/utils";
 type Color = "emerald" | "blue" | "amber" | "violet";
 
 interface Trend {
-  value: number; // positive = up, negative = down
+  value: number;
   label: string;
 }
 
@@ -18,22 +18,10 @@ interface StatsCardProps {
 }
 
 const colorMap: Record<Color, { bg: string; icon: string; trend: string }> = {
-  emerald: {
-    bg: "bg-emerald-50",
-    icon: "text-emerald-600",
-    trend: "text-emerald-600",
-  },
-  blue: { bg: "bg-blue-50", icon: "text-blue-600", trend: "text-blue-600" },
-  amber: {
-    bg: "bg-amber-50",
-    icon: "text-amber-600",
-    trend: "text-amber-600",
-  },
-  violet: {
-    bg: "bg-violet-50",
-    icon: "text-violet-600",
-    trend: "text-violet-600",
-  },
+  emerald: { bg: "bg-teal-light",                  icon: "text-moss-dark",    trend: "text-success-accent" },
+  blue:    { bg: "bg-surface-pricing-featured",     icon: "text-brand-blue",   trend: "text-brand-blue" },
+  amber:   { bg: "bg-surface-yellow",               icon: "text-yellow-dark",  trend: "text-yellow-dark" },
+  violet:  { bg: "bg-surface-pricing-featured",     icon: "text-brand-blue",   trend: "text-brand-blue" },
 };
 
 export default function StatsCard({
@@ -47,37 +35,28 @@ export default function StatsCard({
   const c = colorMap[color];
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-md transition-shadow">
+    <div className="bg-canvas rounded-xl border border-hairline p-5 hover:shadow-sm transition-shadow">
       <div className="flex items-start justify-between mb-4">
-        <div
-          className={cn(
-            "w-10 h-10 rounded-lg flex items-center justify-center",
-            c.bg
-          )}
-        >
+        <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center", c.bg)}>
           <span className={cn("w-5 h-5", c.icon)}>{icon}</span>
         </div>
         {trend && (
-          <span
-            className={cn(
-              "text-xs font-medium flex items-center gap-0.5",
-              trend.value >= 0 ? "text-emerald-600" : "text-red-500"
-            )}
-          >
+          <span className={cn(
+            "text-xs font-medium flex items-center gap-0.5",
+            trend.value >= 0 ? "text-success-accent" : "text-brand-red-dark"
+          )}>
             {trend.value >= 0 ? "↑" : "↓"} {Math.abs(trend.value)}%{" "}
-            <span className="text-slate-400 font-normal">{trend.label}</span>
+            <span className="text-stone font-normal">{trend.label}</span>
           </span>
         )}
       </div>
-      <p className="text-2xl font-semibold text-slate-900 leading-none">
+      <p className="text-2xl font-semibold text-ink leading-none">
         {value}
         {suffix && (
-          <span className="text-sm font-normal text-slate-400 ml-1">
-            {suffix}
-          </span>
+          <span className="text-sm font-normal text-steel ml-1">{suffix}</span>
         )}
       </p>
-      <p className="text-sm text-slate-500 mt-1">{title}</p>
+      <p className="text-sm text-muted-foreground mt-1">{title}</p>
     </div>
   );
 }

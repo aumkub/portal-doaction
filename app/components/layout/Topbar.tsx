@@ -49,7 +49,7 @@ function NotificationDropdown({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
-          className="relative p-2 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors focus:outline-none"
+          className="relative p-2 rounded-lg text-steel hover:bg-surface transition-colors focus:outline-none"
           aria-label={t("topbar_notifications")}
         >
           <svg
@@ -66,7 +66,7 @@ function NotificationDropdown({
             />
           </svg>
           {unread.length > 0 && (
-            <span className={`absolute top-1 right-1 w-4 h-4 bg-violet-600 text-white font-bold rounded-full flex items-center justify-center leading-none
+            <span className={`absolute top-1 right-1 w-4 h-4 bg-brand-blue text-white font-bold rounded-full flex items-center justify-center leading-none
               ${unread.length > 9 ? "text-[8px]" : "text-[10px]"}`}>
               {unread.length > 9 ? "9+" : unread.length}
             </span>
@@ -75,15 +75,15 @@ function NotificationDropdown({
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="end" className="w-80">
-        <div className="flex items-center justify-between px-3 py-2 border-b border-slate-100">
-          <span className="text-sm font-semibold text-slate-900">
+        <div className="flex items-center justify-between px-3 py-2 border-b border-hairline-soft">
+          <span className="text-sm font-semibold text-ink">
             {t("topbar_notifications")}
           </span>
           {unread.length > 0 && (
             <Form method="post" action="/api/notifications/read">
               <button
                 type="submit"
-                className="text-xs text-violet-600 hover:text-violet-700 transition-colors"
+                className="text-xs text-brand-blue hover:text-blue-pressed transition-colors"
               >
                 {t("topbar_mark_all_read")}
               </button>
@@ -93,8 +93,8 @@ function NotificationDropdown({
 
         {notifications.length === 0 ? (
           <div className="px-3 py-8 text-center">
-            <FaBell className="mx-auto mb-1 text-2xl text-slate-400" aria-hidden="true" />
-            <p className="text-sm text-slate-400">{t("topbar_no_notifications")}</p>
+            <FaBell className="mx-auto mb-1 text-2xl text-stone" aria-hidden="true" />
+            <p className="text-sm text-stone">{t("topbar_no_notifications")}</p>
           </div>
         ) : (
           <div className="max-h-80 overflow-y-auto">
@@ -107,8 +107,8 @@ function NotificationDropdown({
                 <input type="hidden" name="id" value={n.id} />
                 <button
                   type="submit"
-                  className={`w-full text-left px-3 py-3 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 ${
-                    !n.read ? "bg-violet-50/50" : ""
+                  className={`w-full text-left px-3 py-3 hover:bg-surface transition-colors border-b border-slate-50 last:border-0 ${
+                    !n.read ? "bg-surface" : ""
                   }`}
                 >
                   <div className="flex items-start gap-2">
@@ -120,20 +120,20 @@ function NotificationDropdown({
                       )}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-800 leading-tight">
+                      <p className="text-sm font-medium text-ink leading-tight">
                         {n.title}
                       </p>
                       {n.body && (
-                        <p className="text-xs text-slate-500 mt-0.5 leading-relaxed truncate">
+                        <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed truncate">
                           {n.body}
                         </p>
                       )}
-                      <p className="text-[11px] text-slate-400 mt-1">
+                      <p className="text-[11px] text-stone mt-1">
                         {formatRelativeTime(n.created_at, lang)}
                       </p>
                     </div>
                     {!n.read && (
-                      <span className="w-2 h-2 bg-violet-500 rounded-full mt-1.5 shrink-0" />
+                      <span className="w-2 h-2 bg-brand-blue rounded-full mt-1.5 shrink-0" />
                     )}
                   </div>
                 </button>
@@ -141,8 +141,8 @@ function NotificationDropdown({
             ))}
           </div>
         )}
-        <div className="border-t border-slate-100 px-3 py-2">
-          <a href={allHref} className="text-xs text-violet-600 hover:text-violet-700">
+        <div className="border-t border-hairline-soft px-3 py-2">
+          <a href={allHref} className="text-xs text-brand-blue hover:text-blue-pressed">
             {t("view_all")}
           </a>
         </div>
@@ -173,12 +173,12 @@ export default function Topbar({
   const settingsHref = role === "admin" ? "/admin/settings" : "/settings";
 
   return (
-    <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 lg:px-6 shrink-0">
+    <header className="h-16 bg-canvas border-b border-hairline flex items-center justify-between px-4 lg:px-6 shrink-0">
       {/* Left */}
       <div className="flex items-center gap-3">
         <MobileSidebarTrigger role={role} companyName={companyName} />
         {companyName && (
-          <span className="text-sm text-slate-500 hidden sm:block">
+          <span className="text-sm text-muted-foreground hidden sm:block">
             {companyName}
           </span>
         )}
@@ -191,20 +191,20 @@ export default function Topbar({
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="flex items-center gap-2 ml-1 rounded-lg px-2 py-1.5 hover:bg-slate-100 transition-colors focus:outline-none">
+            <button className="flex items-center gap-2 ml-1 rounded-lg px-2 py-1.5 hover:bg-surface transition-colors focus:outline-none">
               <Avatar className="h-7 w-7">
                 {user.avatar_url && (
                   <AvatarImage src={user.avatar_url} alt={user.name} />
                 )}
-                <AvatarFallback className="bg-slate-900 text-white text-xs font-semibold">
+                <AvatarFallback className="bg-ink text-white text-xs font-semibold">
                   {initials}
                 </AvatarFallback>
               </Avatar>
-              <span className="text-sm text-slate-700 hidden sm:block">
+              <span className="text-sm text-charcoal hidden sm:block">
                 {user.name}
               </span>
               <svg
-                className="w-4 h-4 text-slate-400 hidden sm:block"
+                className="w-4 h-4 text-stone hidden sm:block"
                 fill="none"
                 stroke="currentColor"
                 strokeWidth={2}
@@ -217,8 +217,8 @@ export default function Topbar({
 
           <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuLabel className="font-normal">
-              <p className="font-medium text-slate-900 text-sm">{user.name}</p>
-              <p className="text-xs text-slate-500 truncate">{user.email}</p>
+              <p className="font-medium text-ink text-sm">{user.name}</p>
+              <p className="text-xs text-muted-foreground truncate">{user.email}</p>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
@@ -230,7 +230,7 @@ export default function Topbar({
             <Form method="post" action="/logout">
               <button
                 type="submit"
-                className="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-red-500 hover:bg-slate-100 rounded-md transition-colors text-left"
+                className="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-red-500 hover:bg-surface rounded-md transition-colors text-left"
               >
                 <span><FaArrowRightFromBracket aria-hidden="true" /></span> {t("topbar_logout")}
               </button>

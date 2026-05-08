@@ -83,7 +83,7 @@ export default function AdminAttachmentsPage({ loaderData }: any) {
             <tbody>
               {attachments.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-5 py-10 text-center text-slate-400">
+                  <td colSpan={6} className="px-5 py-10 text-center text-slate-500">
                     No attachments
                   </td>
                 </tr>
@@ -100,7 +100,7 @@ export default function AdminAttachmentsPage({ loaderData }: any) {
                         <FaPaperclip aria-hidden="true" />
                         <span>{a.file_name}</span>
                       </a>
-                      <p className="text-[11px] text-slate-400 mt-1">
+                      <p className="text-[11px] text-slate-500 mt-1">
                         {(a.size_bytes / 1024).toFixed(1)} KB
                       </p>
                     </td>
@@ -114,7 +114,7 @@ export default function AdminAttachmentsPage({ loaderData }: any) {
                           {a.message_text.slice(0, 70)}
                         </a>
                       ) : (
-                        <span className="text-xs text-slate-400 italic">(ไม่ได้ส่ง)</span>
+                        <span className="text-xs text-slate-500 italic">(ไม่ได้ส่ง)</span>
                       )}
                     </td>
                     <td className="px-5 py-4 text-slate-600">{a.uploader_name}</td>

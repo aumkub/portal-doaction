@@ -12,7 +12,7 @@ const statusConfig = {
   in_progress: { label: "กำลังดำเนิน",   color: "bg-blue-50 text-blue-600" },
   waiting:     { label: "รอข้อมูล",       color: "bg-slate-100 text-slate-600" },
   resolved:    { label: "เสร็จสิ้น",      color: "bg-emerald-50 text-emerald-600" },
-  closed:      { label: "ปิดแล้ว",        color: "bg-slate-100 text-slate-400" },
+  closed:      { label: "ปิดแล้ว",        color: "bg-slate-100 text-slate-500" },
 };
 
 const priorityConfig = {
@@ -110,7 +110,7 @@ export default function TicketDetailPage({ loaderData, actionData }: Route.Compo
         <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
           {ticket.description}
         </p>
-        <p className="text-xs text-slate-400 mt-3">
+        <p className="text-xs text-slate-500 mt-3">
           สร้างเมื่อ {formatRelativeTime(ticket.created_at)}
         </p>
       </div>
@@ -136,7 +136,7 @@ export default function TicketDetailPage({ loaderData, actionData }: Route.Compo
                 </p>
                 <p
                   className={`text-[11px] mt-1.5 ${
-                    isOwn ? "text-violet-200" : "text-slate-400"
+                    isOwn ? "text-violet-200" : "text-slate-500"
                   }`}
                 >
                   {formatRelativeTime(msg.created_at)}

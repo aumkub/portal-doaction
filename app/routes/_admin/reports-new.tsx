@@ -10,7 +10,6 @@ import { sendEmail } from "~/lib/email.server";
 import { buildReportCustomerNotification } from "~/lib/report-customer-email.server";
 import { createReportAccessToken } from "~/lib/report-access.server";
 import { parseClientCcEmails } from "~/lib/client-cc";
-import PageHeader from "~/components/layout/PageHeader";
 import ReportEditor from "~/routes/_admin/reports-editor";
 import { useT } from "~/lib/i18n";
 import type { TaskCategory } from "~/types";
@@ -262,14 +261,15 @@ export default function AdminReportNewPage({ loaderData, actionData }: Route.Com
   const { t } = useT();
   return (
     <div className="space-y-6 max-w-4xl">
-      <PageHeader
-        title={t("admin_report_new_title")}
-        breadcrumbs={[
-          { label: t("admin_breadcrumb_admin"), href: "/admin/clients" },
-          { label: t("admin_breadcrumb_reports"), href: "/admin/reports" },
-          { label: t("admin_breadcrumb_new") },
-        ]}
-      />
+      <div>
+        <a
+          href="/admin/reports"
+          className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors mb-4"
+        >
+          ← {t("admin_breadcrumb_reports")}
+        </a>
+        <h1 className="text-2xl font-semibold text-slate-900">{t("admin_report_new_title")}</h1>
+      </div>
       <ReportEditor clients={clients} isNew={true} errors={errors} />
     </div>
   );

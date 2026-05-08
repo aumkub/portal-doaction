@@ -44,12 +44,12 @@ export default function ClientLayout({ loaderData }: Route.ComponentProps) {
   };
 
   return (
-    <div className="flex h-screen bg-slate-50 overflow-hidden">
+    <div className="flex h-screen bg-surface overflow-hidden">
       <Sidebar role="client" companyName={client?.company_name} />
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
 
         {isImpersonating && (
-          <div className="flex items-center justify-between bg-amber-500 text-white text-xs font-medium px-4 py-2 shrink-0">
+          <div className="flex items-center justify-between bg-brand-yellow text-primary text-xs font-medium px-4 py-2 shrink-0">
             <span>
               👤 กำลังใช้งานแทน <strong>{client?.company_name ?? user.email}</strong>
             </span>

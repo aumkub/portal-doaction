@@ -9,6 +9,13 @@
   "observability": {
     "enabled": true
   },
+  "routes": [
+    {
+      "pattern": "portal.doaction.co.th",
+      "zone_name": "doaction.co.th",
+      "custom_domain": true
+    }
+  ],
   "upload_source_maps": true,
   "vars": {
     "VALUE_FROM_CLOUDFLARE": "Hello from Cloudflare",

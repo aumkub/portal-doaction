@@ -265,7 +265,7 @@ const th = {
   admin_reports_empty: "ยังไม่มี Report",
   admin_report_status_published: "เผยแพร่แล้ว",
   admin_report_status_draft: "Draft",
-  admin_reports_edit: "แก้ไข →",
+  admin_reports_edit: "แก้ไข",
   admin_reports_col_email: "อีเมลลูกค้า",
   admin_col_login_status: "สถานะเข้าใช้งาน",
   admin_login_status_activated: "เข้าใช้งานแล้ว",

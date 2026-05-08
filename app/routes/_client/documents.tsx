@@ -4,9 +4,8 @@ import { requireUser } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { getMonthName } from "~/lib/utils";
 import { useT } from "~/lib/i18n";
-import PageHeader from "~/components/layout/PageHeader";
 import type { MonthlyReport } from "~/types";
-import { FaFileLines } from "react-icons/fa6";
+import { FaFileLines, FaArrowRight, FaArrowUpRightFromSquare } from "react-icons/fa6";
 
 export function meta() {
   return [{ title: "Documents — do action portal" }];
@@ -18,107 +17,106 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const db = createDB(env.DB);
   const client = await db.getClientByUserId(user.id);
   if (!client) return { reports: [], client: null };
-
   const allReports = await db.listReportsByClient(client.id);
   const reports = allReports.filter((r) => r.status === "published");
   return { reports, client };
 }
 
 export default function DocumentsPage({ loaderData }: Route.ComponentProps) {
-  const { reports, client } = loaderData as {
-    reports: MonthlyReport[];
-    client: any;
-  };
+  const { reports } = loaderData as { reports: MonthlyReport[]; client: any };
   const { t, lang } = useT();
-
   const yearDisplay = (year: number) => (lang === "th" ? year + 543 : year);
 
   return (
-    <div className="space-y-6 max-w-4xl">
-      <PageHeader
-        title={t("docs_title")}
-        subtitle={t("docs_subtitle")}
-        breadcrumbs={[
-          { label: "Dashboard", href: "/dashboard" },
-          { label: t("docs_title") },
-        ]}
-      />
+    <div className="space-y-6 max-w-3xl">
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-semibold text-slate-900">{t("docs_title")}</h1>
+        <p className="mt-1 text-sm text-slate-500">{t("docs_subtitle")}</p>
+      </div>
 
-      {/* Monthly Reports section */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-slate-700">
-            {t("docs_monthly_reports")} ({reports.length})
-          </h2>
-          <a
-            href="/reports"
-            className="text-xs text-violet-600 hover:text-violet-700 font-medium"
-          >
-            {t("view_all")}
-          </a>
+      {/* Monthly Reports */}
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <FaFileLines className="text-violet-500 text-sm" aria-hidden="true" />
+            <h2 className="text-sm font-semibold text-slate-900">{t("docs_monthly_reports")}</h2>
+            <span className="text-xs text-slate-500 font-normal">({reports.length})</span>
+          </div>
+          {reports.length > 0 && (
+            <a href="/reports" className="inline-flex items-center gap-1 text-xs font-medium text-violet-600 hover:text-violet-700 transition-colors">
+              {t("view_all")} <FaArrowRight className="text-[9px]" />
+            </a>
+          )}
         </div>
 
         {reports.length === 0 ? (
-          <div className="bg-white rounded-xl border border-slate-200 p-16 text-center">
-            <FaFileLines className="mx-auto mb-3 text-4xl text-slate-400" aria-hidden="true" />
-            <p className="text-slate-600 font-medium">{t("docs_no_docs_title")}</p>
-            <p className="text-slate-400 text-sm mt-1">{t("docs_no_docs_subtitle")}</p>
+          <div className="px-5 py-16 text-center">
+            <FaFileLines className="mx-auto mb-3 text-3xl text-slate-300" aria-hidden="true" />
+            <p className="text-slate-700 font-medium">{t("docs_no_docs_title")}</p>
+            <p className="text-slate-500 text-sm mt-1">{t("docs_no_docs_subtitle")}</p>
           </div>
         ) : (
-          <div className="bg-white rounded-xl border border-slate-200 divide-y divide-slate-100">
-            {reports.map((report) => (
+          <div className="divide-y divide-slate-100">
+            {reports.map((report, idx) => (
               <div
                 key={report.id}
                 className="flex items-center gap-4 px-5 py-4 hover:bg-slate-50 transition-colors group"
               >
-                <div className="w-10 h-10 rounded-lg bg-violet-50 flex items-center justify-center shrink-0">
-                  <FaFileLines className="text-base text-violet-600" aria-hidden="true" />
+                {/* Icon */}
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-50">
+                  <FaFileLines className="text-violet-600 text-sm" aria-hidden="true" />
                 </div>
+
+                {/* Info */}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-slate-800 truncate">
-                    {report.title ||
-                      `${t("docs_monthly_reports")} ${getMonthName(report.month, lang)} ${yearDisplay(report.year)}`}
+                    {report.title || `${t("docs_monthly_reports")} ${getMonthName(report.month, lang)} ${yearDisplay(report.year)}`}
                   </p>
-                  <p className="text-xs text-slate-400 mt-0.5">
+                  <p className="text-xs text-slate-500 mt-0.5">
                     {getMonthName(report.month, lang)} {yearDisplay(report.year)}
-                    {report.total_tasks > 0 && ` · ${report.total_tasks} ${t("docs_tasks_suffix")}`}
+                    {report.total_tasks > 0 && (
+                      <span className="ml-2 text-slate-400">· {report.total_tasks} {t("docs_tasks_suffix")}</span>
+                    )}
+                    {idx === 0 && (
+                      <span className="ml-2 text-[10px] font-semibold text-violet-600 bg-violet-50 px-1.5 py-0.5 rounded-full">ล่าสุด</span>
+                    )}
                   </p>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
+
+                {/* Actions */}
+                <div className="flex items-center gap-1 shrink-0">
                   <a
                     href={`/reports/${report.id}`}
-                    className="text-xs text-slate-500 hover:text-violet-600 transition-colors font-medium"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors"
                   >
                     {t("docs_view_report")}
                   </a>
-                  <a
-                    href={`/reports/${report.id}?print=1`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => {
-                      e.preventDefault();
+                  <button
+                    type="button"
+                    onClick={() => {
                       const w = window.open(`/reports/${report.id}`, "_blank");
                       if (w) setTimeout(() => w.print(), 800);
                     }}
-                    className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-700 transition-colors"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors"
                     title="Export PDF"
                   >
-                    <Printer className="w-3.5 h-3.5" />
+                    <Printer className="w-3 h-3" />
                     PDF
-                  </a>
+                  </button>
                 </div>
               </div>
             ))}
           </div>
         )}
-      </section>
+      </div>
 
-      {/* Info box */}
-      <div className="rounded-xl border border-slate-200 bg-white p-5">
-        <p className="text-xs font-semibold text-slate-600 mb-1">{t("docs_about_title")}</p>
+      {/* Info card */}
+      <div className="rounded-xl border border-slate-200 bg-slate-50 px-5 py-4">
+        <p className="text-xs font-semibold text-slate-700 mb-1">{t("docs_about_title")}</p>
         <p className="text-sm text-slate-500 leading-relaxed">
           {t("docs_about_body")}{" "}
-          <a href="/tickets/new" className="text-violet-600 hover:underline">
+          <a href="/tickets/new" className="text-violet-600 hover:underline font-medium">
             {t("docs_contact_link")}
           </a>
         </p>

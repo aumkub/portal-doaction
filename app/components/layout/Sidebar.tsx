@@ -68,7 +68,7 @@ function NavItems({ nav, onNavigate }: { nav: NavItem[]; onNavigate?: () => void
             cn(
               "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
               isActive
-                ? "bg-[#EED900] text-black"
+                ? "bg-brand-yellow text-primary"
                 : "text-slate-400 hover:text-white hover:bg-white/5"
             )
           }
@@ -98,7 +98,7 @@ function NavItemsWithRole({ nav, userRole, onNavigate }: { nav: NavItem[]; userR
               cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
                 isActive
-                  ? "bg-[#EED900] text-black"
+                  ? "bg-brand-yellow text-primary"
                   : "text-slate-400 hover:text-white hover:bg-white/5"
               )
             }
@@ -113,7 +113,7 @@ function NavItemsWithRole({ nav, userRole, onNavigate }: { nav: NavItem[]; userR
 
 function LogoBlock({ companyName }: { companyName?: string | null }) {
   return (
-    <div className="py-3 pb-2 pt-1 flex flex-col justify-center px-5 border-b !border-gray-700 shrink-0">
+    <div className="py-3 pb-2 pt-1 flex flex-col justify-center px-5 border-b !border-white/10 shrink-0">
 
       <div>
         <div className="flex items-center gap-3">
@@ -137,7 +137,7 @@ function LogoBlock({ companyName }: { companyName?: string | null }) {
 function ClientContactNavLink({ onNavigate }: { onNavigate?: () => void }) {
   const { t } = useT();
   return (
-    <div className="px-3 pt-2 pb-1 border-t !border-gray-700 shrink-0">
+    <div className="px-3 pt-2 pb-1 border-t !border-white/10 shrink-0">
       <NavLink
         to="/contact"
         onClick={onNavigate}
@@ -145,7 +145,7 @@ function ClientContactNavLink({ onNavigate }: { onNavigate?: () => void }) {
           cn(
             "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
             isActive
-              ? "bg-[#EED900] text-black"
+              ? "bg-brand-yellow text-primary"
               : "text-slate-400 hover:text-white hover:bg-white/5"
           )
         }
@@ -160,7 +160,7 @@ function ClientContactNavLink({ onNavigate }: { onNavigate?: () => void }) {
 function LogoutButton() {
   const { t } = useT();
   return (
-    <div className="p-3 border-t !border-gray-700 shrink-0">
+    <div className="p-3 border-t !border-white/10 shrink-0">
       <Form method="post" action="/logout">
         <button
           type="submit"
@@ -182,12 +182,12 @@ function SidebarContent({
   const { t } = useT();
   const nav = role === "co-admin" ? coAdminNav : role === "admin" ? adminNav : clientNav;
   return (
-    <div className={`flex h-full flex-col ${role === "admin" || role === "co-admin" ? "bg-black/90" : "bg-black/90"}`}>
+    <div className="flex h-full flex-col bg-sidebar">
       <LogoBlock companyName={companyName} />
       {role === "admin" || role === "co-admin" ? (
         <div className="px-5 pt-3">
           <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-            role === "co-admin" ? "bg-emerald-600/20 text-emerald-300" : "bg-violet-600/20 text-violet-300"
+            role === "co-admin" ? "bg-success-accent/20 text-success-accent" : "bg-brand-yellow/20 text-brand-yellow"
           }`}>
             {role === "co-admin" ? "CO-ADMIN" : t("nav_badge_admin")}
           </span>
