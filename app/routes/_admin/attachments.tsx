@@ -5,17 +5,26 @@ import { formatDate } from "~/lib/utils";
 import { useT } from "~/lib/i18n";
 import PageHeader from "~/components/layout/PageHeader";
 import { FaPaperclip } from "react-icons/fa6";
+import Pagination from "~/components/ui/Pagination";
 
 export function meta() {
   return [{ title: "ไฟล์แนบ Ticket — Admin" }];
 }
 
+const PAGE_SIZE = 20;
+
 export async function loader({ request, context }: any) {
   const env = context.cloudflare.env;
   await requireAdmin(request, env.DB, env.SESSIONPORTAL);
   const db = createDB(env.DB);
-  const attachments = await db.listAllTicketAttachments();
-  return { attachments };
+  const url = new URL(request.url);
+  const page = Math.max(1, Number(url.searchParams.get("page") ?? "1"));
+  const all = await db.listAllTicketAttachments();
+  const total = all.length;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const attachments = all.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  return { attachments, page: safePage, totalPages, total };
 }
 
 export async function action({ request, context }: any) {
@@ -39,7 +48,8 @@ export async function action({ request, context }: any) {
 }
 
 export default function AdminAttachmentsPage({ loaderData }: any) {
-  const { attachments } = loaderData as {
+  const { attachments, page, totalPages, total } = loaderData as {
+    page: number; totalPages: number; total: number;
     attachments: Array<{
       id: string;
       ticket_id: string;
@@ -60,7 +70,7 @@ export default function AdminAttachmentsPage({ loaderData }: any) {
     <div className="space-y-6">
       <PageHeader
         title={t("nav_attachments")}
-        subtitle={`${attachments.length} files`}
+        subtitle={`${total} files`}
         breadcrumbs={[
           { label: t("admin_breadcrumb_admin"), href: "/admin/clients" },
           { label: t("nav_attachments") },
@@ -137,6 +147,7 @@ export default function AdminAttachmentsPage({ loaderData }: any) {
             </tbody>
           </table>
         </div>
+        <Pagination page={page} totalPages={totalPages} />
       </div>
     </div>
   );

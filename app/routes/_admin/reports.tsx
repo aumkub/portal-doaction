@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { useRevalidator } from "react-router";
 import type { Route } from "./+types/reports";
+import Pagination from "~/components/ui/Pagination";
 import { requireCoAdminOrAdmin } from "~/lib/auth.server";
 import ReportCustomerEmailDialog, {
   type ReportRowForEmail,
@@ -7,7 +9,7 @@ import ReportCustomerEmailDialog, {
 import { createDB } from "~/lib/db.server";
 import { formatDate, formatRelativeTime, getMonthName } from "~/lib/utils";
 import { useT } from "~/lib/i18n";
-import { FaEye, FaFileCirclePlus, FaPaperPlane, FaRotateRight, FaPenToSquare, FaMagnifyingGlass } from "react-icons/fa6";
+import { FaEye, FaFileCirclePlus, FaPaperPlane, FaRotateRight, FaPenToSquare, FaMagnifyingGlass, FaTelegram } from "react-icons/fa6";
 export function meta() {
   return [{ title: "จัดการ Report — Admin" }];
 }
@@ -46,11 +48,19 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const bulkCreated = Number(url.searchParams.get("bulkCreated") ?? "0");
   const bulkFailed = Number(url.searchParams.get("bulkFailed") ?? "0");
+  const PAGE_SIZE = 20;
+  const page = Math.max(1, Number(url.searchParams.get("page") ?? "1"));
+  const total = allReports.length;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const reports = allReports.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   return {
-    reports: allReports.slice(0, 20),
+    reports,
     clients,
     userRole: user.role,
+    page: safePage,
+    totalPages,
     bulkResult: {
       created: Number.isNaN(bulkCreated) ? 0 : bulkCreated,
       failed: Number.isNaN(bulkFailed) ? 0 : bulkFailed,
@@ -64,18 +74,34 @@ const statusStyle = {
 };
 
 export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
-  const { reports, bulkResult, userRole } = loaderData as {
+  const { reports, bulkResult, userRole, page, totalPages } = loaderData as {
     reports: ReportRowForEmail[];
     bulkResult: { created: number; failed: number };
     userRole: "admin" | "co-admin";
+    page: number;
+    totalPages: number;
   };
   const { t, lang } = useT();
   const isCoAdmin = userRole === "co-admin";
 
+  const revalidator = useRevalidator();
   const [emailDialog, setEmailDialog] = useState<{
     report: ReportRowForEmail;
     mode: "send" | "view";
   } | null>(null);
+  const [telegramSending, setTelegramSending] = useState<string | null>(null);
+
+  async function sendTelegram(reportId: string) {
+    setTelegramSending(reportId);
+    try {
+      const fd = new FormData();
+      fd.append("reportId", reportId);
+      await fetch("/api/report-telegram-notify", { method: "POST", body: fd });
+      revalidator.revalidate();
+    } finally {
+      setTelegramSending(null);
+    }
+  }
 
   const formatReportPeriod = (month: number, year: number) => {
     const m = getMonthName(month, lang);
@@ -122,25 +148,22 @@ export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[850px]">
+          <table className="w-full text-sm min-w-[640px]">
             <thead>
               <tr className="border-b border-slate-100">
-                <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">
+                <th className="text-left text-xs font-medium text-slate-500 px-3 py-2">
                   {t("admin_col_client")}
                 </th>
-                <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">
+                <th className="text-left text-xs font-medium text-slate-500 px-3 py-2">
                   {t("admin_reports_col_month")}
                 </th>
-                <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">
-                  {t("admin_reports_col_tasks_short")}
-                </th>
-                <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">
+                <th className="text-left text-xs font-medium text-slate-500 px-3 py-2">
                   {t("admin_reports_col_status")}
                 </th>
-                <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">
+                <th className="text-left text-xs font-medium text-slate-500 px-3 py-2 w-[250px]">
                   {t("admin_reports_col_email")}
                 </th>
-                <th className="text-right text-xs font-medium text-slate-500 px-5 py-3">
+                <th className="text-right text-xs font-medium text-slate-500 px-3 py-2 w-[100px]">
                   {t("admin_reports_col_actions")}
                 </th>
               </tr>
@@ -149,8 +172,8 @@ export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
               {reports.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={6}
-                    className="px-5 py-12 text-center text-slate-400"
+                    colSpan={5}
+                    className="px-3 py-12 text-center text-slate-400"
                   >
                     {t("admin_reports_empty")}
                   </td>
@@ -158,6 +181,7 @@ export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
               ) : (
                 reports.map((report) => {
                   const notified = report.client_notified_at != null;
+                  const telegramSent = report.telegram_notified_at != null;
                   const isPublished = report.status === "published";
 
                   return (
@@ -165,108 +189,122 @@ export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
                       key={report.id}
                       className="border-b border-slate-100 last:border-0 hover:bg-slate-50/80 transition-colors"
                     >
-                      <td className="px-5 py-4 font-medium text-slate-900">
+                      <td className="px-3 py-2.5 font-medium text-slate-900">
                         {report.company_name}
                       </td>
-                      <td className="px-5 py-4 text-slate-600">
+                      <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">
                         {formatReportPeriod(report.month, report.year)}
                       </td>
-                      <td className="px-5 py-4 text-slate-500">
-                        {report.total_tasks} {t("items")}
-                      </td>
-                      <td className="px-5 py-4">
+                      <td className="px-3 py-2.5">
                         <span
-                          className={`text-xs font-medium px-2 py-1 rounded-full ${statusStyle[report.status]}`}
+                          className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusStyle[report.status]}`}
                         >
                           {report.status === "published"
                             ? t("admin_report_status_published")
                             : t("admin_report_status_draft")}
                         </span>
                       </td>
-                      <td className="px-5 py-4">
-                        {!isPublished ? (
-                          <span className="text-xs text-slate-400">
-                            {t("admin_report_email_publish_first")}
-                          </span>
-                        ) : notified ? (
-                          <div className="flex flex-col gap-1.5">
-                            <span className="inline-flex w-fit items-center gap-1 rounded-full bg-violet-50 text-violet-700 text-[11px] font-semibold px-2 py-0.5">
-                              <span className="w-1 h-1 rounded-full bg-violet-500" />
-                              {t("admin_report_email_badge_sent")}
+                      <td className="px-3 py-2.5">
+                        <div className="flex flex-col gap-1">
+                          {/* Email row */}
+                          {!isPublished ? (
+                            <span className="text-xs text-slate-400">
+                              {t("admin_report_email_publish_first")}
                             </span>
-                            <span className="text-[11px] text-slate-500">
-                              {lang === "en"
-                                ? formatRelativeTime(report.client_notified_at!, "en")
-                                : formatRelativeTime(report.client_notified_at!, "th")}
-                              <span className="text-slate-400">
-                                {" · "}
-                                {formatDate(report.client_notified_at!, lang)}
+                          ) : notified ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 text-violet-700 text-[11px] font-semibold px-2 py-0.5">
+                                <span className="w-1 h-1 rounded-full bg-violet-500" />
+                                {t("admin_report_email_badge_sent")}
                               </span>
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-amber-700 font-medium bg-amber-50 px-2 py-1 rounded-md">
-                            {t("admin_report_email_not_sent")}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-5 py-4 text-right">
-                        <div className="flex flex-col sm:flex-row items-stretch sm:items-start justify-end gap-2">
-                          {isPublished && !isCoAdmin && (
-                            <>
-                              {!notified ? (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setEmailDialog({ report, mode: "send" })
-                                  }
-                                  className="inline-flex items-center justify-center gap-1 rounded-lg bg-violet-600 text-white text-xs font-medium px-3 py-2 hover:bg-violet-700 transition-colors shadow-sm"
-                                >
-                                  <FaPaperPlane aria-hidden="true" />
-                                  {t("admin_report_email_btn_send")}
-                                </button>
-                              ) : (
-                                <div className="flex flex-col gap-1.5 items-stretch sm:items-start">
+                              {!isCoAdmin && (
+                                <>
                                   <button
                                     type="button"
-                                    onClick={() =>
-                                      setEmailDialog({ report, mode: "view" })
-                                    }
-                                    className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-medium px-3 py-2 hover:bg-slate-50 transition-colors"
+                                    onClick={() => setEmailDialog({ report, mode: "view" })}
+                                    className="text-[11px] text-slate-500 hover:text-slate-800 underline-offset-2 hover:underline"
                                   >
-                                    <FaEye aria-hidden="true" />
                                     {t("admin_report_email_btn_view")}
                                   </button>
+                                  <span className="text-slate-300">·</span>
                                   <button
                                     type="button"
-                                    onClick={() =>
-                                      setEmailDialog({ report, mode: "send" })
-                                    }
-                                    className="inline-flex items-center gap-1 text-[11px] font-medium text-violet-600 hover:text-violet-800 underline-offset-2 hover:underline"
+                                    onClick={() => setEmailDialog({ report, mode: "send" })}
+                                    className="inline-flex items-center gap-0.5 text-[11px] font-medium text-violet-600 hover:text-violet-800 underline-offset-2 hover:underline"
                                   >
-                                    <FaRotateRight aria-hidden="true" />
+                                    <FaRotateRight className="text-[9px]" aria-hidden="true" />
                                     {t("admin_report_email_btn_resend")}
                                   </button>
-                                </div>
+                                </>
                               )}
-                            </>
+                            </div>
+                          ) : isPublished && !isCoAdmin ? (
+                            <button
+                              type="button"
+                              onClick={() => setEmailDialog({ report, mode: "send" })}
+                              className="inline-flex w-fit items-center gap-1 rounded-md bg-violet-600 text-white text-[11px] font-medium px-2 py-1 hover:bg-violet-700 transition-colors"
+                            >
+                              <FaPaperPlane className="text-[9px]" aria-hidden="true" />
+                              {t("admin_report_email_btn_send")}
+                            </button>
+                          ) : (
+                            <span className="text-xs text-amber-700 font-medium bg-amber-50 px-2 py-0.5 rounded-md">
+                              {t("admin_report_email_not_sent")}
+                            </span>
                           )}
+
+                          {/* Telegram row — admin only, published only */}
+                          {isPublished && !isCoAdmin && (
+                            <div className="flex items-center gap-1.5">
+                              {telegramSent ? (
+                                <>
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 text-slate-600 text-[11px] font-semibold px-2 py-0.5">
+                                    <FaTelegram className="text-[10px]" aria-hidden="true" />
+                                    {t("admin_report_telegram_badge_sent")}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    disabled={telegramSending === report.id}
+                                    onClick={() => sendTelegram(report.id)}
+                                    className="inline-flex items-center gap-0.5 text-[11px] font-medium text-slate-500 hover:text-slate-800 underline-offset-2 hover:underline disabled:opacity-40"
+                                  >
+                                    <FaRotateRight className="text-[9px]" aria-hidden="true" />
+                                    {telegramSending === report.id ? "..." : t("admin_report_telegram_btn_resend")}
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  type="button"
+                                  disabled={telegramSending === report.id}
+                                  onClick={() => sendTelegram(report.id)}
+                                  className="inline-flex w-fit items-center gap-1 rounded-md border border-slate-200 bg-white text-slate-700 text-[11px] font-medium px-2 py-1 hover:bg-slate-50 transition-colors disabled:opacity-40"
+                                >
+                                  <FaTelegram className="text-[10px]" aria-hidden="true" />
+                                  {telegramSending === report.id ? "..." : t("admin_report_telegram_btn_send")}
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        <div className="inline-flex items-center justify-end gap-0.5">
                           <a
                             href={`/reports/${report.id}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white text-xs text-slate-600 hover:bg-slate-50 transition-colors px-3 py-2"
+                            title={t("admin_reports_preview")}
+                            className="inline-flex items-center justify-center rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors p-1.5"
                           >
-                            <FaMagnifyingGlass aria-hidden="true" />
-                            {t("admin_reports_preview")}
+                            <FaMagnifyingGlass className="text-xs" aria-hidden="true" />
                           </a>
                           {!isCoAdmin && (
                             <a
                               href={`/admin/reports/${report.id}`}
-                              className="inline-flex items-center justify-center gap-1 rounded-lg border border-transparent text-xs text-slate-500 hover:text-slate-900 transition-colors p-2"
+                              title={t("admin_reports_edit")}
+                              className="inline-flex items-center justify-center rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors p-1.5"
                             >
-                              <FaPenToSquare aria-hidden="true" />
-                              {t("admin_reports_edit")}
+                              <FaPenToSquare className="text-xs" aria-hidden="true" />
                             </a>
                           )}
                         </div>
@@ -278,6 +316,7 @@ export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
             </tbody>
           </table>
         </div>
+        <Pagination page={page} totalPages={totalPages} />
       </div>
     </div>
   );

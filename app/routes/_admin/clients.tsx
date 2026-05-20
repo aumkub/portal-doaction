@@ -1,6 +1,7 @@
 import { Form } from "react-router";
 import type { FormEvent } from "react";
 import type { Route } from "./+types/clients";
+import Pagination from "~/components/ui/Pagination";
 import { requireCoAdminOrAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { formatRelativeTime } from "~/lib/utils";
@@ -25,17 +26,22 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     clients = clients.filter((c) => assignedClientIds.includes(c.id));
   }
 
-  const clientsWithStatus = await Promise.all(
+  const allClientsWithStatus = await Promise.all(
     clients.map(async (client) => {
-      const user = await db.getUserById(client.user_id);
-      return {
-        ...client,
-        first_login_at: user?.first_login_at ?? null,
-      };
+      const u = await db.getUserById(client.user_id);
+      return { ...client, first_login_at: u?.first_login_at ?? null };
     })
   );
 
-  return { clients: clientsWithStatus, userRole: user.role };
+  const PAGE_SIZE = 20;
+  const url = new URL(request.url);
+  const page = Math.max(1, Number(url.searchParams.get("page") ?? "1"));
+  const total = allClientsWithStatus.length;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const clientsWithStatus = allClientsWithStatus.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  return { clients: clientsWithStatus, userRole: user.role, page: safePage, totalPages, total };
 }
 
 const packageKeys: Record<Client["package"], TranslationKey> = {
@@ -50,9 +56,12 @@ const packageColors = {
 };
 
 export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
-  const { clients, userRole } = loaderData as {
+  const { clients, userRole, page, totalPages, total } = loaderData as {
     clients: Array<Client & { first_login_at: number | null }>;
     userRole: string;
+    page: number;
+    totalPages: number;
+    total: number;
   };
   const { t, lang } = useT();
 
@@ -65,8 +74,8 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
           </h1>
           <p className="text-slate-500 text-sm mt-1">
             {userRole === "co-admin"
-              ? `รายการลูกค้าที่คุณรับผิดชอบ (${clients.length})`
-              : t("admin_clients_subtitle").replace("{count}", String(clients.length))}
+              ? `รายการลูกค้าที่คุณรับผิดชอบ (${total})`
+              : t("admin_clients_subtitle").replace("{count}", String(total))}
           </p>
         </div>
         {userRole !== "co-admin" && (
@@ -201,6 +210,7 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
             )}
           </tbody>
         </table>
+        <Pagination page={page} totalPages={totalPages} />
       </div>
     </div>
   );

@@ -77,6 +77,8 @@ export interface MonthlyReport {
   client_notified_at?: number | null;
   client_notification_subject?: string | null;
   client_notification_html?: string | null;
+  /** When Telegram notification was last sent for this report */
+  telegram_notified_at?: number | null;
 }
 
 export interface ReportTask {

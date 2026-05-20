@@ -11,6 +11,11 @@ type DashboardTicket = {
   company_name: string;
 };
 
+type MissingReportClient = {
+  id: string;
+  company_name: string;
+};
+
 export function meta() {
   return [{ title: "Admin Overview — do action portal" }];
 }
@@ -35,18 +40,28 @@ export async function loader({ request, context }: any) {
     ? allClients.filter((c) => assignedClientIds.includes(c.id))
     : allClients;
 
-  // Filter reports due for Co-Admins
-  const dueReportsQuery = user.role === "co-admin"
-    ? `SELECT COUNT(*) as count FROM monthly_reports WHERE year = ? AND month = ? AND client_id IN (${assignedClientIds.map(() => "?").join(",")})`
-    : "SELECT COUNT(*) as count FROM monthly_reports WHERE year = ? AND month = ?";
+  // Clients WITHOUT a report this month
+  const missingReportQuery = user.role === "co-admin"
+    ? `SELECT c.id, c.company_name
+       FROM clients c
+       LEFT JOIN monthly_reports mr ON mr.client_id = c.id AND mr.year = ? AND mr.month = ?
+       WHERE mr.id IS NULL AND c.id IN (${assignedClientIds.map(() => "?").join(",")})
+       ORDER BY c.company_name`
+    : `SELECT c.id, c.company_name
+       FROM clients c
+       LEFT JOIN monthly_reports mr ON mr.client_id = c.id AND mr.year = ? AND mr.month = ?
+       WHERE mr.id IS NULL
+       ORDER BY c.company_name`;
 
-  const dueReportsParams = user.role === "co-admin"
+  const missingReportParams = user.role === "co-admin"
     ? [year, month, ...assignedClientIds]
     : [year, month];
 
-  const dueReports = await context.cloudflare.env.DB.prepare(dueReportsQuery)
-    .bind(...dueReportsParams)
-    .first();
+  const missingReportResult = user.role === "co-admin" && assignedClientIds.length === 0
+    ? { results: [] }
+    : await context.cloudflare.env.DB.prepare(missingReportQuery)
+        .bind(...missingReportParams)
+        .all();
 
   // Filter tickets for Co-Admins
   const openTicketsQuery = user.role === "co-admin"
@@ -67,20 +82,26 @@ export async function loader({ request, context }: any) {
     ? [...assignedClientIds]
     : [];
 
-  const openTicketsResult = await context.cloudflare.env.DB.prepare(openTicketsQuery)
-    .bind(...openTicketsParams)
-    .all();
+  const openTicketsResult = user.role === "co-admin" && assignedClientIds.length === 0
+    ? { results: [] }
+    : await context.cloudflare.env.DB.prepare(openTicketsQuery)
+        .bind(...openTicketsParams)
+        .all();
 
-  const dueReportCount = (dueReports as { count?: number } | null)?.count ?? 0;
+  const clientsMissingReport = ((missingReportResult as { results?: MissingReportClient[] }).results ?? [])
+    .filter((c) => c.company_name !== "บริษัท ดู แอคชั่น จำกัด");
   const urgentTickets = (openTicketsResult as { results?: DashboardTicket[] }).results ?? [];
 
   return {
     totalClients: clients.length,
-    reportsDueThisMonth: dueReportCount,
+    clientsMissingReportCount: clientsMissingReport.length,
+    clientsMissingReport,
     openTickets: urgentTickets.length,
     urgentTickets,
     clients: clients.slice(0, 6),
     userRole: user.role,
+    currentMonth: month,
+    currentYear: year,
   };
 }
 
@@ -114,10 +135,10 @@ export default function AdminOverviewPage({ loaderData }: any) {
             {data.openTickets}
           </p>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-5">
+        <div className={`rounded-xl border p-5 ${data.clientsMissingReportCount > 0 ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-white"}`}>
           <p className="text-sm text-slate-500">{t("admin_stat_reports_due")}</p>
-          <p className="mt-2 text-3xl font-semibold text-slate-900">
-            {data.reportsDueThisMonth}
+          <p className={`mt-2 text-3xl font-semibold ${data.clientsMissingReportCount > 0 ? "text-amber-600" : "text-slate-900"}`}>
+            {data.clientsMissingReportCount}
           </p>
         </div>
       </div>
@@ -169,6 +190,46 @@ export default function AdminOverviewPage({ loaderData }: any) {
             )}
           </div>
         </div>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold text-slate-900">
+              {t("admin_section_missing_reports")}
+            </h2>
+            <p className="mt-0.5 text-xs text-slate-400">
+              {data.currentYear}/{String(data.currentMonth).padStart(2, "0")}
+            </p>
+          </div>
+          {data.userRole === "admin" && (
+            <Link to="/admin/reports/new" className="text-xs text-violet-600">
+              {t("admin_create_report")}
+            </Link>
+          )}
+        </div>
+        {data.clientsMissingReport.length === 0 ? (
+          <p className="text-sm text-slate-400">{t("admin_no_missing_reports")}</p>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {data.clientsMissingReport.map((client: MissingReportClient) => (
+              <div
+                key={client.id}
+                className="flex items-center justify-between rounded-lg border border-amber-100 bg-amber-50 px-3 py-2"
+              >
+                <span className="text-sm text-slate-700">{client.company_name}</span>
+                {data.userRole === "admin" && (
+                  <Link
+                    to={`/admin/reports/new`}
+                    className="ml-2 shrink-0 text-xs font-medium text-amber-700 hover:text-amber-900"
+                  >
+                    + {t("admin_create_report")}
+                  </Link>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
