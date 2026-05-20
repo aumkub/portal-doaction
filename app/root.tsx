@@ -39,7 +39,7 @@ export const links: Route.LinksFunction = () => [
 	},
 	{
 		rel: "stylesheet",
-		href: "https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap",
+		href: "https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,500..700;1,17..18,500..700&display=swap",
 	},
 ];
 
@@ -126,7 +126,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
 				)}
 				<a
 					href="/"
-					className="inline-block mt-2 px-5 py-2.5 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 transition-colors"
+					className="inline-block mt-2 px-6 py-2.5 rounded-full bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/85 transition-colors"
 				>
 					กลับหน้าหลัก
 				</a>

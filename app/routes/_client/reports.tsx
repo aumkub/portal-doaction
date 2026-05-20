@@ -83,7 +83,7 @@ export default function ReportsPage({ loaderData }: Route.ComponentProps) {
 
       {!selectedReport ? (
         <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
-          <p className="text-slate-400">{t("reports_no_reports")}</p>
+          <p className="text-slate-500">{t("reports_no_reports")}</p>
         </div>
       ) : (
         <>
@@ -124,7 +124,7 @@ export default function ReportsPage({ loaderData }: Route.ComponentProps) {
               </span>
             </h2>
             {tasks.length === 0 ? (
-              <p className="text-slate-400 text-sm">{t("reports_no_tasks")}</p>
+              <p className="text-slate-500 text-sm">{t("reports_no_tasks")}</p>
             ) : (
               <ul className="space-y-3">
                 {tasks.map((task) => (
@@ -138,7 +138,7 @@ export default function ReportsPage({ loaderData }: Route.ComponentProps) {
                         {task.title}
                       </p>
                       {task.description && (
-                        <p className="text-xs text-slate-400 mt-0.5">
+                        <p className="text-xs text-slate-500 mt-0.5">
                           {task.description}
                         </p>
                       )}

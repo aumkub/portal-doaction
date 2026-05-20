@@ -183,7 +183,7 @@ export default function ReportCustomerEmailDialog({
             <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3 text-sm space-y-2 shrink-0">
               {displayTo && (
                 <div className="flex flex-col sm:flex-row sm:items-baseline gap-0.5 sm:gap-3">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-400 w-20 shrink-0">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 w-20 shrink-0">
                     {t("admin_report_email_to")}
                   </span>
                   <span className="text-slate-800">
@@ -194,7 +194,7 @@ export default function ReportCustomerEmailDialog({
               )}
               {preview?.cc && preview.cc.length > 0 && (
                 <div className="flex flex-col sm:flex-row sm:items-baseline gap-0.5 sm:gap-3">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-400 w-20 shrink-0">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 w-20 shrink-0">
                     CC
                   </span>
                   <span className="text-slate-800">
@@ -204,7 +204,7 @@ export default function ReportCustomerEmailDialog({
               )}
               {displaySubject && (
                 <div className="flex flex-col sm:flex-row sm:items-baseline gap-0.5 sm:gap-3">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-400 w-20 shrink-0">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 w-20 shrink-0">
                     {t("admin_report_email_subject")}
                   </span>
                   <span className="text-slate-800 font-medium leading-snug">{displaySubject}</span>
@@ -220,7 +220,7 @@ export default function ReportCustomerEmailDialog({
           )}
 
           {mode === "send" && loading && (
-            <div className="flex flex-col items-center justify-center py-16 text-slate-400 text-sm gap-3">
+            <div className="flex flex-col items-center justify-center py-16 text-slate-500 text-sm gap-3">
               <div className="w-8 h-8 border-2 border-slate-200 border-t-violet-600 rounded-full animate-spin" />
               {t("admin_report_email_loading_preview")}
             </div>
@@ -234,7 +234,7 @@ export default function ReportCustomerEmailDialog({
 
           {displayHtml && !(mode === "send" && loading) && (
             <div className="flex-1 min-h-[280px] flex flex-col rounded-xl border border-slate-200 overflow-hidden bg-white shadow-inner">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 px-3 py-2 bg-slate-50 border-b border-slate-100">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 px-3 py-2 bg-slate-50 border-b border-slate-100">
                 {t("admin_report_email_preview_label")}
               </p>
               <iframe

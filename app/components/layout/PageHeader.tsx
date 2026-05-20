@@ -47,12 +47,12 @@ export default function PageHeader({
                 {crumb.href ? (
                   <a
                     href={crumb.href}
-                    className="text-xs text-slate-400 hover:text-slate-600 transition-colors"
+                    className="text-xs text-slate-500 hover:text-slate-600 transition-colors"
                   >
                     {crumb.label}
                   </a>
                 ) : (
-                  <span className="text-xs text-slate-400">{crumb.label}</span>
+                  <span className="text-xs text-slate-500">{crumb.label}</span>
                 )}
               </span>
             ))}

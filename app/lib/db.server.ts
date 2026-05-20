@@ -332,7 +332,7 @@ export function createDB(d1: D1Database) {
     async listTicketsByClient(client_id: string): Promise<SupportTicket[]> {
       const result = await d1
         .prepare(
-          "SELECT * FROM support_tickets WHERE client_id = ? ORDER BY created_at DESC"
+          "SELECT * FROM support_tickets WHERE client_id = ? AND deleted_at IS NULL ORDER BY created_at DESC"
         )
         .bind(client_id)
         .all<SupportTicket>();
@@ -346,8 +346,22 @@ export function createDB(d1: D1Database) {
            FROM support_tickets st
            LEFT JOIN clients c ON c.id = st.client_id
            WHERE st.status IN ('open', 'in_progress', 'waiting')
+             AND st.deleted_at IS NULL
              AND (c.deleted_at IS NULL OR c.deleted_at = 0)
            ORDER BY st.created_at ASC`
+        )
+        .all<SupportTicket & { company_name: string }>();
+      return result.results;
+    },
+
+    async listTrashedTickets(): Promise<(SupportTicket & { company_name: string })[]> {
+      const result = await d1
+        .prepare(
+          `SELECT st.*, c.company_name
+           FROM support_tickets st
+           LEFT JOIN clients c ON c.id = st.client_id
+           WHERE st.deleted_at IS NOT NULL
+           ORDER BY st.deleted_at DESC`
         )
         .all<SupportTicket & { company_name: string }>();
       return result.results;
@@ -472,6 +486,26 @@ export function createDB(d1: D1Database) {
 
     async deleteTicketAttachment(id: string): Promise<void> {
       await d1.prepare("DELETE FROM ticket_attachments WHERE id = ?").bind(id).run();
+    },
+
+    async softDeleteTicket(id: string, deletedBy: string): Promise<void> {
+      await d1
+        .prepare("UPDATE support_tickets SET deleted_at = unixepoch(), deleted_by = ? WHERE id = ?")
+        .bind(deletedBy, id)
+        .run();
+    },
+
+    async restoreTicket(id: string): Promise<void> {
+      await d1
+        .prepare("UPDATE support_tickets SET deleted_at = NULL, deleted_by = NULL WHERE id = ?")
+        .bind(id)
+        .run();
+    },
+
+    async permanentlyDeleteTicket(id: string): Promise<void> {
+      await d1.prepare("DELETE FROM ticket_messages WHERE ticket_id = ?").bind(id).run();
+      await d1.prepare("DELETE FROM ticket_attachments WHERE ticket_id = ?").bind(id).run();
+      await d1.prepare("DELETE FROM support_tickets WHERE id = ?").bind(id).run();
     },
 
     async listAllTicketAttachments(): Promise<

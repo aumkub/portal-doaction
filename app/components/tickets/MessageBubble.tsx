@@ -239,8 +239,8 @@ export default function MessageBubble({
       <div
         className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm shadow-sm ${
           isClient
-            ? "bg-white text-slate-800 border border-slate-200"
-            : "bg-violet-600 text-white"
+            ? "bg-canvas text-ink border border-hairline"
+            : "bg-primary text-on-dark"
         }`}
       >
         {authorName ? (

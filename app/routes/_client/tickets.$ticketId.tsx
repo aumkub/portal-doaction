@@ -74,6 +74,24 @@ export async function action({ request, context, params }: any) {
   if (!ticket) throw new Response("Ticket not found", { status: 404 });
 
   const formData = await request.formData();
+  const intent = formData.get("intent");
+
+  // ── Delete ticket ──────────────────────────────────────────────
+  if (intent === "delete") {
+    if (user.role === "client") {
+      const client = await db.getClientByUserId(user.id);
+      if (!client || client.id !== ticket.client_id) {
+        throw new Response("Forbidden", { status: 403 });
+      }
+    }
+    // Only allow deletion while ticket is still open (no admin interaction yet)
+    if (ticket.status !== "open") {
+      return { errors: { message: ["ไม่สามารถลบ Ticket ที่อยู่ระหว่างดำเนินการหรือปิดแล้วได้"] } };
+    }
+    await db.softDeleteTicket(ticket.id, user.id);
+    return redirect("/tickets");
+  }
+
   const parsed = ReplySchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
     return { errors: parsed.error.flatten().fieldErrors };
@@ -258,14 +276,32 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
       <Link to="/tickets" className="text-sm text-slate-500 hover:text-slate-900 mb-4 inline-block">
         {t("back")}
       </Link>
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-medium text-slate-400">#{ticket.id}</p>
+          <p className="text-xs font-medium text-slate-500">#{ticket.id}</p>
           <h1 className="text-2xl font-semibold text-slate-900">{ticket.title}</h1>
           <p className="mt-1 text-sm text-slate-500">
             {t("ticket_created_at")} {formatDate(ticket.created_at, lang)}
           </p>
         </div>
+        {ticket.status === "open" && (
+          <Form
+            method="post"
+            onSubmit={(e) => {
+              if (!confirm("ต้องการลบ Ticket นี้ใช่หรือไม่? การลบไม่สามารถยกเลิกได้")) {
+                e.preventDefault();
+              }
+            }}
+          >
+            <input type="hidden" name="intent" value="delete" />
+            <button
+              type="submit"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-100 hover:border-red-300 transition-colors"
+            >
+              ลบ Ticket
+            </button>
+          </Form>
+        )}
       </div>
 
       <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-3">

@@ -115,6 +115,8 @@ export interface SupportTicket {
   resolved_at: number | null;
   created_at: number;
   updated_at: number;
+  deleted_at: number | null;
+  deleted_by: string | null;
 }
 
 export interface TicketMessage {

@@ -68,7 +68,7 @@ const statusConfig: Record<
   waiting: {
     label: "รอข้อมูล",
     color: "text-slate-600 bg-slate-100",
-    dotClass: "text-slate-400",
+    dotClass: "text-slate-500",
   },
   resolved: {
     label: "เสร็จสิ้น",
@@ -77,7 +77,7 @@ const statusConfig: Record<
   },
   closed: {
     label: "ปิดแล้ว",
-    color: "text-slate-400 bg-slate-100",
+    color: "text-slate-500 bg-slate-100",
     dotClass: "text-slate-500",
   },
 };
@@ -205,7 +205,7 @@ export default function TicketsPage({ loaderData, actionData }: Route.ComponentP
       <div className="space-y-3">
         {filtered.length === 0 ? (
           <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
-            <p className="text-slate-400 text-sm">ไม่มี Ticket</p>
+            <p className="text-slate-500 text-sm">ไม่มี Ticket</p>
           </div>
         ) : (
           filtered.map((ticket) => {
@@ -220,7 +220,7 @@ export default function TicketsPage({ loaderData, actionData }: Route.ComponentP
                     <p className="text-sm font-medium text-slate-700 truncate">
                       {ticket.title}
                     </p>
-                    <p className="text-xs text-slate-400 mt-1">
+                    <p className="text-xs text-slate-500 mt-1">
                       {formatRelativeTime(ticket.created_at)} ·{" "}
                       {priorityLabels[ticket.priority]}
                     </p>

@@ -389,7 +389,7 @@ export default function ReportEditor({
           <div className="space-y-2">
             <Label>{t("admin_editor_uptime_per_client")}</Label>
             {selectedClientIds.length === 0 ? (
-              <p className="text-xs text-slate-400">{t("admin_editor_uptime_select_client_first")}</p>
+              <p className="text-xs text-slate-500">{t("admin_editor_uptime_select_client_first")}</p>
             ) : (
               <div className="space-y-2">
                 {selectedClientIds.map((clientId) => {
@@ -407,7 +407,7 @@ export default function ReportEditor({
                       <div className="space-y-1">
                         <div className="flex items-center justify-between">
                           <span className="text-xs text-slate-500">{t("admin_editor_uptime_pct")}</span>
-                          {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" /> : null}
+                          {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-500" /> : null}
                         </div>
                         <Input
                           type="number"
@@ -435,7 +435,7 @@ export default function ReportEditor({
             <Label htmlFor="uptime_percent" className="flex items-center gap-2">
               {t("admin_editor_uptime_pct")}
               {uptimeFetching && (
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-500" />
               )}
             </Label>
             <Input
@@ -450,7 +450,7 @@ export default function ReportEditor({
               placeholder="99.95"
             />
             {uptimePercent === "" && !uptimeFetching && selectedClientId && (
-              <p className="text-xs text-slate-400">{t("admin_editor_uptime_hint")}</p>
+              <p className="text-xs text-slate-500">{t("admin_editor_uptime_hint")}</p>
             )}
           </div>
         )}
@@ -502,7 +502,7 @@ export default function ReportEditor({
         </div>
 
         {taskDrafts.length === 0 && (
-          <p className="text-slate-400 text-sm py-4 text-center">
+          <p className="text-slate-500 text-sm py-4 text-center">
             {t("admin_editor_tasks_empty")}
           </p>
         )}

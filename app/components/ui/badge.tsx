@@ -5,19 +5,38 @@ import { Slot } from "radix-ui"
 import { cn } from "~/lib/utils"
 
 const badgeVariants = cva(
-  "inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border border-transparent px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3",
+  // Base: pill, caption-bold (13px/600), consistent padding
+  "inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border border-transparent px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap transition-[color,box-shadow] focus-visible:ring-[3px] focus-visible:ring-ring/40 [&>svg]:pointer-events-none [&>svg]:size-3",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground [a&]:hover:bg-primary/90",
-        secondary:
-          "bg-secondary text-secondary-foreground [a&]:hover:bg-secondary/90",
+        // Dark navy — primary status
+        default:
+          "bg-primary text-primary-foreground",
+        // Soft yellow tag chip — feature highlights
+        yellow:
+          "bg-yellow-light text-yellow-dark",
+        // Promo / brand yellow — announcements
+        promo:
+          "bg-brand-yellow text-primary",
+        // Lavender — AI / featured / blue tags
+        purple:
+          "bg-surface-pricing-featured text-brand-blue",
+        // Coral tag
+        coral:
+          "bg-coral-light text-coral-dark",
+        // Success / confirmation
+        success:
+          "bg-success-accent text-white",
+        // Error / destructive
         destructive:
-          "bg-destructive text-white focus-visible:ring-destructive/20 dark:bg-destructive/60 dark:focus-visible:ring-destructive/40 [a&]:hover:bg-destructive/90",
+          "bg-brand-red text-brand-red-dark border border-brand-red-dark/20",
+        // Neutral outline
         outline:
-          "border-border text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
-        ghost: "[a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
-        link: "text-primary underline-offset-4 [a&]:hover:underline",
+          "border-hairline text-ink",
+        // Quiet surface
+        secondary:
+          "bg-surface text-muted-foreground",
       },
     },
     defaultVariants: {
