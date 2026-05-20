@@ -372,7 +372,7 @@ export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
                           <EmailStatusCell report={report} notified={notified} isPublished={isPublished} t={t} lang={lang} formatRelativeTime={formatRelativeTime} formatDate={formatDate} />
                         </td>
                         <td className="px-5 py-3.5">
-                          <ActionButtons report={report} notified={notified} isPublished={isPublished} isCoAdmin={isCoAdmin} t={t} onDialog={setEmailDialog} />
+                          <ActionButtons report={report} notified={notified} isPublished={isPublished} isCoAdmin={isCoAdmin} t={t} onDialog={setEmailDialog} telegramSending={telegramSending} onTelegram={sendTelegram} />
                         </td>
                       </tr>
                     );
@@ -411,7 +411,7 @@ export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
 
                     {/* Actions */}
                     <div className="flex flex-wrap gap-1.5">
-                      <ActionButtons report={report} notified={notified} isPublished={isPublished} isCoAdmin={isCoAdmin} t={t} onDialog={setEmailDialog} />
+                      <ActionButtons report={report} notified={notified} isPublished={isPublished} isCoAdmin={isCoAdmin} t={t} onDialog={setEmailDialog} telegramSending={telegramSending} onTelegram={sendTelegram} />
                     </div>
                   </div>
                 );
