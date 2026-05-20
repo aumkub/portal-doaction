@@ -18,7 +18,7 @@ import type { SupportTicket, TicketAttachment, TicketMessage, User } from "~/typ
 import StatusBadge from "~/components/tickets/StatusBadge";
 import PriorityBadge from "~/components/tickets/PriorityBadge";
 import MessageBubble from "~/components/tickets/MessageBubble";
-import { FaPaperclip } from "react-icons/fa6";
+import { FaPaperclip, FaCircleCheck, FaCircleXmark, FaXmark } from "react-icons/fa6";
 
 const ReplySchema = z.object({
   message: z.string().min(1, "กรุณาพิมพ์ข้อความ"),
@@ -75,6 +75,22 @@ export async function action({ request, context, params }: any) {
 
   const formData = await request.formData();
   const intent = formData.get("intent");
+
+  // ── Status change ─────────────────────────────────────────────
+  if (intent === "status") {
+    const client = await db.getClientByUserId(user.id);
+    if (!client || client.id !== ticket.client_id) {
+      throw new Response("Forbidden", { status: 403 });
+    }
+    const status = formData.get("status") as string;
+    if (status === "resolved" || status === "closed" || status === "in_progress") {
+      const updateData: any = { status };
+      if (status === "resolved") updateData.resolved_at = Math.floor(Date.now() / 1000);
+      if (status === "in_progress") updateData.resolved_at = null;
+      await db.updateTicket(ticket.id, updateData);
+    }
+    return redirect(`/tickets/${ticket.id}`);
+  }
 
   // ── Delete ticket ──────────────────────────────────────────────
   if (intent === "delete") {
@@ -324,6 +340,77 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
           </p>
         </div>
       </div>
+
+      {ticket.status === "resolved" ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+          <div className="flex items-start gap-3">
+            <FaCircleCheck className="text-emerald-500 text-lg mt-0.5 shrink-0" aria-hidden="true" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-emerald-900">ทีมงานแจ้งว่าได้แก้ปัญหาเรียบร้อยแล้ว</p>
+              <p className="text-xs text-emerald-700 mt-0.5">กรุณายืนยันว่าปัญหาได้รับการแก้ไขแล้ว หรือแจ้งว่ายังไม่เรียบร้อย</p>
+              <div className="flex flex-wrap gap-2 mt-3">
+                <Form method="post">
+                  <input type="hidden" name="intent" value="status" />
+                  <input type="hidden" name="status" value="closed" />
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors disabled:opacity-60"
+                  >
+                    <FaCircleCheck className="text-[10px]" />
+                    ยืนยัน แก้ปัญหาแล้ว
+                  </button>
+                </Form>
+                <Form method="post">
+                  <input type="hidden" name="intent" value="status" />
+                  <input type="hidden" name="status" value="in_progress" />
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-white px-4 py-2 text-xs font-medium text-emerald-800 hover:bg-emerald-50 transition-colors disabled:opacity-60"
+                  >
+                    <FaCircleXmark className="text-[10px]" />
+                    ยังไม่เรียบร้อย
+                  </button>
+                </Form>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : ["open", "in_progress", "waiting"].includes(ticket.status) ? (
+        <div className="rounded-xl border border-slate-200 bg-white p-4 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-slate-700">ต้องการปิด Ticket นี้?</p>
+            <p className="text-xs text-slate-500 mt-0.5">ใช้เมื่อปัญหาได้รับการแก้ไขแล้ว หรือไม่ต้องการความช่วยเหลือเพิ่มเติม</p>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <Form method="post">
+              <input type="hidden" name="intent" value="status" />
+              <input type="hidden" name="status" value="resolved" />
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 hover:bg-emerald-100 transition-colors disabled:opacity-60"
+              >
+                <FaCircleCheck className="text-[10px]" />
+                {t("status_resolved")}
+              </button>
+            </Form>
+            <Form method="post">
+              <input type="hidden" name="intent" value="status" />
+              <input type="hidden" name="status" value="closed" />
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-60"
+              >
+                <FaXmark className="text-[10px]" />
+                {t("status_closed_short")}
+              </button>
+            </Form>
+          </div>
+        </div>
+      ) : null}
 
       <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
         <MessageBubble message={ticket.description} isClient={true} isInternal={false} alignRight={true} />

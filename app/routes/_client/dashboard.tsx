@@ -180,32 +180,39 @@ export default function DashboardPage({ loaderData }: Route.ComponentProps) {
             <p className="px-5 py-10 text-center text-sm text-slate-500">{t("dash_no_activity")}</p>
           ) : (
             <ul className="divide-y divide-slate-100">
-              {activity.map((item) => (
-                <li key={item.id} className="flex items-center gap-3 px-5 py-3.5">
-                  <span className="shrink-0">
-                    {item.iconKind === "resolved" ? (
-                      <FaCircleCheck className="text-emerald-500 text-base" aria-hidden="true" />
-                    ) : item.iconKind === "in_progress" ? (
-                      <FaRotateRight className="text-blue-500 text-base" aria-hidden="true" />
-                    ) : (
-                      <Ticket className="w-4 h-4 text-violet-500" aria-hidden="true" />
-                    )}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-slate-700 truncate">{item.title}</p>
-                  </div>
-                  <span className={`shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full ${
-                    item.type === "task"
-                      ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-                      : "bg-violet-50 text-violet-700 ring-1 ring-violet-200"
-                  }`}>
-                    {item.type === "task" ? "งาน" : "Ticket"}
-                  </span>
-                  <span className="text-xs text-slate-500 whitespace-nowrap shrink-0 ml-1">
-                    {fmt(item.time)}
-                  </span>
-                </li>
-              ))}
+              {activity.map((item) => {
+                const href = item.type === "ticket"
+                  ? `/tickets/${item.id}`
+                  : latestReportId ? `/reports/${latestReportId}` : "/reports";
+                return (
+                  <li key={item.id}>
+                    <a href={href} className="flex items-center gap-3 px-5 py-3.5 hover:bg-slate-50 transition-colors">
+                      <span className="shrink-0">
+                        {item.iconKind === "resolved" ? (
+                          <FaCircleCheck className="text-emerald-500 text-base" aria-hidden="true" />
+                        ) : item.iconKind === "in_progress" ? (
+                          <FaRotateRight className="text-blue-500 text-base" aria-hidden="true" />
+                        ) : (
+                          <Ticket className="w-4 h-4 text-violet-500" aria-hidden="true" />
+                        )}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-slate-700 truncate">{item.title}</p>
+                      </div>
+                      <span className={`shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full ${
+                        item.type === "task"
+                          ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                          : "bg-violet-50 text-violet-700 ring-1 ring-violet-200"
+                      }`}>
+                        {item.type === "task" ? "งาน" : "Ticket"}
+                      </span>
+                      <span className="text-xs text-slate-500 whitespace-nowrap shrink-0 ml-1">
+                        {fmt(item.time)}
+                      </span>
+                    </a>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

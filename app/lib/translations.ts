@@ -47,7 +47,7 @@ const th = {
   status_open: "เปิด",
   status_in_progress: "กำลังดำเนิน",
   status_waiting: "รอข้อมูล",
-  status_resolved: "เสร็จสิ้น",
+  status_resolved: "แก้ปัญหาแล้ว",
   status_closed: "ปิด",
 
   // ─── Ticket priority ──────────────────────────────────
@@ -91,7 +91,7 @@ const th = {
   tickets_filter_all: "ทั้งหมด",
   tickets_filter_open: "เปิด",
   tickets_filter_in_progress: "กำลังดำเนิน",
-  tickets_filter_resolved: "เสร็จสิ้น",
+  tickets_filter_resolved: "แก้ปัญหาแล้ว",
   tickets_empty: "ไม่พบรายการแจ้งปัญหา",
 
   // ─── New Ticket ───────────────────────────────────────
@@ -376,7 +376,7 @@ const th = {
   admin_editor_publish: "เผยแพร่รายงาน",
   admin_editor_send_email_on_publish: "ส่งอีเมลแจ้งลูกค้าทันที",
   admin_editor_send_email_hint: "จะส่งอีเมลพร้อมลิ้งก์รายงานไปยังอีเมลของลูกค้าโดยอัตโนมัติ",
-  status_closed_short: "ปิดแล้ว",
+  status_closed_short: "ปิด",
 };
 
 const en: Record<keyof typeof th, string> = {
