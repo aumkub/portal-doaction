@@ -90,7 +90,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 const inputCls =
-  "w-full h-11 rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400 transition";
+  "w-full h-11 rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-violet-400 focus:ring-brand-blue/30 focus:border-brand-blue transition"
 
 export default function LoginPage() {
   const actionData = useActionData<typeof action>();
@@ -138,23 +138,15 @@ export default function LoginPage() {
     <div className="w-full max-w-sm">
       <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
         {/* Top accent */}
-        <div className="h-1 w-full bg-linear-to-r from-violet-500 via-purple-500 to-indigo-500" />
+        <div className="h-1 w-full bg-linear-to-r bg-[#FFD130]" />
 
         <div className="px-8 pt-8 pb-8">
           {/* Logo */}
           <div className="relative mb-8 text-center isolate">
-            <div
-              aria-hidden
-              className="pointer-events-none absolute inset-x-10 -inset-y-3 rounded-3xl bg-linear-to-r from-violet-100/60 via-indigo-100/50 to-cyan-100/50 blur-2xl animate-pulse"
-            />
-            <div
-              aria-hidden
-              className="pointer-events-none absolute left-1/2 top-1/2 h-24 w-24 -translate-x-1/2 -translate-y-1/2 rounded-full border border-violet-200/60 animate-[spin_16s_linear_infinite]"
-            />
-            <div className="relative inline-flex rounded-2xl bg-white/85 px-4 py-2 shadow-sm ring-1 ring-slate-100">
+            <div className="relative inline-flex">
               <img src="/logo-dark.svg" alt="do action" className="h-16 mx-auto" />
             </div>
-            <p className="mt-2 text-[10px] font-bold tracking-[0.2em] text-slate-400 uppercase">
+            <p className="text-[10px] font-bold tracking-[0.2em] text-slate-400 uppercase">
               Client Portal
             </p>
           </div>

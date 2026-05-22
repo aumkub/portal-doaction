@@ -1,5 +1,5 @@
 import { Form, redirect, useNavigation } from "react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { z } from "zod";
 import { requireCoAdminOrAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
@@ -10,17 +10,12 @@ import {
   sendTicketEmailToClient,
 } from "~/lib/ticket-email.server";
 import { parseClientCcEmails } from "~/lib/client-cc";
-import {
-  isAllowedAttachment,
-  isAttachmentTooLarge,
-  prepareAttachmentForUpload,
-  cleanupOrphanAttachment,
-  uploadAttachment,
-} from "~/lib/file-upload.client";
+import { useTicketAttachments } from "~/hooks/use-ticket-attachments";
 import type { SupportTicket, TicketAttachment, TicketMessage, User, Client } from "~/types";
 import StatusBadge from "~/components/tickets/StatusBadge";
 import PriorityBadge from "~/components/tickets/PriorityBadge";
 import MessageBubble from "~/components/tickets/MessageBubble";
+import { TicketReplyDropZone } from "~/components/tickets/TicketReplyDropZone";
 import { useT } from "~/lib/i18n";
 import type { TranslationKey } from "~/lib/translations";
 import { FaPaperclip, FaArrowLeft, FaX, FaTrash } from "react-icons/fa6";
@@ -209,12 +204,19 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
   const isSubmitting = navigation.state !== "idle";
   const formRef = useRef<HTMLFormElement | null>(null);
   const isSubmittingReplyRef = useRef(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadError, setUploadError] = useState("");
-  const [uploadedFiles, setUploadedFiles] = useState<
-    Array<{ fileKey: string; fileName: string; mimeType: string; sizeBytes: number; url: string }>
-  >([]);
+  const {
+    uploading,
+    uploadProgress,
+    uploadError,
+    uploadedFiles,
+    attachmentsJson,
+    onFileInputChange,
+    onPaste,
+    removeFile,
+    markSubmitSuccess,
+    isDragging,
+    dropZoneProps,
+  } = useTicketAttachments({ ticketId: ticket.id });
 
   const attachmentsByMessage = attachments.reduce<Record<string, TicketAttachment[]>>((acc, a) => {
     (acc[a.message_id] ||= []).push(a);
@@ -225,40 +227,9 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
     if (navigation.state !== "idle" || !isSubmittingReplyRef.current) return;
     if (errors?.message) { isSubmittingReplyRef.current = false; return; }
     formRef.current?.reset();
-    setUploadedFiles([]);
-    setUploadError("");
+    markSubmitSuccess();
     isSubmittingReplyRef.current = false;
-  }, [navigation.state, errors?.message]);
-
-  useEffect(() => {
-    const cleanup = () => {
-      if (isSubmittingReplyRef.current || uploadedFiles.length === 0) return;
-      for (const f of uploadedFiles) void cleanupOrphanAttachment({ ticketId: ticket.id, fileKey: f.fileKey });
-    };
-    window.addEventListener("beforeunload", cleanup);
-    return () => { window.removeEventListener("beforeunload", cleanup); cleanup(); };
-  }, [ticket.id, uploadedFiles]);
-
-  async function onAttachmentSelect(fileList: FileList | null) {
-    if (!fileList || fileList.length === 0) return;
-    setUploadError("");
-    setUploading(true);
-    setUploadProgress(0);
-    try {
-      for (const rawFile of Array.from(fileList)) {
-        if (!isAllowedAttachment(rawFile)) throw new Error("PDF, image, and video only");
-        const prepared = await prepareAttachmentForUpload(rawFile);
-        if (isAttachmentTooLarge(prepared)) throw new Error("Max file size is 2MB");
-        const uploaded = await uploadAttachment({ ticketId: ticket.id, file: prepared, onProgress: (p) => setUploadProgress(p) });
-        setUploadedFiles((prev) => [...prev, uploaded]);
-      }
-    } catch (err) {
-      setUploadError(err instanceof Error ? err.message : "Upload failed");
-    } finally {
-      setUploading(false);
-      setUploadProgress(0);
-    }
-  }
+  }, [navigation.state, errors?.message, markSubmitSuccess]);
 
   return (
     <div className="max-w-4xl space-y-5">
@@ -281,7 +252,7 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
                   </a>
                 )}
               </div>
-              <h1 className="text-xl font-semibold text-slate-900 leading-snug">{ticket.title}</h1>
+              <h1 className="text-xl font-semibold text-slate-900 leading-snug word-break-all">{ticket.title}</h1>
               <div className="flex items-center gap-2 flex-wrap">
                 <StatusBadge status={ticket.status} />
                 <PriorityBadge priority={ticket.priority} />
@@ -360,13 +331,20 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
         <div className="px-5 py-4 border-b border-slate-100">
           <p className="text-sm font-semibold text-slate-900">{t("admin_ticket_reply_label")}</p>
         </div>
+        <TicketReplyDropZone
+          isDragging={isDragging}
+          dropHandlers={dropZoneProps}
+          dropLabel={t("ticket_drop_files")}
+          className={isDragging ? "ring-2 ring-violet-400/50 ring-offset-2 rounded-lg -m-1 p-1" : ""}
+        >
         <Form ref={formRef} method="post" className="p-5 space-y-4">
           <input type="hidden" name="intent" value="reply" />
-          <input type="hidden" name="attachments_json" value={JSON.stringify(uploadedFiles)} />
+          <input type="hidden" name="attachments_json" value={attachmentsJson} />
 
           <textarea
             name="message"
             rows={4}
+            onPaste={onPaste}
             className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400 transition resize-none"
             placeholder={t("admin_ticket_ph_reply")}
           />
@@ -381,11 +359,11 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
                 type="file"
                 accept="application/pdf,image/*,video/*"
                 multiple
-                onChange={(e) => void onAttachmentSelect(e.target.files)}
+                onChange={(e) => onFileInputChange(e.target.files)}
                 className="sr-only"
               />
             </label>
-            <p className="text-[11px] text-slate-500">PDF / Image / Video — max 2 MB each</p>
+            <p className="text-[11px] text-slate-500">{t("admin_ticket_attach_hint")}</p>
 
             {uploading && (
               <div className="space-y-1.5">
@@ -406,10 +384,7 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
                     </span>
                     <button
                       type="button"
-                      onClick={() => {
-                        setUploadedFiles((prev) => prev.filter((item) => item.fileKey !== f.fileKey));
-                        void cleanupOrphanAttachment({ ticketId: ticket.id, fileKey: f.fileKey });
-                      }}
+                      onClick={() => removeFile(f.fileKey)}
                       className="shrink-0 p-1 rounded text-slate-500 hover:text-rose-500 hover:bg-rose-50 transition-colors"
                       aria-label="Remove"
                     >
@@ -442,6 +417,7 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
             </button>
           </div>
         </Form>
+        </TicketReplyDropZone>
       </div>
     </div>
   );

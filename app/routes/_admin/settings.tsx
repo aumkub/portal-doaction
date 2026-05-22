@@ -4,6 +4,7 @@ import { requireAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { useT } from "~/lib/i18n";
 import { sendTelegramNotification } from "~/lib/telegram.server";
+import { NativeSelect } from "~/components/ui/native-select";
 import {
   FaCircleCheck,
   FaPaperPlane,
@@ -400,15 +401,11 @@ export default function AdminSettingsPage({ loaderData, actionData }: any) {
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-slate-600">{t("admin_ticket_reminder_hour")}</label>
-              <select
-                name="hour"
-                defaultValue={ticketReminderHour}
-                className={fieldCls("bg-white")}
-              >
+              <NativeSelect name="hour" defaultValue={ticketReminderHour} className="bg-white">
                 {Array.from({ length: 24 }, (_, i) => (
                   <option key={i} value={i}>{String(i).padStart(2, "0")}:00</option>
                 ))}
-              </select>
+              </NativeSelect>
             </div>
           </div>
           <div className="flex justify-end">

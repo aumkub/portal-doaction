@@ -7,7 +7,7 @@ import { formatRelativeTime } from "~/lib/utils";
 import type { Client } from "~/types";
 import { useT } from "~/lib/i18n";
 import type { TranslationKey } from "~/lib/translations";
-import { FaCirclePlus, FaEye, FaUserSecret, FaMagnifyingGlass, FaUsers, FaCircleCheck, FaClock } from "react-icons/fa6";
+import { FaCirclePlus, FaEye, FaUserSecret, FaMagnifyingGlass, FaUsers, FaCircleCheck, FaClock, FaCloud } from "react-icons/fa6";
 
 export function meta() {
   return [{ title: "จัดการลูกค้า — Admin" }];
@@ -69,6 +69,26 @@ function avatarColor(name: string) {
   let hash = 0;
   for (const c of name) hash = (hash * 31 + c.charCodeAt(0)) & 0xffff;
   return colors[hash % colors.length];
+}
+
+function BackupConnectedIcon({
+  path,
+  t,
+}: {
+  path: string | null | undefined;
+  t: (key: TranslationKey) => string;
+}) {
+  if (!path?.trim()) {
+    return <span className="text-slate-300 text-xs" aria-hidden="true">—</span>;
+  }
+  return (
+    <span
+      className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200"
+      title={t("admin_col_backup_linked").replace("{path}", path)}
+    >
+      <FaCloud className="text-xs" aria-label={t("admin_col_backup_linked").replace("{path}", path)} />
+    </span>
+  );
 }
 
 function ClientActions({
@@ -229,7 +249,7 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
           <>
             {/* Desktop table — lg+ */}
             <div className="hidden lg:block overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm md:min-w-[1024px]">
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/60">
                     <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">{t("admin_col_client")}</th>
@@ -237,6 +257,12 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
                     <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">{t("admin_col_package")}</th>
                     <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">{t("admin_col_contract")}</th>
                     <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">{t("admin_col_login_status")}</th>
+                    {!isCoAdmin && (
+                      <th className="text-center text-xs font-medium text-slate-500 px-3 py-3 w-14" title={t("admin_col_backup")}>
+                        <FaCloud className="inline text-slate-400 text-[10px]" aria-hidden="true" />
+                        <span className="sr-only">{t("admin_col_backup")}</span>
+                      </th>
+                    )}
                     <th className="px-5 py-3" />
                   </tr>
                 </thead>
@@ -279,11 +305,16 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
                               <p className="text-[11px] text-slate-500 mt-1">{formatRelativeTime(client.first_login_at, lang)}</p>
                             </div>
                           ) : (
-                            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 ring-1 ring-amber-200">
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 ring-1 ring-amber-200 whitespace-nowrap">
                               <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />{t("admin_login_status_pending")}
                             </span>
                           )}
                         </td>
+                        {!isCoAdmin && (
+                          <td className="px-3 py-3.5 text-center">
+                            <BackupConnectedIcon path={client.backup_path} t={t} />
+                          </td>
+                        )}
                         <td className="px-5 py-3.5">
                           <ClientActions client={client} isCoAdmin={isCoAdmin} t={t} confirmMsg={`${t("admin_impersonate_confirm")} ${client.company_name}?`} />
                         </td>
@@ -329,12 +360,15 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
                           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />{t("admin_login_status_activated")}
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 ring-1 ring-amber-200">
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 ring-1 ring-amber-200 whitespace-nowrap">
                           <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />{t("admin_login_status_pending")}
                         </span>
                       )}
                       {client.contract_end && (
                         <span className="text-xs text-slate-500">{t("admin_col_contract")}: {client.contract_end}</span>
+                      )}
+                      {!isCoAdmin && (
+                        <BackupConnectedIcon path={client.backup_path} t={t} />
                       )}
                     </div>
 

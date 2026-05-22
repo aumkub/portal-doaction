@@ -5,6 +5,7 @@ import { getMonthName } from "~/lib/utils";
 import { useT } from "~/lib/i18n";
 import type { MonthlyReport, ReportTask } from "~/types";
 import { FaFileLines, FaCircleCheck } from "react-icons/fa6";
+import { NativeSelect } from "~/components/ui/native-select";
 
 export function meta() {
   return [{ title: "Monthly Reports — do action portal" }];
@@ -61,22 +62,22 @@ export default function ReportsPage({ loaderData }: Route.ComponentProps) {
 
         {reports.length > 0 && (
           <form>
-            <select
+            <NativeSelect
               name="report"
               defaultValue={selectedReport?.id ?? ""}
+              wrapperClassName="w-auto inline-block"
               onChange={(e) => {
                 const url = new URL(window.location.href);
                 url.searchParams.set("report", e.target.value);
                 window.location.href = url.toString();
               }}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
             >
               {reports.map((r) => (
                 <option key={r.id} value={r.id}>
                   {getMonthName(r.month, lang)} {yearDisplay(r.year)}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </form>
         )}
       </div>

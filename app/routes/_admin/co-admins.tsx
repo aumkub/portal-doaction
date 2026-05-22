@@ -6,6 +6,7 @@ import { createDB } from "~/lib/db.server";
 import { generateId } from "~/lib/utils";
 import { useT } from "~/lib/i18n";
 import { sendTelegramNotification, sendTelegramNotificationToGroup } from "~/lib/telegram.server";
+import { NativeSelect } from "~/components/ui/native-select";
 import {
   FaCirclePlus,
   FaTrash,
@@ -415,16 +416,17 @@ export default function CoAdminsPage({ loaderData, actionData }: Route.Component
                     <Form method="post" className="flex flex-col sm:flex-row gap-2">
                       <input type="hidden" name="intent" value="assign" />
                       <input type="hidden" name="co_admin_id" value={coAdmin.id} />
-                      <select
+                      <NativeSelect
                         name="client_id"
                         required
-                        className="h-9 text-xs border border-slate-200 rounded-lg px-3 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 transition flex-1 min-w-0"
+                        size="sm"
+                        wrapperClassName="flex-1 min-w-0"
                       >
                         <option value="">เลือกลูกค้าที่จะเพิ่ม...</option>
                         {unassignedClients.map((c) => (
                           <option key={c.id} value={c.id}>{c.company_name}</option>
                         ))}
-                      </select>
+                      </NativeSelect>
                       <Input
                         type="text"
                         name="telegram_group_id"

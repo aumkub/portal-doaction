@@ -45,6 +45,8 @@ export interface Client {
   contract_start: string | null;
   contract_end: string | null;
   notes: string | null;
+  /** Folder name on backup server (admin maps per client) */
+  backup_path: string | null;
   deleted_at?: number | null;
   created_at: number;
 }

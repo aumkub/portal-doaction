@@ -8,6 +8,7 @@ import ReportStats from "~/components/reports/ReportStats";
 import TaskList from "~/components/reports/TaskList";
 import type { MonthlyReport, ReportTask } from "~/types";
 import { FaFileLines } from "react-icons/fa6";
+import { NativeSelect } from "~/components/ui/native-select";
 
 export function meta({ data }: Route.MetaArgs) {
   const report = (data as { report: MonthlyReport } | null)?.report;
@@ -65,17 +66,18 @@ export default function ReportDetailPage({ loaderData }: Route.ComponentProps) {
           <div className="flex items-center gap-2 shrink-0">
             {/* Month switcher */}
             {published.length > 1 && (
-              <select
+              <NativeSelect
                 defaultValue={report.id}
+                wrapperClassName="w-auto inline-block"
                 onChange={(e) => { window.location.href = `/reports/${e.target.value}`; }}
-                className="rounded-lg border border-slate-200 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-violet-400 transition"
+                className="focus:ring-violet-400/30 focus:border-violet-400"
               >
                 {published.map((r) => (
                   <option key={r.id} value={r.id}>
                     {getThaiMonth(r.month)} {yearDisplay(r.year)}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             )}
             <button
               type="button"

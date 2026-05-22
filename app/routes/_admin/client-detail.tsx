@@ -2,6 +2,7 @@ import { Form, redirect, useActionData, type FormEvent } from "react-router";
 import { z } from "zod";
 import { useState, type FormEvent as ReactFormEvent } from "react";
 import { requireCoAdminOrAdmin, startImpersonation, generateMagicToken } from "~/lib/auth.server";
+import { getBackupList } from "~/lib/backup.server";
 import { createDB } from "~/lib/db.server";
 import { generateId } from "~/lib/utils";
 import { useT } from "~/lib/i18n";
@@ -9,6 +10,7 @@ import { sendTelegramNotificationForClient } from "~/lib/telegram.server";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Button } from "~/components/ui/button";
+import { NativeSelect } from "~/components/ui/native-select";
 import {
   FaTrash,
   FaArrowLeft,
@@ -19,6 +21,7 @@ import {
   FaUserSecret,
   FaPaperPlane,
   FaCircleCheck,
+  FaDatabase,
 } from "react-icons/fa6";
 import {
   normalizeClientCcEmailsInput,
@@ -67,7 +70,28 @@ export async function loader({ request, params, context }: any) {
     db.listCustomerNotes(client.id),
   ]);
 
-  return { client, user, reportsCount: reports.length, ticketsCount: tickets.length, notes, currentUser, canImpersonate };
+  let backupSites: string[] = [];
+  const backupPathUsage: Record<string, string> = {};
+  if (currentUser.role === "admin") {
+    const allClients = await db.listClients();
+    for (const c of allClients) {
+      if (c.backup_path) backupPathUsage[c.backup_path] = c.company_name;
+    }
+    const backup = await getBackupList(env, env.SESSIONPORTAL);
+    if (backup.ok) backupSites = backup.entries.map((e) => e.name);
+  }
+
+  return {
+    client,
+    user,
+    reportsCount: reports.length,
+    ticketsCount: tickets.length,
+    notes,
+    currentUser,
+    canImpersonate,
+    backupSites,
+    backupPathUsage,
+  };
 }
 
 export async function action({ request, params, context }: any) {
@@ -218,6 +242,15 @@ export async function action({ request, params, context }: any) {
     return { success: { note_added: true } };
   }
 
+  if (intent === "update_backup_path") {
+    if (currentUser.role !== "admin") {
+      throw new Response("Forbidden", { status: 403 });
+    }
+    const backup_path = String(formData.get("backup_path") ?? "").trim() || null;
+    await db.updateClient(client.id, { backup_path });
+    return { success: { backup_path_updated: true } };
+  }
+
   if (intent === "delete_note") {
     const noteId = String(formData.get("note_id") ?? "");
     const note = await db.getCustomerNoteById(noteId);
@@ -245,7 +278,8 @@ type ActionData = {
     | { magic_link: true; email: string }
     | { email_changed: true; email: string }
     | { note_added: true }
-    | { note_deleted: true };
+    | { note_deleted: true }
+    | { backup_path_updated: true };
 };
 
 const packageStyles: Record<string, { badge: string; dot: string; label: string }> = {
@@ -288,10 +322,23 @@ function SectionCard({ title, subtitle, children, action }: {
 }
 
 export default function AdminClientDetailPage({ loaderData }: any) {
-  const { client, user, reportsCount, ticketsCount, notes, currentUser, canImpersonate } = loaderData;
+  const {
+    client,
+    user,
+    reportsCount,
+    ticketsCount,
+    notes,
+    currentUser,
+    canImpersonate,
+    backupSites = [],
+    backupPathUsage = {},
+  } = loaderData;
   const { t } = useT();
   const actionData = useActionData() as ActionData | undefined;
   const isViewOnly = currentUser.role === "co-admin";
+  const isAdmin = currentUser.role === "admin";
+  const backupPathUpdated =
+    actionData?.success && "backup_path_updated" in actionData.success;
 
   const v = actionData?.values ?? {
     name: user?.name ?? "",
@@ -452,12 +499,12 @@ export default function AdminClientDetailPage({ loaderData }: any) {
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="package">{t("settings_package_label")}</Label>
-                  <select id="package" name="package" defaultValue={v.package} disabled={isViewOnly}
-                    className={`w-full h-10 rounded-lg border border-slate-200 px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 transition ${isViewOnly ? "bg-slate-50 text-slate-500" : ""}`}>
+                  <NativeSelect id="package" name="package" defaultValue={v.package} disabled={isViewOnly}
+                    className={isViewOnly ? "bg-slate-50 text-slate-500" : ""}>
                     <option value="basic">{t("admin_pkg_basic")}</option>
                     <option value="standard">{t("admin_pkg_standard")}</option>
                     <option value="premium">{t("admin_pkg_premium")}</option>
-                  </select>
+                  </NativeSelect>
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="contract_start">{t("admin_client_new_contract_start")}</Label>
@@ -484,6 +531,54 @@ export default function AdminClientDetailPage({ loaderData }: any) {
               </div>
             </SectionCard>
           </Form>
+
+          {/* Backup folder mapping — admin only */}
+          {isAdmin && (
+            <SectionCard
+              title={t("admin_client_backup_title")}
+              subtitle={t("admin_client_backup_subtitle")}
+            >
+              {backupPathUpdated && (
+                <p className="flex items-center gap-2 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 mb-4">
+                  <FaCircleCheck />
+                  {t("admin_client_backup_saved")}
+                </p>
+              )}
+              <Form method="post" className="space-y-3">
+                <input type="hidden" name="intent" value="update_backup_path" />
+                <div className="space-y-1.5">
+                  <Label htmlFor="backup_path">{t("admin_client_backup_folder")}</Label>
+                  <NativeSelect
+                    id="backup_path"
+                    name="backup_path"
+                    defaultValue={client.backup_path ?? ""}
+                  >
+                    <option value="">{t("admin_client_backup_none")}</option>
+                    {backupSites.map((site) => {
+                      const usedBy = backupPathUsage[site];
+                      const isOther = usedBy && usedBy !== client.company_name;
+                      return (
+                        <option key={site} value={site} disabled={!!isOther}>
+                          {site}
+                          {isOther ? ` (${t("admin_client_backup_used_by").replace("{name}", usedBy)})` : ""}
+                        </option>
+                      );
+                    })}
+                  </NativeSelect>
+                  <p className="text-xs text-slate-500">{t("admin_client_backup_hint")}</p>
+                </div>
+                <Button type="submit" className="bg-slate-900 hover:bg-slate-700 text-white text-xs">
+                  <FaDatabase className="text-[10px]" />
+                  {t("admin_client_backup_save")}
+                </Button>
+              </Form>
+              {client.backup_path && (
+                <p className="mt-3 text-xs text-violet-700 bg-violet-50 border border-violet-100 rounded-lg px-3 py-2">
+                  {t("admin_client_backup_linked").replace("{path}", client.backup_path)}
+                </p>
+              )}
+            </SectionCard>
+          )}
 
           {/* Account access */}
           {!isViewOnly && (

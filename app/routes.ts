@@ -62,6 +62,7 @@ export default [
   route("api/impersonation/start", "routes/api/impersonation-start.ts"),
   route("api/impersonation/stop", "routes/api/impersonation-stop.ts"),
   route("api/uptime", "routes/api/uptime.ts"),
+  route("api/admin/backup-refresh", "routes/api/admin-backup-refresh.ts"),
   route("api/attachments-upload", "routes/api/attachments-upload.ts"),
   route("api/attachments/:key", "routes/api/attachments.$key.ts"),
 ] satisfies RouteConfig;

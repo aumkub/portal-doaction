@@ -20,7 +20,10 @@
   "vars": {
     "VALUE_FROM_CLOUDFLARE": "Hello from Cloudflare",
     "APP_URL": "https://portal.doaction.co.th",
-    "SESSION_SECRET": "y8N4vQ2mK7pLx3Rz9tW6cJ1hF5uD0sBa"
+    "SESSION_SECRET": "y8N4vQ2mK7pLx3Rz9tW6cJ1hF5uD0sBa",
+    "WEBDAV_HOST": "cloud.aumwp.com",
+    "WEBDAV_USER": "aum",
+    "WEBDAV_PATH": "/home/Backup"
   },
   "d1_databases": [
     {

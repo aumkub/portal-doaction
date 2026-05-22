@@ -8,6 +8,7 @@ import { PlusCircle, Trash2, GripVertical, Loader2 } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
+import { NativeSelect } from "~/components/ui/native-select";
 import { Textarea } from "~/components/ui/textarea";
 import {
   Select,
@@ -299,13 +300,12 @@ export default function ReportEditor({
           ) : (
             <div className="space-y-1.5">
               <Label htmlFor="client_id">{t("admin_col_client")}</Label>
-              <select
+              <NativeSelect
                 id="client_id"
                 name="client_id"
                 value={selectedClientId}
                 onChange={(e) => handleClientChange(e.target.value)}
                 required
-                className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
               >
                 <option value="" disabled>
                   {t("admin_editor_select_client")}
@@ -315,7 +315,7 @@ export default function ReportEditor({
                     {c.company_name}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
               {errors?.client_id && (
                 <p className="text-red-500 text-xs">{errors.client_id[0]}</p>
               )}
@@ -340,20 +340,19 @@ export default function ReportEditor({
           {/* Month */}
           <div className="space-y-1.5">
             <Label htmlFor="month">{t("admin_editor_month")}</Label>
-            <select
+            <NativeSelect
               id="month"
               name="month"
               value={month}
               onChange={(e) => handleMonthChange(Number(e.target.value))}
               required
-              className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
             >
               {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
                 <option key={m} value={m}>
                   {getMonthName(m, lang)}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </div>
 
           {/* Title */}

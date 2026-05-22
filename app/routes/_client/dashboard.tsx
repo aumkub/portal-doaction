@@ -1,5 +1,6 @@
 import { CheckCircle2, Globe, Ticket, ArrowRight } from "lucide-react";
-import { FaCircleCheck, FaRotateRight, FaTag } from "react-icons/fa6";
+import { FaCircleCheck, FaRotateRight, FaTag, FaBoxArchive } from "react-icons/fa6";
+import { getClientBackupFromCache, parseBackupTimestamp, type BackupEntry } from "~/lib/backup";
 import type { Route } from "./+types/dashboard";
 import { requireUser } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
@@ -78,6 +79,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const tasks = latestReport ? await db.listTasksByReport(latestReport.id) : [];
   const openTickets = tickets.filter((t) => ["open", "in_progress", "waiting"].includes(t.status));
 
+  const clientBackup = await getClientBackupFromCache(env.SESSIONPORTAL, client.backup_path);
+
   type ActivityItem = {
     id: string;
     type: "task" | "ticket";
@@ -106,11 +109,28 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     activity,
     client,
     latestReportId: latestReport?.id ?? null,
+    clientBackup,
   };
 }
 
+function backupEntryTime(entry: BackupEntry): number {
+  return entry.lastModified || parseBackupTimestamp(entry.name) || 0;
+}
+
+function formatBackupWhen(entry: BackupEntry, locale: "th" | "en"): string {
+  const ts = backupEntryTime(entry);
+  if (!ts) return entry.name;
+  return new Date(ts * 1000).toLocaleDateString(locale === "en" ? "en-US" : "th-TH", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export default function DashboardPage({ loaderData }: Route.ComponentProps) {
-  const { stats, activity, client, latestReportId } = loaderData;
+  const { stats, activity, client, latestReportId, clientBackup } = loaderData;
   const { t, lang } = useT();
   const fmt = (unix: number) => formatRelativeTime(unix, lang);
   const isOnline = stats?.isUp;
@@ -239,6 +259,61 @@ export default function DashboardPage({ loaderData }: Route.ComponentProps) {
                 <span>{t("dash_contact_team")}</span>
                 <ArrowRight className="w-4 h-4 opacity-40 group-hover:translate-x-0.5 transition-transform" />
               </a>
+            </div>
+          </div>
+
+          {/* Website backups */}
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100">
+              <h2 className="text-sm font-semibold text-slate-900">{t("dash_backup_title")}</h2>
+            </div>
+            <div className="p-5">
+              {!clientBackup || clientBackup.ok === false ? (
+                <p className="text-sm text-slate-500">
+                  {clientBackup?.reason === "cache_empty"
+                    ? t("dash_backup_pending")
+                    : clientBackup?.reason === "site_not_found"
+                      ? t("dash_backup_not_found")
+                      : t("dash_backup_not_configured")}
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs text-slate-500">
+                      {t("dash_backup_count").replace("{count}", String(clientBackup.backupCount))}
+                    </p>
+                    <p className="text-[10px] text-slate-400">
+                      {formatRelativeTime(clientBackup.fetchedAt, lang)}
+                    </p>
+                  </div>
+                  {clientBackup.latest ? (
+                    <div className="rounded-lg border border-emerald-100 bg-emerald-50/50 px-3 py-2.5">
+                      <p className="text-[10px] font-medium text-emerald-700 uppercase tracking-wide">
+                        {t("dash_backup_latest")}
+                      </p>
+                      <p className="text-xs text-slate-700 font-mono truncate mt-1">
+                        {clientBackup.latest.name}
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        {formatBackupWhen(clientBackup.latest, lang)}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-500">{t("dash_backup_empty")}</p>
+                  )}
+                  {clientBackup.backups.length > 1 && (
+                    <ul className="space-y-1.5 pt-2 border-t border-slate-100 max-h-32 overflow-y-auto">
+                      {clientBackup.backups.slice(1, 5).map((b) => (
+                        <li key={b.name} className="flex items-center gap-2 text-xs text-slate-600">
+                          <FaBoxArchive className="text-emerald-500 shrink-0 text-[10px]" />
+                          <span className="truncate flex-1 font-mono">{b.name}</span>
+                          <span className="shrink-0 text-slate-400">{formatBackupWhen(b, lang)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -393,8 +468,8 @@ function ContractStatus({
 
   // active
   return (
-    <div className="rounded-lg bg-emerald-50 border border-emerald-100 px-4 py-3 flex items-start gap-3">
-      <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
+    <div className="rounded-lg flex items-start gap-3">
+      <span className="relative top-1.5 h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
       <div>
         <p className="text-sm font-semibold text-emerald-700">
           {t("dash_contract_days_left", { days: diffDays })}

@@ -10,6 +10,7 @@ import PageHeader from "~/components/layout/PageHeader";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Button } from "~/components/ui/button";
+import { NativeSelect } from "~/components/ui/native-select";
 import { useT } from "~/lib/i18n";
 import { useState } from "react";
 
@@ -164,12 +165,11 @@ export default function AdminClientsNewPage({ actionData }: Route.ComponentProps
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="package">{t("settings_package_label")}</Label>
-              <select id="package" name="package" defaultValue="standard"
-                className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-900">
+              <NativeSelect id="package" name="package" defaultValue="standard">
                 <option value="basic">{t("admin_pkg_basic")}</option>
                 <option value="standard">{t("admin_pkg_standard")}</option>
                 <option value="premium">{t("admin_pkg_premium")}</option>
-              </select>
+              </NativeSelect>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="contract_start">{t("admin_client_new_contract_start")}</Label>

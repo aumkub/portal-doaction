@@ -7,6 +7,7 @@ import { generateId, formatRelativeTime } from "~/lib/utils";
 import { z } from "zod";
 import type { SupportTicket, TicketStatus, TicketPriority } from "~/types";
 import { FaCircle } from "react-icons/fa6";
+import { NativeSelect } from "~/components/ui/native-select";
 
 export function meta() {
   return [{ title: "Support Tickets — do action portal" }];
@@ -151,16 +152,12 @@ export default function TicketsPage({ loaderData, actionData }: Route.ComponentP
               <label className="block text-sm font-medium text-slate-700 mb-1">
                 ความสำคัญ
               </label>
-              <select
-                name="priority"
-                defaultValue="medium"
-                className="rounded-lg border border-slate-200 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
-              >
+              <NativeSelect name="priority" defaultValue="medium">
                 <option value="low">ต่ำ</option>
                 <option value="medium">กลาง</option>
                 <option value="high">สูง</option>
                 <option value="urgent">เร่งด่วน</option>
-              </select>
+              </NativeSelect>
             </div>
             <div className="flex gap-2 justify-end">
               <button

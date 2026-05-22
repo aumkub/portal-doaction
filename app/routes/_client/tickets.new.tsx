@@ -4,6 +4,7 @@ import { requireUser } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { generateId } from "~/lib/utils";
 import { useT } from "~/lib/i18n";
+import { NativeSelect } from "~/components/ui/native-select";
 import { sendTelegramNotification } from "~/lib/telegram.server";
 
 const TicketSchema = z.object({
@@ -117,16 +118,16 @@ export default function NewTicketPage({ actionData }: any) {
             <label className="mb-1.5 block text-sm font-medium text-ink">
               {t("field_priority")}
             </label>
-            <select
+            <NativeSelect
               name="priority"
               defaultValue="medium"
-              className="h-11 w-full rounded-md border border-hairline-strong bg-canvas px-3 text-sm text-ink outline-none focus:border-brand-blue focus:ring-3 focus:ring-brand-blue/15 transition-[border,box-shadow]"
+              className="h-11 rounded-md border-hairline-strong bg-canvas text-ink focus:border-brand-blue focus:ring-[3px] focus:ring-brand-blue/15"
             >
               <option value="low">{t("priority_low")}</option>
               <option value="medium">{t("priority_medium")}</option>
               <option value="high">{t("priority_high")}</option>
               <option value="urgent">{t("priority_urgent")}</option>
-            </select>
+            </NativeSelect>
           </div>
 
           <div className="flex justify-end gap-3 pt-2 border-t border-hairline-soft">

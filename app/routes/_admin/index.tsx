@@ -1,10 +1,23 @@
 import { requireCoAdminOrAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { useT } from "~/lib/i18n";
+import { formatRelativeTime, formatBytes } from "~/lib/utils";
+import { useState, useEffect } from "react";
+import { useFetcher } from "react-router";
+import { getBackupList } from "~/lib/backup.server";
+import {
+  filterBackupSnapshots,
+  parseBackupTimestamp,
+  type BackupEntry,
+  type BackupResult,
+} from "~/lib/backup";
 import {
   FaUsers, FaTicket, FaFileLines,
-  FaCircle, FaArrowRight,
+  FaArrowRight, FaDatabase, FaFolder, FaBoxArchive, FaArrowsRotate, FaChevronDown,
+  FaChevronLeft, FaChevronRight,
 } from "react-icons/fa6";
+
+const CLIENTS_PAGE_SIZE = 6;
 
 type DashboardTicket = {
   id: string;
@@ -76,13 +89,21 @@ export async function loader({ request, context }: any) {
   const urgentTickets: DashboardTicket[] =
     (openTicketsResult as { results?: DashboardTicket[] }).results ?? [];
 
+  // Fetch backup list — admin only (co-admins skip this)
+  let backup: BackupResult = { ok: false, error: "Not available for co-admins" };
+  if (user.role === "admin") {
+    const env = context.cloudflare.env;
+    backup = await getBackupList(env, env.SESSIONPORTAL);
+  }
+
   return {
     totalClients: clients.length,
     reportsDueThisMonth: (dueReports as { count?: number } | null)?.count ?? 0,
     openTickets: urgentTickets.length,
     urgentTickets,
-    clients: clients.slice(0, 6) as DashboardClient[],
+    clients: clients as DashboardClient[],
     userRole: user.role,
+    backup,
   };
 }
 
@@ -134,7 +155,7 @@ function avatarColor(name: string) {
 
 export default function AdminOverviewPage({ loaderData }: any) {
   const data = loaderData;
-  const { t } = useT();
+  const { t, lang } = useT();
   const isCoAdmin = data.userRole === "co-admin";
 
   return (
@@ -182,38 +203,7 @@ export default function AdminOverviewPage({ loaderData }: any) {
 
       {/* Main grid */}
       <div className="grid gap-5 lg:grid-cols-2">
-        {/* Clients */}
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-            <h2 className="text-sm font-semibold text-slate-900">{t("admin_section_clients")}</h2>
-            <a href="/admin/clients" className="inline-flex items-center gap-1 text-xs font-medium text-violet-600 hover:text-violet-700 transition-colors">
-              {t("admin_view_all")} <FaArrowRight className="text-[9px]" />
-            </a>
-          </div>
-          <div className="divide-y divide-slate-50">
-            {data.clients.length === 0 ? (
-              <p className="px-5 py-8 text-center text-sm text-slate-500">{t("admin_clients_empty")}</p>
-            ) : (
-              data.clients.map((client: DashboardClient) => (
-                <a
-                  key={client.id}
-                  href={`/admin/clients/${client.id}`}
-                  className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50 transition-colors group"
-                >
-                  <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${avatarColor(client.company_name)}`}>
-                    {getInitials(client.company_name)}
-                  </span>
-                  <span className="flex-1 min-w-0 text-sm font-medium text-slate-800 truncate group-hover:text-slate-900">
-                    {client.company_name}
-                  </span>
-                  <span className={`shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full capitalize ${packageStyles[client.package]}`}>
-                    {client.package}
-                  </span>
-                </a>
-              ))
-            )}
-          </div>
-        </div>
+        <ClientsPanel clients={data.clients} t={t} />
 
         {/* Open Tickets */}
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
@@ -249,6 +239,331 @@ export default function AdminOverviewPage({ loaderData }: any) {
           </div>
         </div>
       </div>
+
+      {/* Backup Status — admin only */}
+      {!isCoAdmin && (
+        <BackupPanel backup={data.backup} t={t} lang={lang} />
+      )}
     </div>
+  );
+}
+
+function BackupPanel({
+  backup: initialBackup,
+  t,
+  lang,
+}: {
+  backup: BackupResult;
+  t: (k: any) => string;
+  lang: "th" | "en";
+}) {
+  const fetcher = useFetcher<{ backup: BackupResult }>();
+  const [backup, setBackup] = useState(initialBackup);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    setBackup(initialBackup);
+  }, [initialBackup]);
+
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data?.backup) {
+      setBackup(fetcher.data.backup);
+    }
+  }, [fetcher.state, fetcher.data]);
+
+  const refreshing = fetcher.state !== "idle";
+  const entries = backup.ok ? backup.entries : [];
+  const allBackups = entries.flatMap((e) => filterBackupSnapshots(e.children ?? []));
+  const latestBackup = allBackups.reduce<BackupEntry | null>((best, b) => {
+    const ts = backupTimestamp(b);
+    const bestTs = best ? backupTimestamp(best) : 0;
+    return ts > bestTs ? b : best;
+  }, null);
+  const totalBackups = allBackups.length;
+  const dateLocale = lang === "en" ? "en-US" : "th-TH";
+  const siteNames = entries.map((e) => e.name);
+  const allCollapsed = siteNames.length > 0 && siteNames.every((n) => collapsed.has(n));
+  const allExpanded = siteNames.every((n) => !collapsed.has(n));
+
+  const expandAll = () => setCollapsed(new Set());
+  const collapseAll = () => setCollapsed(new Set(siteNames));
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-slate-100">
+        <div className="flex items-center gap-2 min-w-0">
+          <FaDatabase className="text-slate-400 text-sm shrink-0" />
+          <h2 className="text-sm font-semibold text-slate-900">{t("admin_backup_title")}</h2>
+          {backup.ok && (
+            <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0 ${
+              backup.fromCache
+                ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+                : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+            }`}>
+              {backup.fromCache ? t("admin_backup_cached") : t("admin_backup_live")}
+              {` · ${formatRelativeTime(backup.fetchedAt, lang)}`}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-[11px] text-slate-400 font-mono hidden sm:inline">cloud.aumwp.com</span>
+          <button
+            type="button"
+            disabled={refreshing}
+            onClick={() => fetcher.submit(null, { method: "post", action: "/api/admin/backup-refresh" })}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+          >
+            <FaArrowsRotate className={`text-[10px] ${refreshing ? "animate-spin" : ""}`} />
+            {refreshing ? t("admin_backup_refreshing") : t("admin_backup_refresh")}
+          </button>
+        </div>
+      </div>
+
+      {!backup.ok ? (
+        <div className="px-5 py-4">
+          <p className="text-sm text-red-600">{t("admin_backup_error")}: {(backup as { error: string }).error}</p>
+        </div>
+      ) : entries.length === 0 ? (
+        <p className="px-5 py-8 text-center text-sm text-slate-500">{t("admin_backup_empty")}</p>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-slate-100 border-b border-slate-100">
+            <div className="bg-white px-5 py-3">
+              <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">{t("admin_backup_sites")}</p>
+              <p className="text-xl font-semibold text-slate-800 leading-tight mt-0.5">{entries.length}</p>
+            </div>
+            <div className="bg-white px-5 py-3">
+              <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">{t("admin_backup_items_total")}</p>
+              <p className="text-xl font-semibold text-slate-800 leading-tight mt-0.5">{totalBackups}</p>
+            </div>
+            <div className="bg-white px-5 py-3">
+              <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">{t("admin_backup_last")}</p>
+              <p className="text-sm font-medium text-slate-700 mt-0.5 truncate">
+                {latestBackup
+                  ? formatBackupDate(latestBackup, dateLocale)
+                  : "—"}
+              </p>
+            </div>
+            <div className="bg-white px-5 py-3 hidden sm:block">
+              <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">{t("admin_backup_host")}</p>
+              <p className="text-sm font-medium text-slate-700 mt-0.5 font-mono">cloud.aumwp.com</p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 px-5 py-2 border-b border-slate-50 bg-slate-50/30">
+            <button
+              type="button"
+              onClick={expandAll}
+              disabled={allExpanded}
+              className="text-[11px] font-medium text-violet-600 hover:text-violet-700 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {t("admin_backup_expand_all")}
+            </button>
+            <span className="text-slate-300">|</span>
+            <button
+              type="button"
+              onClick={collapseAll}
+              disabled={allCollapsed}
+              className="text-[11px] font-medium text-slate-500 hover:text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {t("admin_backup_collapse_all")}
+            </button>
+          </div>
+
+          <ul className="divide-y divide-slate-100">
+            {entries.map((entry) => (
+              <BackupSiteRow
+                key={entry.name}
+                entry={entry}
+                collapsed={collapsed.has(entry.name)}
+                onToggle={() => {
+                  setCollapsed((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(entry.name)) next.delete(entry.name);
+                    else next.add(entry.name);
+                    return next;
+                  });
+                }}
+                t={t}
+                dateLocale={dateLocale}
+              />
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ClientsPanel({
+  clients,
+  t,
+}: {
+  clients: DashboardClient[];
+  t: (k: any) => string;
+}) {
+  const [page, setPage] = useState(0);
+  const totalPages = Math.max(1, Math.ceil(clients.length / CLIENTS_PAGE_SIZE));
+  const safePage = Math.min(page, totalPages - 1);
+  const pageClients = clients.slice(
+    safePage * CLIENTS_PAGE_SIZE,
+    safePage * CLIENTS_PAGE_SIZE + CLIENTS_PAGE_SIZE
+  );
+  const showPagination = clients.length > CLIENTS_PAGE_SIZE;
+
+  useEffect(() => {
+    if (page > totalPages - 1) setPage(Math.max(0, totalPages - 1));
+  }, [clients.length, page, totalPages]);
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+        <h2 className="text-sm font-semibold text-slate-900">
+          {t("admin_section_clients")}
+          {clients.length > 0 && (
+            <span className="ml-2 text-[11px] font-normal text-slate-400">({clients.length})</span>
+          )}
+        </h2>
+        <a href="/admin/clients" className="inline-flex items-center gap-1 text-xs font-medium text-violet-600 hover:text-violet-700 transition-colors">
+          {t("admin_view_all")} <FaArrowRight className="text-[9px]" />
+        </a>
+      </div>
+      <div className="divide-y divide-slate-50">
+        {clients.length === 0 ? (
+          <p className="px-5 py-8 text-center text-sm text-slate-500">{t("admin_clients_empty")}</p>
+        ) : (
+          pageClients.map((client) => (
+            <a
+              key={client.id}
+              href={`/admin/clients/${client.id}`}
+              className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50 transition-colors group"
+            >
+              <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${avatarColor(client.company_name)}`}>
+                {getInitials(client.company_name)}
+              </span>
+              <span className="flex-1 min-w-0 text-sm font-medium text-slate-800 truncate group-hover:text-slate-900">
+                {client.company_name}
+              </span>
+              <span className={`shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full capitalize ${packageStyles[client.package]}`}>
+                {client.package}
+              </span>
+            </a>
+          ))
+        )}
+      </div>
+      {showPagination && (
+        <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-slate-100 bg-slate-50/50">
+          <button
+            type="button"
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            disabled={safePage === 0}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <FaChevronLeft className="text-[9px]" />
+            {t("admin_pagination_prev")}
+          </button>
+          <span className="text-[11px] text-slate-500 tabular-nums">
+            {t("admin_pagination_page")
+              .replace("{current}", String(safePage + 1))
+              .replace("{total}", String(totalPages))}
+          </span>
+          <button
+            type="button"
+            onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+            disabled={safePage >= totalPages - 1}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            {t("admin_pagination_next")}
+            <FaChevronRight className="text-[9px]" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function backupTimestamp(entry: BackupEntry): number {
+  return entry.lastModified || parseBackupTimestamp(entry.name) || 0;
+}
+
+function formatBackupDate(entry: BackupEntry, locale: string): string {
+  const ts = backupTimestamp(entry);
+  if (!ts) return entry.name;
+  return new Date(ts * 1000).toLocaleDateString(locale, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function BackupSiteRow({
+  entry,
+  collapsed,
+  onToggle,
+  t,
+  dateLocale,
+}: {
+  entry: BackupEntry;
+  collapsed: boolean;
+  onToggle: () => void;
+  t: (k: any) => string;
+  dateLocale: string;
+}) {
+  const backups = filterBackupSnapshots(entry.children ?? []);
+  const hasBackups = backups.length > 0;
+  const open = hasBackups && !collapsed;
+
+  return (
+    <li className="group">
+      <button
+        type="button"
+        onClick={hasBackups ? onToggle : undefined}
+        disabled={!hasBackups}
+        aria-expanded={open}
+        className={`w-full flex items-center gap-3 px-5 py-3 text-left transition-colors ${
+          hasBackups ? "hover:bg-slate-50 cursor-pointer" : "cursor-default bg-slate-50/50"
+        } ${open ? "bg-slate-50/80" : "bg-white"}`}
+      >
+        <span
+          className={`shrink-0 flex h-5 w-5 items-center justify-center rounded text-slate-400 transition-transform duration-200 ${
+            open ? "rotate-0" : "-rotate-90"
+          } ${!hasBackups ? "opacity-0" : ""}`}
+        >
+          <FaChevronDown className="text-[10px]" />
+        </span>
+        <FaFolder className={`text-base shrink-0 ${open ? "text-amber-500" : "text-amber-400"}`} />
+        <span className="flex-1 min-w-0 text-sm font-semibold text-slate-800 truncate">{entry.name}</span>
+        <span className="shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 ring-1 ring-violet-100">
+          {t("admin_backup_items_count").replace("{count}", String(backups.length))}
+        </span>
+      </button>
+
+      <div
+        className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${
+          open ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+        }`}
+      >
+        <div className="overflow-hidden">
+          {hasBackups && (
+            <ul className="divide-y divide-slate-50 border-t border-slate-100 bg-slate-50/30">
+              {backups.map((backup) => (
+                <li key={backup.name} className="flex items-center gap-3 pl-12 pr-5 py-2.5 hover:bg-white/80">
+                  <FaBoxArchive className="text-emerald-500 text-sm shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-slate-700 font-mono truncate">{backup.name}</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">{t("admin_backup_snapshot")}</p>
+                  </div>
+                  <span className="shrink-0 text-xs text-slate-500 hidden sm:block">
+                    {formatBackupDate(backup, dateLocale)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </li>
   );
 }

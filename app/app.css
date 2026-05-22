@@ -166,3 +166,15 @@ html, body {
 .animate-fade-in   { animation: var(--animate-fade-in); }
 .animate-slide-up  { animation: var(--animate-slide-up); }
 .animate-slide-down { animation: var(--animate-slide-down); }
+
+/* Native <select>: hide browser chevron; padding set via px-3 on NativeSelect */
+.select-native {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: none;
+}
+
+.select-native::-ms-expand {
+  display: none;
+}
