@@ -5,21 +5,30 @@ import { formatDate } from "~/lib/utils";
 import { useT } from "~/lib/i18n";
 import type { EmailLog } from "~/types";
 import { parseClientCcEmails } from "~/lib/client-cc";
+import Pagination from "~/components/ui/Pagination";
 
 export function meta() {
   return [{ title: "Email Logs — Admin" }];
 }
 
+const PAGE_SIZE = 20;
+
 export async function loader({ request, context }: any) {
   const env = context.cloudflare.env;
   await requireAdmin(request, env.DB, env.SESSIONPORTAL);
   const db = createDB(env.DB);
-  const logs = await db.listEmailLogs(300);
-  return { logs };
+  const url = new URL(request.url);
+  const page = Math.max(1, Number(url.searchParams.get("page") ?? "1"));
+  const all = await db.listEmailLogs(9999);
+  const total = all.length;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const logs = all.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  return { logs, page: safePage, totalPages, total };
 }
 
 export default function AdminEmailLogsPage({ loaderData }: any) {
-  const { logs } = loaderData as { logs: EmailLog[] };
+  const { logs, page, totalPages } = loaderData as { logs: EmailLog[]; page: number; totalPages: number };
   const { lang, t } = useT();
   const [selected, setSelected] = useState<EmailLog | null>(null);
 
@@ -77,6 +86,7 @@ export default function AdminEmailLogsPage({ loaderData }: any) {
             )}
           </tbody>
         </table>
+        <Pagination page={page} totalPages={totalPages} />
       </div>
       {selected ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">

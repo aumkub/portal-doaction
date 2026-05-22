@@ -319,6 +319,8 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
                   id: att.id,
                   name: att.file_name,
                   href: `/api/attachments/${encodeURIComponent(att.file_key)}`,
+                  mimeType: att.mime_type,
+                  sizeBytes: att.size_bytes,
                 }))}
               />
             </div>

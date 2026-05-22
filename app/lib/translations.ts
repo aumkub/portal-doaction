@@ -47,7 +47,7 @@ const th = {
   status_open: "เปิด",
   status_in_progress: "กำลังดำเนิน",
   status_waiting: "รอข้อมูล",
-  status_resolved: "เสร็จสิ้น",
+  status_resolved: "แก้ปัญหาแล้ว",
   status_closed: "ปิด",
 
   // ─── Ticket priority ──────────────────────────────────
@@ -98,7 +98,7 @@ const th = {
   tickets_filter_all: "ทั้งหมด",
   tickets_filter_open: "เปิด",
   tickets_filter_in_progress: "กำลังดำเนิน",
-  tickets_filter_resolved: "เสร็จสิ้น",
+  tickets_filter_resolved: "แก้ปัญหาแล้ว",
   tickets_empty: "ไม่พบรายการแจ้งปัญหา",
 
   // ─── New Ticket ───────────────────────────────────────
@@ -186,7 +186,7 @@ const th = {
     "สรุปภาพรวมลูกค้า รายงาน และ tickets ที่ต้องดูแล",
   admin_stat_total_clients: "ลูกค้าทั้งหมด",
   admin_stat_open_tickets: "Tickets เปิด",
-  admin_stat_reports_due: "รายงานที่ครบกำหนดเดือนนี้",
+  admin_stat_reports_due: "ลูกค้าที่ยังไม่มีรายงานเดือนนี้",
   admin_section_clients: "ลูกค้า",
   admin_view_all: "ดูทั้งหมด",
   admin_pagination_prev: "ก่อนหน้า",
@@ -214,6 +214,9 @@ const th = {
   admin_backup_live: "สด",
   admin_backup_items_count: "{count} รายการ",
   admin_backup_items_total: "ไฟล์สำรองทั้งหมด",
+  admin_section_missing_reports: "ยังไม่ได้สร้างรายงานเดือนนี้",
+  admin_no_missing_reports: "ลูกค้าทุกรายมีรายงานเดือนนี้แล้ว",
+  admin_create_report: "สร้างรายงาน",
   admin_clients_title: "จัดการลูกค้า",
   admin_clients_subtitle: "{count} ลูกค้าทั้งหมด",
   admin_clients_add: "เพิ่มลูกค้าใหม่",
@@ -329,6 +332,9 @@ const th = {
   admin_report_email_btn_view: "ดูอีเมล",
   admin_report_email_btn_resend: "ส่งอีกครั้ง",
   admin_report_email_publish_first: "เผยแพร่ก่อน",
+  admin_report_telegram_btn_send: "ส่ง Telegram",
+  admin_report_telegram_btn_resend: "ส่ง Telegram อีกครั้ง",
+  admin_report_telegram_badge_sent: "ส่ง Telegram แล้ว",
   admin_report_email_dialog_send_title: "ส่งอีเมลแจ้งรายงาน",
   admin_report_email_dialog_send_desc:
     "ตรวจสอบตัวอย่างด้านล่าง จากนั้นกดส่งไปยังอีเมลผู้ใช้ของลูกค้า",
@@ -430,7 +436,7 @@ const th = {
   admin_editor_publish: "เผยแพร่รายงาน",
   admin_editor_send_email_on_publish: "ส่งอีเมลแจ้งลูกค้าทันที",
   admin_editor_send_email_hint: "จะส่งอีเมลพร้อมลิ้งก์รายงานไปยังอีเมลของลูกค้าโดยอัตโนมัติ",
-  status_closed_short: "ปิดแล้ว",
+  status_closed_short: "ปิด",
 };
 
 const en: Record<keyof typeof th, string> = {
@@ -617,7 +623,7 @@ const en: Record<keyof typeof th, string> = {
     "Summary of clients, reports, and tickets that need attention",
   admin_stat_total_clients: "Total clients",
   admin_stat_open_tickets: "Open tickets",
-  admin_stat_reports_due: "Reports due this month",
+  admin_stat_reports_due: "Clients missing report this month",
   admin_section_clients: "Clients",
   admin_view_all: "View all",
   admin_pagination_prev: "Previous",
@@ -645,6 +651,9 @@ const en: Record<keyof typeof th, string> = {
   admin_backup_live: "Live",
   admin_backup_items_count: "{count} items",
   admin_backup_items_total: "Total backups",
+  admin_section_missing_reports: "No report yet this month",
+  admin_no_missing_reports: "All clients have a report this month",
+  admin_create_report: "Create report",
   admin_clients_title: "Manage clients",
   admin_clients_subtitle: "{count} clients total",
   admin_clients_add: "+ Add client",
@@ -760,6 +769,9 @@ const en: Record<keyof typeof th, string> = {
   admin_report_email_btn_view: "View email",
   admin_report_email_btn_resend: "Send again",
   admin_report_email_publish_first: "Publish first",
+  admin_report_telegram_btn_send: "Send Telegram",
+  admin_report_telegram_btn_resend: "Resend Telegram",
+  admin_report_telegram_badge_sent: "Telegram sent",
   admin_report_email_dialog_send_title: "Email report to client",
   admin_report_email_dialog_send_desc:
     "Review the preview below, then send to the client portal user’s inbox.",

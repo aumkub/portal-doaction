@@ -10,18 +10,27 @@ import { formatDate } from "~/lib/utils";
 import { useT } from "~/lib/i18n";
 import PageHeader from "~/components/layout/PageHeader";
 import { FaPaperclip, FaTrash } from "react-icons/fa6";
+import Pagination from "~/components/ui/Pagination";
 
 export function meta() {
   return [{ title: "ไฟล์แนบ — Admin" }];
 }
 
+const PAGE_SIZE = 20;
+
 export async function loader({ request, context }: any) {
   const env = context.cloudflare.env;
   await requireAdmin(request, env.DB, env.SESSIONPORTAL);
   const db = createDB(env.DB);
-  const attachments = await listAllStorageAttachments(env.ATTACHMENTS, db);
-  const temporaryCount = attachments.filter((a) => a.status === "temporary").length;
-  return { attachments, temporaryCount };
+  const url = new URL(request.url);
+  const page = Math.max(1, Number(url.searchParams.get("page") ?? "1"));
+  const all = await listAllStorageAttachments(env.ATTACHMENTS, db);
+  const temporaryCount = all.filter((a) => a.status === "temporary").length;
+  const total = all.length;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const attachments = all.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  return { attachments, temporaryCount, page: safePage, totalPages, total };
 }
 
 export async function action({ request, context }: any) {
@@ -82,9 +91,12 @@ function StatusBadge({ status, t }: { status: AttachmentStorageItem["status"]; t
 }
 
 export default function AdminAttachmentsPage({ loaderData }: any) {
-  const { attachments, temporaryCount } = loaderData as {
+  const { attachments, temporaryCount, page, totalPages } = loaderData as {
     attachments: AttachmentStorageItem[];
     temporaryCount: number;
+    page: number;
+    totalPages: number;
+    total: number;
   };
   const { t, lang } = useT();
   const navigation = useNavigation();
@@ -261,6 +273,7 @@ export default function AdminAttachmentsPage({ loaderData }: any) {
             </tbody>
           </table>
         </div>
+        <Pagination page={page} totalPages={totalPages} />
       </div>
     </div>
   );

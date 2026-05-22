@@ -59,6 +59,7 @@ export default [
   route("api/language", "routes/api/language.ts"),
   route("api/report-email-preview", "routes/api/report-email-preview.ts"),
   route("api/report-notify", "routes/api/report-notify.ts"),
+  route("api/report-telegram-notify", "routes/api/report-telegram-notify.ts"),
   route("api/impersonation/start", "routes/api/impersonation-start.ts"),
   route("api/impersonation/stop", "routes/api/impersonation-stop.ts"),
   route("api/uptime", "routes/api/uptime.ts"),

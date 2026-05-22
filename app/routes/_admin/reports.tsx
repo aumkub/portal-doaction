@@ -1,5 +1,7 @@
 import { useState, useMemo } from "react";
+import { useRevalidator } from "react-router";
 import type { Route } from "./+types/reports";
+import Pagination from "~/components/ui/Pagination";
 import { requireCoAdminOrAdmin } from "~/lib/auth.server";
 import ReportCustomerEmailDialog, {
   type ReportRowForEmail,
@@ -16,6 +18,7 @@ import {
   FaMagnifyingGlass,
   FaFileLines,
   FaCircleCheck,
+  FaTelegram,
 } from "react-icons/fa6";
 
 export function meta() {
@@ -54,11 +57,19 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const bulkCreated = Number(url.searchParams.get("bulkCreated") ?? "0");
   const bulkFailed = Number(url.searchParams.get("bulkFailed") ?? "0");
+  const PAGE_SIZE = 20;
+  const page = Math.max(1, Number(url.searchParams.get("page") ?? "1"));
+  const total = allReports.length;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const reports = allReports.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   return {
-    reports: allReports.slice(0, 20),
+    reports,
     clients,
     userRole: user.role,
+    page: safePage,
+    totalPages,
     bulkResult: {
       created: Number.isNaN(bulkCreated) ? 0 : bulkCreated,
       failed: Number.isNaN(bulkFailed) ? 0 : bulkFailed,
@@ -116,10 +127,12 @@ function EmailStatusCell({ report, notified, isPublished, t, lang, formatRelativ
   );
 }
 
-function ActionButtons({ report, notified, isPublished, isCoAdmin, t, onDialog }: {
+function ActionButtons({ report, notified, isPublished, isCoAdmin, t, onDialog, telegramSending, onTelegram }: {
   report: ReportRowForEmail; notified: boolean; isPublished: boolean;
   isCoAdmin: boolean; t: (k: any) => string; onDialog: ReportDialogSetter;
+  telegramSending: string | null; onTelegram: (id: string) => void;
 }) {
+  const telegramSent = report.telegram_notified_at != null;
   return (
     <>
       {isPublished && !isCoAdmin && (
@@ -141,6 +154,17 @@ function ActionButtons({ report, notified, isPublished, isCoAdmin, t, onDialog }
               </button>
             </>
           )}
+          {telegramSent ? (
+            <button type="button" disabled={telegramSending === report.id} onClick={() => onTelegram(report.id)}
+              className="inline-flex items-center gap-1.5 mr-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-600 px-3 py-1.5 hover:bg-slate-50 transition-colors disabled:opacity-40">
+              <FaTelegram className="text-[10px]" />{telegramSending === report.id ? "..." : t("admin_report_telegram_btn_resend")}
+            </button>
+          ) : (
+            <button type="button" disabled={telegramSending === report.id} onClick={() => onTelegram(report.id)}
+              className="inline-flex items-center gap-1.5 mr-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 px-3 py-1.5 hover:bg-slate-50 transition-colors disabled:opacity-40">
+              <FaTelegram className="text-[10px]" />{telegramSending === report.id ? "..." : t("admin_report_telegram_btn_send")}
+            </button>
+          )}
         </>
       )}
       <a href={`/reports/${report.id}`} target="_blank" rel="noopener noreferrer"
@@ -158,17 +182,33 @@ function ActionButtons({ report, notified, isPublished, isCoAdmin, t, onDialog }
 }
 
 export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
-  const { reports, bulkResult, userRole } = loaderData as {
+  const { reports, bulkResult, userRole, page, totalPages } = loaderData as {
     reports: ReportRowForEmail[];
     bulkResult: { created: number; failed: number };
     userRole: "admin" | "co-admin";
+    page: number;
+    totalPages: number;
   };
   const { t, lang } = useT();
   const isCoAdmin = userRole === "co-admin";
 
+  const revalidator = useRevalidator();
   const [emailDialog, setEmailDialog] = useState<{ report: ReportRowForEmail; mode: "send" | "view" } | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "draft" | "published">("all");
+  const [telegramSending, setTelegramSending] = useState<string | null>(null);
+
+  async function sendTelegram(reportId: string) {
+    setTelegramSending(reportId);
+    try {
+      const fd = new FormData();
+      fd.append("reportId", reportId);
+      await fetch("/api/report-telegram-notify", { method: "POST", body: fd });
+      revalidator.revalidate();
+    } finally {
+      setTelegramSending(null);
+    }
+  }
 
   const formatReportPeriod = (month: number, year: number) => {
     const m = getMonthName(month, lang);
@@ -332,7 +372,7 @@ export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
                           <EmailStatusCell report={report} notified={notified} isPublished={isPublished} t={t} lang={lang} formatRelativeTime={formatRelativeTime} formatDate={formatDate} />
                         </td>
                         <td className="px-5 py-3.5">
-                          <ActionButtons report={report} notified={notified} isPublished={isPublished} isCoAdmin={isCoAdmin} t={t} onDialog={setEmailDialog} />
+                          <ActionButtons report={report} notified={notified} isPublished={isPublished} isCoAdmin={isCoAdmin} t={t} onDialog={setEmailDialog} telegramSending={telegramSending} onTelegram={sendTelegram} />
                         </td>
                       </tr>
                     );
@@ -371,7 +411,7 @@ export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
 
                     {/* Actions */}
                     <div className="flex flex-wrap gap-1.5">
-                      <ActionButtons report={report} notified={notified} isPublished={isPublished} isCoAdmin={isCoAdmin} t={t} onDialog={setEmailDialog} />
+                      <ActionButtons report={report} notified={notified} isPublished={isPublished} isCoAdmin={isCoAdmin} t={t} onDialog={setEmailDialog} telegramSending={telegramSending} onTelegram={sendTelegram} />
                     </div>
                   </div>
                 );
@@ -385,6 +425,7 @@ export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
             <p className="text-xs text-slate-500">แสดง {filtered.length} จาก {reports.length} รายการ</p>
           </div>
         )}
+        <Pagination page={page} totalPages={totalPages} />
       </div>
     </div>
   );

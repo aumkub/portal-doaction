@@ -104,6 +104,8 @@ export async function loader({ request, context }: any) {
     clients: clients as DashboardClient[],
     userRole: user.role,
     backup,
+    currentMonth: month,
+    currentYear: year,
   };
 }
 

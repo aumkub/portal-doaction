@@ -5,6 +5,7 @@ import { sendEmail } from "~/lib/email.server";
 import { buildReportCustomerNotification } from "~/lib/report-customer-email.server";
 import { createReportAccessToken } from "~/lib/report-access.server";
 import { parseClientCcEmails } from "~/lib/client-cc";
+import { sendTelegramNotificationForClient } from "~/lib/telegram.server";
 
 /** POST /api/report-notify — send report notification email to client user */
 export async function action({ request, context }: Route.ActionArgs) {
@@ -84,6 +85,20 @@ export async function action({ request, context }: Route.ActionArgs) {
     client_notification_subject: subject,
     client_notification_html: html,
   });
+
+  // Send Telegram notification to co-admin groups for this client
+  const appUrl = String(env.APP_URL || new URL(request.url).origin).replace(/\/$/, "");
+  await sendTelegramNotificationForClient({
+    db,
+    appUrl,
+    clientId: report.client_id,
+    notification: {
+      title: `📊 ส่งรายงานให้ลูกค้าแล้ว: ${client.company_name}`,
+      body: report.title,
+      link: `/admin/reports/${report.id}`,
+    },
+  });
+  await db.updateReport(report.id, { telegram_notified_at: now });
 
   return Response.json({ ok: true, notifiedAt: now });
 }
