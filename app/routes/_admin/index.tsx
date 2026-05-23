@@ -466,16 +466,16 @@ function BackupLogPanel({
                         {item.clientLabel ?? item.siteName}
                       </p>
                       {item.clientLabel ? (
-                        <p className="text-[10px] text-slate-400 font-mono truncate mt-0.5">
+                        <p className="text-[12px] text-slate-400 font-mono truncate mt-0.5">
                           {item.siteName}
                         </p>
                       ) : null}
-                      <p className="text-[10px] text-slate-500 font-mono truncate mt-0.5 sm:hidden">
+                      <p className="text-[12px] text-slate-500 font-mono truncate mt-0.5 sm:hidden">
                         {item.backup.name}
                       </p>
                     </td>
                     <td className="px-3 py-2.5 hidden sm:table-cell">
-                      <p className="text-[11px] text-slate-600 font-mono truncate max-w-[200px]">
+                      <p className="text-[12px] text-slate-600 font-mono truncate max-w-[200px]">
                         {item.backup.name}
                       </p>
                     </td>
