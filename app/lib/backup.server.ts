@@ -107,7 +107,7 @@ async function fetchBackupsInSite(
 
   for (const item of level1) {
     if (isBackupSnapshot(item.name)) {
-      backups.push(item);
+      backups.push({ ...item, relativePath: item.name });
       continue;
     }
     if (!item.isDirectory) continue;
@@ -117,7 +117,9 @@ async function fetchBackupsInSite(
     const subXml = await propfind(creds, subPath);
     const level2 = parseWebDAVXML(subXml, subPath);
     for (const sub of level2) {
-      if (isBackupSnapshot(sub.name)) backups.push(sub);
+      if (isBackupSnapshot(sub.name)) {
+        backups.push({ ...sub, relativePath: `${item.name}/${sub.name}` });
+      }
     }
   }
 

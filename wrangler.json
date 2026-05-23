@@ -1,6 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "portal-doaction",
+  "account_id": "2df134c52dd063a449a35d53a8e07f94",
   "main": "./workers/app.ts",
   "compatibility_date": "2025-10-08",
   "compatibility_flags": [

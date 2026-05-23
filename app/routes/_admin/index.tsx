@@ -2,7 +2,7 @@ import { requireCoAdminOrAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { useT } from "~/lib/i18n";
 import { formatRelativeTime, formatBytes } from "~/lib/utils";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useFetcher } from "react-router";
 import { getBackupList } from "~/lib/backup.server";
 import {
@@ -14,10 +14,11 @@ import {
 import {
   FaUsers, FaTicket, FaFileLines,
   FaArrowRight, FaDatabase, FaFolder, FaBoxArchive, FaArrowsRotate, FaChevronDown,
-  FaChevronLeft, FaChevronRight,
+  FaChevronLeft, FaChevronRight, FaMagnifyingGlass,
 } from "react-icons/fa6";
 
 const CLIENTS_PAGE_SIZE = 6;
+const BACKUP_LOG_PAGE_SIZE = 10;
 
 type DashboardTicket = {
   id: string;
@@ -91,9 +92,13 @@ export async function loader({ request, context }: any) {
 
   // Fetch backup list — admin only (co-admins skip this)
   let backup: BackupResult = { ok: false, error: "Not available for co-admins" };
+  const backupPathLabels: Record<string, string> = {};
   if (user.role === "admin") {
     const env = context.cloudflare.env;
     backup = await getBackupList(env, env.SESSIONPORTAL);
+    for (const c of allClients) {
+      if (c.backup_path) backupPathLabels[c.backup_path] = c.company_name;
+    }
   }
 
   return {
@@ -104,6 +109,7 @@ export async function loader({ request, context }: any) {
     clients: clients as DashboardClient[],
     userRole: user.role,
     backup,
+    backupPathLabels,
     currentMonth: month,
     currentYear: year,
   };
@@ -242,26 +248,56 @@ export default function AdminOverviewPage({ loaderData }: any) {
         </div>
       </div>
 
-      {/* Backup Status — admin only */}
+      {/* Backup — admin only */}
       {!isCoAdmin && (
-        <BackupPanel backup={data.backup} t={t} lang={lang} />
+        <BackupSection
+          backup={data.backup}
+          backupPathLabels={data.backupPathLabels}
+          t={t}
+          lang={lang}
+        />
       )}
     </div>
   );
 }
 
-function BackupPanel({
+type BackupLogItem = {
+  siteName: string;
+  clientLabel: string | null;
+  backup: BackupEntry;
+  timestamp: number;
+};
+
+function buildBackupLog(
+  entries: BackupEntry[],
+  backupPathLabels: Record<string, string>
+): BackupLogItem[] {
+  return entries
+    .flatMap((site) =>
+      filterBackupSnapshots(site.children ?? []).map((backup) => ({
+        siteName: site.name,
+        clientLabel: backupPathLabels[site.name] ?? null,
+        backup,
+        timestamp: backupTimestamp(backup),
+      }))
+    )
+    .filter((item) => item.timestamp > 0)
+    .sort((a, b) => b.timestamp - a.timestamp);
+}
+
+function BackupSection({
   backup: initialBackup,
+  backupPathLabels,
   t,
   lang,
 }: {
   backup: BackupResult;
+  backupPathLabels: Record<string, string>;
   t: (k: any) => string;
   lang: "th" | "en";
 }) {
   const fetcher = useFetcher<{ backup: BackupResult }>();
   const [backup, setBackup] = useState(initialBackup);
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setBackup(initialBackup);
@@ -274,7 +310,248 @@ function BackupPanel({
   }, [fetcher.state, fetcher.data]);
 
   const refreshing = fetcher.state !== "idle";
+  const onRefresh = () =>
+    fetcher.submit(null, { method: "post", action: "/api/admin/backup-refresh" });
+
+  return (
+    <div className="grid gap-5 lg:grid-cols-2">
+      <BackupLogPanel
+        backup={backup}
+        backupPathLabels={backupPathLabels}
+        refreshing={refreshing}
+        onRefresh={onRefresh}
+        t={t}
+        lang={lang}
+      />
+      <BackupPanel
+        backup={backup}
+        refreshing={refreshing}
+        onRefresh={onRefresh}
+        t={t}
+        lang={lang}
+      />
+    </div>
+  );
+}
+
+function BackupLogPanel({
+  backup,
+  backupPathLabels,
+  refreshing,
+  onRefresh,
+  t,
+  lang,
+}: {
+  backup: BackupResult;
+  backupPathLabels: Record<string, string>;
+  refreshing: boolean;
+  onRefresh: () => void;
+  t: (k: any) => string;
+  lang: "th" | "en";
+}) {
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(0);
   const entries = backup.ok ? backup.entries : [];
+  const fetchedAt = backup.ok ? backup.fetchedAt : 0;
+
+  const allLogItems = useMemo(
+    () => buildBackupLog(entries, backupPathLabels),
+    [entries, backupPathLabels]
+  );
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return allLogItems;
+    return allLogItems.filter((item) => {
+      const label = (item.clientLabel ?? item.siteName).toLowerCase();
+      return (
+        label.includes(q) ||
+        item.siteName.toLowerCase().includes(q) ||
+        item.backup.name.toLowerCase().includes(q)
+      );
+    });
+  }, [allLogItems, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / BACKUP_LOG_PAGE_SIZE));
+  const safePage = Math.min(page, totalPages - 1);
+  const pageItems = filtered.slice(
+    safePage * BACKUP_LOG_PAGE_SIZE,
+    safePage * BACKUP_LOG_PAGE_SIZE + BACKUP_LOG_PAGE_SIZE
+  );
+  const showPagination = filtered.length > BACKUP_LOG_PAGE_SIZE;
+
+  useEffect(() => {
+    setPage(0);
+  }, [search]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [fetchedAt]);
+
+  useEffect(() => {
+    if (page > totalPages - 1) setPage(Math.max(0, totalPages - 1));
+  }, [filtered.length, page, totalPages]);
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden flex flex-col">
+      <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-slate-100">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <FaBoxArchive className="text-emerald-500 text-sm shrink-0" />
+            <h2 className="text-sm font-semibold text-slate-900">{t("admin_backup_log_title")}</h2>
+            {backup.ok && allLogItems.length > 0 && (
+              <span className="text-[11px] font-normal text-slate-400">({allLogItems.length})</span>
+            )}
+          </div>
+          <p className="text-[11px] text-slate-500 mt-0.5">{t("admin_backup_log_subtitle")}</p>
+        </div>
+        <button
+          type="button"
+          disabled={refreshing}
+          onClick={onRefresh}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors shrink-0"
+        >
+          <FaArrowsRotate className={`text-[10px] ${refreshing ? "animate-spin" : ""}`} />
+          {refreshing ? t("admin_backup_refreshing") : t("admin_backup_refresh")}
+        </button>
+      </div>
+
+      {backup.ok && allLogItems.length > 0 && (
+        <div className="px-5 py-3 border-b border-slate-100">
+          <div className="relative">
+            <FaMagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs" />
+            <input
+              type="search"
+              placeholder={t("admin_backup_log_search")}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400 transition"
+            />
+          </div>
+        </div>
+      )}
+
+      {!backup.ok ? (
+        <div className="px-5 py-4">
+          <p className="text-sm text-red-600">
+            {t("admin_backup_error")}: {(backup as { error: string }).error}
+          </p>
+        </div>
+      ) : allLogItems.length === 0 ? (
+        <p className="px-5 py-8 text-center text-sm text-slate-500">{t("admin_backup_log_empty")}</p>
+      ) : filtered.length === 0 ? (
+        <p className="px-5 py-8 text-center text-sm text-slate-500">{t("admin_backup_log_no_results")}</p>
+      ) : (
+        <>
+          <div className="overflow-x-auto flex-1">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50/80">
+                  <th className="px-5 py-2.5 text-[10px] font-medium text-slate-500 uppercase tracking-wide">
+                    {t("admin_backup_log_site")}
+                  </th>
+                  <th className="px-3 py-2.5 text-[10px] font-medium text-slate-500 uppercase tracking-wide hidden sm:table-cell">
+                    {t("admin_backup_log_file")}
+                  </th>
+                  <th className="px-5 py-2.5 text-[10px] font-medium text-slate-500 uppercase tracking-wide text-right">
+                    {t("admin_backup_log_date")}
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {pageItems.map((item) => (
+                  <tr key={`${item.siteName}-${item.backup.relativePath ?? item.backup.name}`} className="hover:bg-slate-50/80">
+                    <td className="px-5 py-2.5">
+                      <p className="text-xs font-medium text-slate-800 truncate max-w-[140px] sm:max-w-none">
+                        {item.clientLabel ?? item.siteName}
+                      </p>
+                      {item.clientLabel ? (
+                        <p className="text-[10px] text-slate-400 font-mono truncate mt-0.5">
+                          {item.siteName}
+                        </p>
+                      ) : null}
+                      <p className="text-[10px] text-slate-500 font-mono truncate mt-0.5 sm:hidden">
+                        {item.backup.name}
+                      </p>
+                    </td>
+                    <td className="px-3 py-2.5 hidden sm:table-cell">
+                      <p className="text-[11px] text-slate-600 font-mono truncate max-w-[200px]">
+                        {item.backup.name}
+                      </p>
+                    </td>
+                    <td className="px-5 py-2.5 text-right whitespace-nowrap">
+                      <p className="text-xs text-slate-600">
+                        {formatBackupDate(item.backup, lang)}
+                      </p>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="border-t border-slate-100 bg-slate-50/50">
+            {search.trim() && (
+              <p className="px-5 pt-2.5 text-[11px] text-slate-500">
+                {t("admin_backup_log_showing")
+                  .replace("{shown}", String(filtered.length))
+                  .replace("{total}", String(allLogItems.length))}
+              </p>
+            )}
+            {showPagination && (
+              <div className="flex items-center justify-between gap-2 px-5 py-3">
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  disabled={safePage === 0}
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  <FaChevronLeft className="text-[9px]" />
+                  {t("admin_pagination_prev")}
+                </button>
+                <span className="text-[11px] text-slate-500 tabular-nums">
+                  {t("admin_pagination_page")
+                    .replace("{current}", String(safePage + 1))
+                    .replace("{total}", String(totalPages))}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                  disabled={safePage >= totalPages - 1}
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  {t("admin_pagination_next")}
+                  <FaChevronRight className="text-[9px]" />
+                </button>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function BackupPanel({
+  backup,
+  refreshing,
+  onRefresh,
+  t,
+  lang,
+}: {
+  backup: BackupResult;
+  refreshing: boolean;
+  onRefresh: () => void;
+  t: (k: any) => string;
+  lang: "th" | "en";
+}) {
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const entries = backup.ok ? backup.entries : [];
+
+  // Collapse all site rows by default whenever backup data loads or refreshes
+  useEffect(() => {
+    if (!backup.ok || entries.length === 0) return;
+    setCollapsed(new Set(entries.map((e) => e.name)));
+  }, [backup.ok, backup.ok ? backup.fetchedAt : 0]);
   const allBackups = entries.flatMap((e) => filterBackupSnapshots(e.children ?? []));
   const latestBackup = allBackups.reduce<BackupEntry | null>((best, b) => {
     const ts = backupTimestamp(b);
@@ -282,7 +559,6 @@ function BackupPanel({
     return ts > bestTs ? b : best;
   }, null);
   const totalBackups = allBackups.length;
-  const dateLocale = lang === "en" ? "en-US" : "th-TH";
   const siteNames = entries.map((e) => e.name);
   const allCollapsed = siteNames.length > 0 && siteNames.every((n) => collapsed.has(n));
   const allExpanded = siteNames.every((n) => !collapsed.has(n));
@@ -312,7 +588,7 @@ function BackupPanel({
           <button
             type="button"
             disabled={refreshing}
-            onClick={() => fetcher.submit(null, { method: "post", action: "/api/admin/backup-refresh" })}
+            onClick={onRefresh}
             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors"
           >
             <FaArrowsRotate className={`text-[10px] ${refreshing ? "animate-spin" : ""}`} />
@@ -342,7 +618,7 @@ function BackupPanel({
               <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">{t("admin_backup_last")}</p>
               <p className="text-sm font-medium text-slate-700 mt-0.5 truncate">
                 {latestBackup
-                  ? formatBackupDate(latestBackup, dateLocale)
+                  ? formatBackupDate(latestBackup, lang)
                   : "—"}
               </p>
             </div>
@@ -387,7 +663,7 @@ function BackupPanel({
                   });
                 }}
                 t={t}
-                dateLocale={dateLocale}
+                lang={lang}
               />
             ))}
           </ul>
@@ -488,9 +764,12 @@ function backupTimestamp(entry: BackupEntry): number {
   return entry.lastModified || parseBackupTimestamp(entry.name) || 0;
 }
 
-function formatBackupDate(entry: BackupEntry, locale: string): string {
+function formatBackupDate(entry: BackupEntry, lang: "th" | "en"): string {
   const ts = backupTimestamp(entry);
   if (!ts) return entry.name;
+  const diff = Math.floor(Date.now() / 1000) - ts;
+  if (diff < 604800) return formatRelativeTime(ts, lang);
+  const locale = lang === "en" ? "en-US" : "th-TH";
   return new Date(ts * 1000).toLocaleDateString(locale, {
     day: "numeric",
     month: "short",
@@ -505,13 +784,13 @@ function BackupSiteRow({
   collapsed,
   onToggle,
   t,
-  dateLocale,
+  lang,
 }: {
   entry: BackupEntry;
   collapsed: boolean;
   onToggle: () => void;
   t: (k: any) => string;
-  dateLocale: string;
+  lang: "th" | "en";
 }) {
   const backups = filterBackupSnapshots(entry.children ?? []);
   const hasBackups = backups.length > 0;
@@ -551,14 +830,14 @@ function BackupSiteRow({
           {hasBackups && (
             <ul className="divide-y divide-slate-50 border-t border-slate-100 bg-slate-50/30">
               {backups.map((backup) => (
-                <li key={backup.name} className="flex items-center gap-3 pl-12 pr-5 py-2.5 hover:bg-white/80">
+                <li key={backup.relativePath ?? backup.name} className="flex items-center gap-3 pl-12 pr-5 py-2.5 hover:bg-white/80">
                   <FaBoxArchive className="text-emerald-500 text-sm shrink-0" />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs text-slate-700 font-mono truncate">{backup.name}</p>
                     <p className="text-[10px] text-slate-400 mt-0.5">{t("admin_backup_snapshot")}</p>
                   </div>
                   <span className="shrink-0 text-xs text-slate-500 hidden sm:block">
-                    {formatBackupDate(backup, dateLocale)}
+                    {formatBackupDate(backup, lang)}
                   </span>
                 </li>
               ))}

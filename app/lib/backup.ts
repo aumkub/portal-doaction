@@ -3,6 +3,8 @@ export type BackupEntry = {
   lastModified: number;
   size: number;
   isDirectory: boolean;
+  /** Path within the site folder (e.g. `file.wpress` or `subdir/file.wpress`) */
+  relativePath?: string;
   childCount?: number;
   children?: BackupEntry[];
 };

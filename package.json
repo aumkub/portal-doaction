@@ -56,7 +56,8 @@
 		"cf-typegen": "wrangler types && react-router typegen",
 		"check": "tsc && react-router build && wrangler deploy --dry-run",
 		"deploy": "wrangler deploy",
-		"dev": "react-router dev",
+		"dev": "env -u HTTP_PROXY -u HTTPS_PROXY -u http_proxy -u https_proxy -u ALL_PROXY -u all_proxy react-router dev",
+		"dev:local": "react-router dev",
 		"preview": "npm run build && vite preview",
 		"typecheck": "npm run typegen && tsc -b"
 	},
