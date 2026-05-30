@@ -231,6 +231,27 @@ export function createDB(d1: D1Database) {
       return result.results;
     },
 
+    async listClientsWithoutReportForMonth(
+      year: number,
+      month: number
+    ): Promise<(Client & { user_email: string; user_name: string })[]> {
+      const result = await d1
+        .prepare(`
+          SELECT c.*, u.email as user_email, u.name as user_name
+          FROM clients c
+          JOIN users u ON u.id = c.user_id
+          WHERE c.deleted_at IS NULL
+            AND c.id NOT IN (
+              SELECT client_id FROM monthly_reports
+              WHERE year = ? AND month = ?
+            )
+          ORDER BY c.company_name
+        `)
+        .bind(year, month)
+        .all<(Client & { user_email: string; user_name: string })>();
+      return result.results;
+    },
+
     async getReport(id: string): Promise<MonthlyReport | null> {
       return d1
         .prepare("SELECT * FROM monthly_reports WHERE id = ?")

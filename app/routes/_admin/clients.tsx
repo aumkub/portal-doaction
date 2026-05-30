@@ -8,7 +8,7 @@ import { formatRelativeTime } from "~/lib/utils";
 import type { Client } from "~/types";
 import { useT } from "~/lib/i18n";
 import type { TranslationKey } from "~/lib/translations";
-import { FaCirclePlus, FaEye, FaUserSecret, FaMagnifyingGlass, FaUsers, FaCircleCheck, FaClock, FaCloud } from "react-icons/fa6";
+import { FaCirclePlus, FaEye, FaUserSecret, FaMagnifyingGlass, FaUsers, FaClock, FaCloud, FaFileCircleXmark, FaCircleCheck } from "react-icons/fa6";
 
 export function meta() {
   return [{ title: "จัดการลูกค้า — Admin" }];
@@ -17,6 +17,10 @@ export function meta() {
 export async function loader({ request, context }: Route.LoaderArgs) {
   const user = await requireCoAdminOrAdmin(request, context.cloudflare.env.DB, context.cloudflare.env.SESSIONPORTAL);
   const db = createDB(context.cloudflare.env.DB);
+
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1; // 1-12
 
   let clients = await db.listClients();
   if (user.role === "co-admin") {
@@ -28,7 +32,19 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const allClientsWithStatus = await Promise.all(
     clients.map(async (client) => {
       const u = await db.getUserById(client.user_id);
-      return { ...client, first_login_at: u?.first_login_at ?? null };
+      // Hardcode: บริษัท ดู แอคชั่น จำกัด doesn't need monthly reports (testing account)
+      const skipReportCheck = client.company_name === "บริษัท ดู แอคชั่น จำกัด";
+      let has_monthly_report = false;
+      if (!skipReportCheck) {
+        const report = await db.getReportByMonth(client.id, currentYear, currentMonth);
+        has_monthly_report = report !== null;
+      }
+      return { 
+        ...client, 
+        first_login_at: u?.first_login_at ?? null,
+        has_monthly_report: skipReportCheck ? true : has_monthly_report,
+        skip_report_check: skipReportCheck
+      };
     })
   );
 
@@ -40,7 +56,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const safePage = Math.min(page, totalPages);
   const clientsWithStatus = allClientsWithStatus.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
-  return { clients: clientsWithStatus, userRole: user.role, page: safePage, totalPages, total };
+  return { clients: clientsWithStatus, userRole: user.role, page: safePage, totalPages, total, currentMonth, currentYear };
 }
 
 const packageKeys: Record<Client["package"], TranslationKey> = {
@@ -135,16 +151,18 @@ function ClientActions({
 }
 
 export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
-  const { clients, userRole, page, totalPages, total } = loaderData as {
-    clients: Array<Client & { first_login_at: number | null }>;
+  const { clients, userRole, page, totalPages, total, currentMonth, currentYear } = loaderData as {
+    clients: Array<Client & { first_login_at: number | null; has_monthly_report: boolean; skip_report_check?: boolean }>;
     userRole: string;
     page: number;
     totalPages: number;
     total: number;
+    currentMonth: number;
+    currentYear: number;
   };
   const { t, lang } = useT();
   const [search, setSearch] = useState("");
-  const [pkgFilter, setPkgFilter] = useState<"all" | Client["package"]>("all");
+  const [reportFilter, setReportFilter] = useState<"all" | "missing" | "has">("all");
 
   const activated = clients.filter((c) => c.first_login_at).length;
   const pending    = clients.length - activated;
@@ -156,10 +174,13 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
         !q ||
         c.company_name.toLowerCase().includes(q) ||
         (c.website_url ?? "").toLowerCase().includes(q);
-      const matchesPkg = pkgFilter === "all" || c.package === pkgFilter;
-      return matchesSearch && matchesPkg;
+      const matchesReport =
+        reportFilter === "all" ||
+        (reportFilter === "missing" && !c.has_monthly_report) ||
+        (reportFilter === "has" && c.has_monthly_report);
+      return matchesSearch && matchesReport;
     });
-  }, [clients, search, pkgFilter]);
+  }, [clients, search, reportFilter]);
 
   const isCoAdmin = userRole === "co-admin";
 
@@ -232,17 +253,21 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
           />
         </div>
         <div className="flex gap-2 flex-wrap">
-          {(["all", "basic", "standard", "premium"] as const).map((pkg) => (
+          {([
+            { value: "all" as const, label: "ทั้งหมด" },
+            { value: "missing" as const, label: "ยังไม่มี Report" },
+            { value: "has" as const, label: "มี Report แล้ว" },
+          ] as const).map((opt) => (
             <button
-              key={pkg}
-              onClick={() => setPkgFilter(pkg)}
+              key={opt.value}
+              onClick={() => setReportFilter(opt.value)}
               className={`px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${
-                pkgFilter === pkg
+                reportFilter === opt.value
                   ? "bg-slate-900 text-white border-slate-900"
                   : "bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
               }`}
             >
-              {pkg === "all" ? "ทั้งหมด" : t(packageKeys[pkg])}
+              {opt.label}
             </button>
           ))}
         </div>
@@ -254,7 +279,7 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
           <div className="px-5 py-16 text-center">
             <div className="flex flex-col items-center gap-2 text-slate-500">
               <FaUsers className="text-3xl opacity-30" />
-              <p className="text-sm">{search || pkgFilter !== "all" ? "ไม่พบลูกค้าที่ค้นหา" : t("admin_clients_empty")}</p>
+              <p className="text-sm">{search || reportFilter !== "all" ? "ไม่พบลูกค้าที่ค้นหา" : t("admin_clients_empty")}</p>
             </div>
           </div>
         ) : (
@@ -265,6 +290,10 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/60">
                     <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">{t("admin_col_client")}</th>
+                    <th className="text-center text-xs font-medium text-slate-500 px-3 py-3 w-14" title="Report ประจำเดือน">
+                      <FaFileCircleXmark className="inline text-slate-400 text-[10px]" aria-hidden="true" />
+                      <span className="sr-only">Report ประจำเดือน</span>
+                    </th>
                     <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">{t("admin_col_website")}</th>
                     <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">{t("admin_col_package")}</th>
                     <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">{t("admin_col_contract")}</th>
@@ -283,6 +312,7 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
                     const styles = packageStyles[client.package];
                     const initials = getInitials(client.company_name);
                     const avatarCls = avatarColor(client.company_name);
+                    const missingReport = !client.has_monthly_report;
                     return (
                       <tr key={client.id} className="hover:bg-slate-50/70 transition-colors">
                         <td className="px-5 py-3.5">
@@ -290,6 +320,20 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
                             <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${avatarCls}`}>{initials}</span>
                             <span className="font-medium text-slate-900">{client.company_name}</span>
                           </div>
+                        </td>
+                        <td className="px-5 py-3.5">
+                          {missingReport ? (
+                            <span
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-rose-50 text-rose-600 ring-1 ring-rose-200"
+                              title={`${currentMonth}/${currentYear} - ยังไม่มี Report`}
+                            >
+                              <FaFileCircleXmark className="text-xs" aria-label="ยังไม่มี Report" />
+                            </span>
+                          ) : (
+                            <span className="text-slate-300" aria-label="มี Report แล้ว">
+                              <FaCircleCheck className="text-emerald-500" />
+                            </span>
+                          )}
                         </td>
                         <td className="px-5 py-3.5 text-slate-500">
                           {client.website_url ? (
@@ -343,9 +387,10 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
                 const styles = packageStyles[client.package];
                 const initials = getInitials(client.company_name);
                 const avatarCls = avatarColor(client.company_name);
+                const missingReport = !client.has_monthly_report;
                 return (
                   <div key={client.id} className="p-4 space-y-3">
-                    {/* Top: avatar + name + package */}
+                    {/* Top: avatar + name + report status */}
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-3 min-w-0">
                         <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${avatarCls}`}>{initials}</span>
@@ -359,7 +404,23 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
                           )}
                         </div>
                       </div>
-                      <span className={`inline-flex shrink-0 items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${styles.badge}`}>
+                      {missingReport ? (
+                        <span
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-rose-50 text-rose-600 ring-1 ring-rose-200"
+                          title={`${currentMonth}/${currentYear} - ยังไม่มี Report`}
+                        >
+                          <FaFileCircleXmark className="text-xs" aria-label="ยังไม่มี Report" />
+                        </span>
+                      ) : (
+                        <span className="text-emerald-500" aria-label="มี Report แล้ว">
+                          <FaCircleCheck className="text-sm" />
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Package badge */}
+                    <div className="flex items-center gap-3">
+                      <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${styles.badge}`}>
                         <span className={`h-1.5 w-1.5 rounded-full ${styles.dot}`} />
                         {t(packageKeys[client.package])}
                       </span>

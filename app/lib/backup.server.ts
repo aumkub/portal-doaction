@@ -16,15 +16,19 @@ const CACHE_TTL_SECONDS = 15 * 60; // 15 minutes
 type WebDAVCredentials = { host: string; user: string; pass: string };
 
 export async function getBackupList(
-  env: {
-    WEBDAV_HOST?: string;
-    WEBDAV_USER?: string;
-    WEBDAV_PASS?: string;
-    WEBDAV_PATH?: string;
-  },
+  webdavConfig: {
+    url: string;
+    username: string;
+    password: string;
+    path?: string;
+  } | null,
   kv: KVNamespace,
   options?: { forceRefresh?: boolean }
 ): Promise<BackupResult> {
+  if (!webdavConfig) {
+    return { ok: false, error: "WebDAV not configured in settings" };
+  }
+
   if (!options?.forceRefresh) {
     const cached = await kv.get(CACHE_KEY, "json") as BackupResult | null;
     if (cached?.ok) {
@@ -32,7 +36,7 @@ export async function getBackupList(
     }
   }
 
-  const fresh = await fetchBackupList(env);
+  const fresh = await fetchBackupList(webdavConfig);
   if (fresh.ok) {
     const payload = { ok: true as const, entries: fresh.entries, fetchedAt: fresh.fetchedAt };
     await kv.put(CACHE_KEY, JSON.stringify(payload), {
@@ -43,34 +47,35 @@ export async function getBackupList(
   return { ...fresh, fromCache: false };
 }
 
-export async function fetchBackupList(env: {
-  WEBDAV_HOST?: string;
-  WEBDAV_USER?: string;
-  WEBDAV_PASS?: string;
-  WEBDAV_PATH?: string;
-}): Promise<{ ok: true; entries: BackupEntry[]; fetchedAt: number } | { ok: false; error: string }> {
-  const host = (env.WEBDAV_HOST ?? ALLOWED_HOST).trim();
-  const user = env.WEBDAV_USER?.trim();
-  const pass = env.WEBDAV_PASS?.trim();
-  const path = (env.WEBDAV_PATH ?? "/home/Backup").trim();
-
-  if (host !== ALLOWED_HOST) {
-    return { ok: false, error: "Domain mismatch — backup host not allowed" };
+export async function fetchBackupList(
+  webdavConfig: {
+    url: string;
+    username: string;
+    password: string;
+    path?: string;
   }
+): Promise<{ ok: true; entries: BackupEntry[]; fetchedAt: number } | { ok: false; error: string }> {
+  const { url, username, password, path = "/home/Backup" } = webdavConfig;
+  const urlObj = new URL(url);
+  const host = urlObj.host;
+  const user = username.trim();
+  const pass = password.trim();
+  const basePath = path.trim();
+
   if (!user || !pass) {
-    return { ok: false, error: "Backup credentials not configured" };
+    return { ok: false, error: "WebDAV credentials not configured" };
   }
 
   const creds: WebDAVCredentials = { host, user, pass };
 
   try {
-    const xml = await propfind(creds, path);
-    const sites = parseWebDAVXML(xml, path).filter((e) => e.isDirectory);
+    const xml = await propfind(creds, basePath);
+    const sites = parseWebDAVXML(xml, basePath).filter((e) => e.isDirectory);
 
     if (sites.length > 0) {
       const enriched = await Promise.all(
         sites.map(async (site) => {
-          const sitePath = `${path.replace(/\/$/, "")}/${site.name}`;
+          const sitePath = `${basePath.replace(/\/$/, "")}/${site.name}`;
           try {
             const backups = await fetchBackupsInSite(creds, sitePath);
             const snapshots = filterBackupSnapshots(backups);
@@ -89,7 +94,7 @@ export async function fetchBackupList(env: {
       return { ok: true, entries: enriched, fetchedAt: Math.floor(Date.now() / 1000) };
     }
 
-    const entries = parseWebDAVXML(xml, path);
+    const entries = parseWebDAVXML(xml, basePath);
     return { ok: true, entries, fetchedAt: Math.floor(Date.now() / 1000) };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Connection failed" };
@@ -141,7 +146,7 @@ async function propfind(creds: WebDAVCredentials, path: string): Promise<string>
   });
 
   if (resp.status !== 207 && !resp.ok) {
-    throw new Error(`WebDAV server returned HTTP ${resp.status}`);
+    throw new Error(`WebDAV server returned HTTP ${resp.status}: ${resp.statusText}`);
   }
   return resp.text();
 }

@@ -1,6 +1,6 @@
-import { Form, redirect, useActionData, type FormEvent } from "react-router";
+import { Form, redirect, useActionData, useSearchParams, type FormEvent as ReactFormEvent } from "react-router";
 import { z } from "zod";
-import { useState, type FormEvent as ReactFormEvent } from "react";
+import { useState } from "react";
 import { requireCoAdminOrAdmin, startImpersonation, generateMagicToken } from "~/lib/auth.server";
 import { getBackupList } from "~/lib/backup.server";
 import { createDB } from "~/lib/db.server";
@@ -22,6 +22,7 @@ import {
   FaPaperPlane,
   FaCircleCheck,
   FaDatabase,
+  FaUser,
 } from "react-icons/fa6";
 import {
   normalizeClientCcEmailsInput,
@@ -77,7 +78,26 @@ export async function loader({ request, params, context }: any) {
     for (const c of allClients) {
       if (c.backup_path) backupPathUsage[c.backup_path] = c.company_name;
     }
-    const backup = await getBackupList(env, env.SESSIONPORTAL);
+    
+    // Read WebDAV settings from database
+    const webdavEnabled = (await db.getAppSetting("webdav_enabled")) !== "0";
+    let webdavConfig = null;
+    let backup = { ok: false as const, error: "WebDAV backup is disabled in settings" };
+    
+    if (webdavEnabled) {
+      const url = await db.getAppSetting("webdav_url");
+      const username = await db.getAppSetting("webdav_username");
+      const password = await db.getAppSetting("webdav_password");
+      const path = await db.getAppSetting("webdav_path");
+      
+      if (!url || !username || !password) {
+        backup = { ok: false, error: "WebDAV credentials not configured. Please configure in Settings." };
+      } else {
+        webdavConfig = { url, username, password, path: path || "/home/Backup" };
+        backup = await getBackupList(webdavConfig, env.SESSIONPORTAL);
+      }
+    }
+    
     if (backup.ok) backupSites = backup.entries.map((e) => e.name);
   }
 
@@ -321,6 +341,10 @@ function SectionCard({ title, subtitle, children, action }: {
   );
 }
 
+function fieldCls(extra = "") {
+  return `w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 transition ${extra}`;
+}
+
 export default function AdminClientDetailPage({ loaderData }: any) {
   const {
     client,
@@ -335,10 +359,12 @@ export default function AdminClientDetailPage({ loaderData }: any) {
   } = loaderData;
   const { t } = useT();
   const actionData = useActionData() as ActionData | undefined;
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get("tab") ?? "details";
   const isViewOnly = currentUser.role === "co-admin";
   const isAdmin = currentUser.role === "admin";
-  const backupPathUpdated =
-    actionData?.success && "backup_path_updated" in actionData.success;
+  const backupPathUpdated = actionData?.success && "backup_path_updated" in actionData.success;
+  const { lang } = useT();
 
   const v = actionData?.values ?? {
     name: user?.name ?? "",
@@ -366,9 +392,14 @@ export default function AdminClientDetailPage({ loaderData }: any) {
   const initials = getInitials(client.company_name);
   const avatarCls = avatarColor(client.company_name);
 
+  const tabs = [
+    { id: "details", label: lang === "th" ? "รายละเอียด" : "Details", icon: <FaUser className="text-[10px]" /> },
+    { id: "access", label: lang === "th" ? "การเข้าถึง" : "Access", icon: <FaUserSecret className="text-[10px]" /> },
+    { id: "notes", label: lang === "th" ? "บันทึก" : "Notes", icon: <FaFileLines className="text-[10px]" /> },
+  ];
+
   return (
     <div className="space-y-6">
-
       {/* ── Breadcrumb ── */}
       <div>
         <a
@@ -450,12 +481,27 @@ export default function AdminClientDetailPage({ loaderData }: any) {
         </div>
       </div>
 
-      {/* ── Main 2-column layout ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      {/* ── Tab Navigation ── */}
+      <div className="bg-white rounded-xl border border-slate-200 p-1.5 flex gap-1.5">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setSearchParams({ tab: tab.id })}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              activeTab === tab.id
+                ? "bg-slate-900 text-white shadow-sm"
+                : "text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            {tab.icon}
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
-        {/* ── Left column ── */}
-        <div className="lg:col-span-8 space-y-5">
-
+      {/* ── Tab Content ── */}
+      {activeTab === "details" && (
+        <div className="space-y-5">
           {/* Edit form */}
           <Form method="post" key={formKey}>
             <input type="hidden" name="intent" value="update_client" />
@@ -580,6 +626,31 @@ export default function AdminClientDetailPage({ loaderData }: any) {
             </SectionCard>
           )}
 
+          {/* Danger zone */}
+          {!isViewOnly && (
+            <div className="bg-rose-50 border border-rose-200 rounded-xl p-5 flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-rose-900">{t("admin_client_delete_title")}</p>
+                <p className="text-xs text-rose-700 mt-0.5">{t("admin_client_delete_desc")}</p>
+              </div>
+              <Form method="post" className="shrink-0"
+                onSubmit={(e: ReactFormEvent<HTMLFormElement>) => {
+                  if (!confirm(t("admin_client_delete_confirm"))) e.preventDefault();
+                }}>
+                <input type="hidden" name="intent" value="delete_client" />
+                <button type="submit"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 transition-colors">
+                  <FaTrash className="text-xs" />
+                  {t("admin_client_delete_btn")}
+                </button>
+              </Form>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === "access" && (
+        <div className="space-y-5">
           {/* Account access */}
           {!isViewOnly && (
             <SectionCard title={t("admin_change_email_title")} subtitle={t("admin_change_email_desc")}>
@@ -651,113 +722,89 @@ export default function AdminClientDetailPage({ loaderData }: any) {
               </Form>
             </div>
           )}
-
-          {/* Danger zone */}
-          {!isViewOnly && (
-            <div className="bg-rose-50 border border-rose-200 rounded-xl p-5 flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold text-rose-900">{t("admin_client_delete_title")}</p>
-                <p className="text-xs text-rose-700 mt-0.5">{t("admin_client_delete_desc")}</p>
-              </div>
-              <Form method="post" className="shrink-0"
-                onSubmit={(e: ReactFormEvent<HTMLFormElement>) => {
-                  if (!confirm(t("admin_client_delete_confirm"))) e.preventDefault();
-                }}>
-                <input type="hidden" name="intent" value="delete_client" />
-                <button type="submit"
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 transition-colors">
-                  <FaTrash className="text-xs" />
-                  {t("admin_client_delete_btn")}
-                </button>
-              </Form>
-            </div>
-          )}
         </div>
+      )}
 
-        {/* ── Right column — Internal Notes ── */}
-        <div className="lg:col-span-4">
-          <div className="sticky top-6">
-            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-                <div>
-                  <p className="text-sm font-semibold text-slate-900">Internal Notes</p>
-                  <p className="text-xs text-slate-500 mt-0.5">บันทึกภายใน สำหรับ Admin และ Co-Admin</p>
-                </div>
-                <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded-full">
-                  {notes.length}
-                </span>
-              </div>
-
-              {/* Add note */}
-              <div className="p-4 border-b border-slate-100 bg-slate-50/50">
-                <Form method="post" className="space-y-2" key={`note-${notes.length}`}>
-                  <input type="hidden" name="intent" value="add_note" />
-                  <textarea name="note" rows={3} placeholder="เพิ่มบันทึกใหม่..."
-                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 resize-none transition" />
-                  {actionData?.errors?.note && (
-                    <p className="text-xs text-red-500">{actionData.errors.note[0]}</p>
-                  )}
-                  {noteAdded && (
-                    <p className="flex items-center gap-1.5 text-xs text-emerald-700">
-                      <FaCircleCheck className="text-[10px]" /> บันทึกเพิ่มแล้ว
-                    </p>
-                  )}
-                  <div className="flex justify-end">
-                    <Button type="submit" className="bg-slate-900 hover:bg-slate-700 text-white text-xs h-8 px-3">
-                      เพิ่มบันทึก
-                    </Button>
-                  </div>
-                </Form>
-              </div>
-
-              {/* Notes list */}
-              <div className="divide-y divide-slate-100 max-h-[500px] overflow-y-auto">
-                {notes.length === 0 ? (
-                  <div className="py-10 text-center">
-                    <p className="text-xs text-slate-500">ยังไม่มีบันทึก</p>
-                  </div>
-                ) : (
-                  notes.map((note: any) => {
-                    const isAdmin = note.user_role === "admin";
-                    return (
-                      <div key={note.id} className="p-4 hover:bg-slate-50/50 transition-colors">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
-                              <span className="text-xs font-medium text-slate-700 truncate">{note.user_name}</span>
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                                isAdmin ? "bg-violet-100 text-violet-700" : "bg-emerald-100 text-emerald-700"
-                              }`}>
-                                {isAdmin ? "Admin" : "Co-Admin"}
-                              </span>
-                            </div>
-                            <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{note.note}</p>
-                            <p className="text-[11px] text-slate-500 mt-1.5">
-                              {new Date(note.created_at * 1000).toLocaleString("th-TH")}
-                            </p>
-                          </div>
-                          {(currentUser.role === "admin" || currentUser.role === "co-admin" || note.user_id === currentUser.id) && (
-                            <Form method="post" className="shrink-0">
-                              <input type="hidden" name="intent" value="delete_note" />
-                              <input type="hidden" name="note_id" value={note.id} />
-                              <button type="submit"
-                                onClick={(e) => { if (!confirm("ลบบันทึกนี้?")) e.preventDefault(); }}
-                                className="p-1.5 rounded-lg text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-colors"
-                                title="ลบบันทึก">
-                                <FaTrash className="text-[10px]" />
-                              </button>
-                            </Form>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
+      {activeTab === "notes" && (
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Internal Notes</p>
+              <p className="text-xs text-slate-500 mt-0.5">บันทึกภายใน สำหรับ Admin และ Co-Admin</p>
             </div>
+            <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded-full">
+              {notes.length}
+            </span>
+          </div>
+
+          {/* Add note */}
+          <div className="p-4 border-b border-slate-100 bg-slate-50/50">
+            <Form method="post" className="space-y-2" key={`note-${notes.length}`}>
+              <input type="hidden" name="intent" value="add_note" />
+              <textarea name="note" rows={3} placeholder="เพิ่มบันทึกใหม่..."
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 resize-none transition" />
+              {actionData?.errors?.note && (
+                <p className="text-xs text-red-500">{actionData.errors.note[0]}</p>
+              )}
+              {noteAdded && (
+                <p className="flex items-center gap-1.5 text-xs text-emerald-700">
+                  <FaCircleCheck className="text-[10px]" /> บันทึกเพิ่มแล้ว
+                </p>
+              )}
+              <div className="flex justify-end">
+                <Button type="submit" className="bg-slate-900 hover:bg-slate-700 text-white text-xs h-8 px-3">
+                  เพิ่มบันทึก
+                </Button>
+              </div>
+            </Form>
+          </div>
+
+          {/* Notes list */}
+          <div className="divide-y divide-slate-100 max-h-[500px] overflow-y-auto">
+            {notes.length === 0 ? (
+              <div className="py-10 text-center">
+                <p className="text-xs text-slate-500">ยังไม่มีบันทึก</p>
+              </div>
+            ) : (
+              notes.map((note: any) => {
+                const isAdmin = note.user_role === "admin";
+                return (
+                  <div key={note.id} className="p-4 hover:bg-slate-50/50 transition-colors">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
+                          <span className="text-xs font-medium text-slate-700 truncate">{note.user_name}</span>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                            isAdmin ? "bg-violet-100 text-violet-700" : "bg-emerald-100 text-emerald-700"
+                          }`}>
+                            {isAdmin ? "Admin" : "Co-Admin"}
+                          </span>
+                        </div>
+                        <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{note.note}</p>
+                        <p className="text-[11px] text-slate-500 mt-1.5">
+                          {new Date(note.created_at * 1000).toLocaleString("th-TH")}
+                        </p>
+                      </div>
+                      {(currentUser.role === "admin" || currentUser.role === "co-admin" || note.user_id === currentUser.id) && (
+                        <Form method="post" className="shrink-0">
+                          <input type="hidden" name="intent" value="delete_note" />
+                          <input type="hidden" name="note_id" value={note.id} />
+                          <button type="submit"
+                            onClick={(e) => { if (!confirm("ลบบันทึกนี้?")) e.preventDefault(); }}
+                            className="p-1.5 rounded-lg text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-colors"
+                            title="ลบบันทึก">
+                            <FaTrash className="text-[10px]" />
+                          </button>
+                        </Form>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

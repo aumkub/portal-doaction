@@ -1,4 +1,4 @@
-import { Form, redirect } from "react-router";
+import { Form, redirect, useSearchParams } from "react-router";
 import { z } from "zod";
 import { requireUser } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
@@ -52,8 +52,16 @@ const inputCls = "w-full h-10 rounded-lg border border-slate-200 px-3 text-sm fo
 
 export default function ClientSettingsPage({ loaderData, actionData }: any) {
   const { user, client } = loaderData;
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get("tab") ?? "profile";
   const errors = actionData?.errors;
-  const { t } = useT();
+  const { t, lang } = useT();
+
+  const tabs = [
+    { id: "profile", label: lang === "th" ? "โปรไฟล์" : "Profile", icon: <FaUser className="text-[10px]" /> },
+    { id: "company", label: lang === "th" ? "บริษัท" : "Company", icon: <FaBuilding className="text-[10px]" /> },
+    { id: "help", label: lang === "th" ? "ช่วยเหลือ" : "Help", icon: <FaCircleQuestion className="text-[10px]" /> },
+  ];
 
   return (
     <div className="space-y-5 max-w-2xl">
@@ -63,55 +71,74 @@ export default function ClientSettingsPage({ loaderData, actionData }: any) {
         <p className="mt-1 text-sm text-slate-500">{t("settings_subtitle")}</p>
       </div>
 
-      {/* Profile */}
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100">
-          <FaUser className="text-slate-500 text-sm" aria-hidden="true" />
-          <h2 className="text-sm font-semibold text-slate-900">{t("settings_profile_section")}</h2>
-        </div>
-        <div className="p-5">
-          {/* Avatar row */}
-          <div className="flex items-center gap-4 mb-5 pb-5 border-b border-slate-100">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-700 text-lg font-bold">
-              {getInitials(user.name)}
-            </div>
-            <div>
-              <p className="font-semibold text-slate-900">{user.name}</p>
-              <p className="text-sm text-slate-500">{user.email}</p>
-            </div>
-          </div>
-
-          <Form method="post" className="space-y-4">
-            <div className="grid sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-600">{t("settings_name_label")}</label>
-                <input name="name" defaultValue={user.name} required className={inputCls} />
-                {errors?.name && <p className="text-xs text-red-500">{errors.name[0]}</p>}
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-600">{t("settings_email_label")}</label>
-                <input
-                  value={user.email}
-                  readOnly
-                  className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm bg-slate-50 text-slate-500 cursor-not-allowed"
-                />
-                <p className="text-xs text-slate-500">{t("settings_email_note")}</p>
-              </div>
-            </div>
-            <div className="flex justify-end pt-1">
-              <button
-                type="submit"
-                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700 transition-colors"
-              >
-                {t("save")}
-              </button>
-            </div>
-          </Form>
-        </div>
+      {/* Tab Navigation */}
+      <div className="bg-white rounded-xl border border-slate-200 p-1.5 flex gap-1.5">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setSearchParams({ tab: tab.id })}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              activeTab === tab.id
+                ? "bg-violet-600 text-white shadow-sm"
+                : "text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            {tab.icon}
+            {tab.label}
+          </button>
+        ))}
       </div>
 
-      {/* Company info */}
-      {client && (
+      {/* Tab Content */}
+      {activeTab === "profile" && (
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100">
+            <FaUser className="text-slate-500 text-sm" aria-hidden="true" />
+            <h2 className="text-sm font-semibold text-slate-900">{t("settings_profile_section")}</h2>
+          </div>
+          <div className="p-5">
+            {/* Avatar row */}
+            <div className="flex items-center gap-4 mb-5 pb-5 border-b border-slate-100">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-700 text-lg font-bold">
+                {getInitials(user.name)}
+              </div>
+              <div>
+                <p className="font-semibold text-slate-900">{user.name}</p>
+                <p className="text-sm text-slate-500">{user.email}</p>
+              </div>
+            </div>
+
+            <Form method="post" className="space-y-4">
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-slate-600">{t("settings_name_label")}</label>
+                  <input name="name" defaultValue={user.name} required className={inputCls} />
+                  {errors?.name && <p className="text-xs text-red-500">{errors.name[0]}</p>}
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-slate-600">{t("settings_email_label")}</label>
+                  <input
+                    value={user.email}
+                    readOnly
+                    className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm bg-slate-50 text-slate-500 cursor-not-allowed"
+                  />
+                  <p className="text-xs text-slate-500">{t("settings_email_note")}</p>
+                </div>
+              </div>
+              <div className="flex justify-end pt-1">
+                <button
+                  type="submit"
+                  className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700 transition-colors"
+                >
+                  {t("save")}
+                </button>
+              </div>
+            </Form>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "company" && client && (
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100">
             <FaBuilding className="text-slate-500 text-sm" aria-hidden="true" />
@@ -151,22 +178,23 @@ export default function ClientSettingsPage({ loaderData, actionData }: any) {
         </div>
       )}
 
-      {/* Help */}
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100">
-          <FaCircleQuestion className="text-slate-500 text-sm" aria-hidden="true" />
-          <h2 className="text-sm font-semibold text-slate-900">{t("settings_help_section")}</h2>
+      {activeTab === "help" && (
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100">
+            <FaCircleQuestion className="text-slate-500 text-sm" aria-hidden="true" />
+            <h2 className="text-sm font-semibold text-slate-900">{t("settings_help_section")}</h2>
+          </div>
+          <div className="p-5">
+            <a
+              href="/tickets/new"
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors"
+            >
+              <FaTicket className="text-violet-500 text-xs" aria-hidden="true" />
+              {t("settings_help_ticket")}
+            </a>
+          </div>
         </div>
-        <div className="p-5">
-          <a
-            href="/tickets/new"
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors"
-          >
-            <FaTicket className="text-violet-500 text-xs" aria-hidden="true" />
-            {t("settings_help_ticket")}
-          </a>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

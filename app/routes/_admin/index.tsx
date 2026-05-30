@@ -94,8 +94,30 @@ export async function loader({ request, context }: any) {
   let backup: BackupResult = { ok: false, error: "Not available for co-admins" };
   const backupPathLabels: Record<string, string> = {};
   if (user.role === "admin") {
-    const env = context.cloudflare.env;
-    backup = await getBackupList(env, env.SESSIONPORTAL);
+    // Read WebDAV settings from database
+    const webdavEnabled = (await db.getAppSetting("webdav_enabled")) !== "0";
+    let webdavConfig = null;
+    
+    if (!webdavEnabled) {
+      backup = { ok: false, error: "WebDAV backup is disabled in settings" };
+    } else {
+      const url = await db.getAppSetting("webdav_url");
+      const username = await db.getAppSetting("webdav_username");
+      const password = await db.getAppSetting("webdav_password");
+      const path = await db.getAppSetting("webdav_path");
+      
+      if (!url || !username || !password) {
+        backup = { ok: false, error: "WebDAV credentials not configured. Please configure in Settings." };
+      } else {
+        webdavConfig = { url, username, password, path: path || "/home/Backup" };
+      }
+    }
+    
+    if (webdavConfig) {
+      const env = context.cloudflare.env;
+      backup = await getBackupList(webdavConfig, env.SESSIONPORTAL);
+    }
+    
     for (const c of allClients) {
       if (c.backup_path) backupPathLabels[c.backup_path] = c.company_name;
     }

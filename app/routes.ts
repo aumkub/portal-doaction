@@ -49,6 +49,7 @@ export default [
       route("reports/new", "routes/_admin/reports-new.tsx"),
       route("reports/:reportId", "routes/_admin/reports-detail.tsx"),
       route("settings", "routes/_admin/settings.tsx"),
+      route("settings/webdav", "routes/_admin/settings.webdav.tsx"),
     ]),
   ]),
 

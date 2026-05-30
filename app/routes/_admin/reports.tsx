@@ -139,17 +139,17 @@ function ActionButtons({ report, notified, isPublished, isCoAdmin, t, onDialog, 
         <>
           {!notified ? (
             <button type="button" onClick={() => onDialog({ report, mode: "send" })}
-              className="inline-flex items-center gap-1.5 mr-2 rounded-lg bg-violet-600 text-white text-xs font-medium px-3 py-1.5 hover:bg-violet-700 transition-colors">
+              className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 text-white text-xs font-medium px-3 py-1.5 hover:bg-violet-700 transition-colors">
               <FaPaperPlane className="text-[10px]" />{t("admin_report_email_btn_send")}
             </button>
           ) : (
             <>
               <button type="button" onClick={() => onDialog({ report, mode: "view" })}
-                className="inline-flex items-center gap-1.5 mr-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-600 px-3 py-1.5 hover:bg-slate-50 transition-colors">
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-600 px-3 py-1.5 hover:bg-slate-50 transition-colors">
                 <FaEye className="text-[10px]" />{t("admin_report_email_btn_view")}
               </button>
               <button type="button" onClick={() => onDialog({ report, mode: "send" })}
-                className="inline-flex items-center gap-1.5 mr-2 rounded-lg border border-violet-200 bg-violet-50 text-xs font-medium text-violet-700 px-3 py-1.5 hover:bg-violet-100 transition-colors">
+                className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 text-xs font-medium text-violet-700 px-3 py-1.5 hover:bg-violet-100 transition-colors">
                 <FaRotateRight className="text-[10px]" />{t("admin_report_email_btn_resend")}
               </button>
             </>
@@ -363,7 +363,7 @@ export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
                         <td className="px-5 py-3.5 text-slate-600 text-sm">{formatReportPeriod(report.month, report.year)}</td>
                         <td className="px-5 py-3.5 text-slate-500 text-sm">{report.total_tasks} {t("items")}</td>
                         <td className="px-5 py-3.5">
-                          <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${st.badge}`}>
+                          <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full whitespace-nowrap ${st.badge}`}>
                             <span className={`h-1.5 w-1.5 rounded-full ${st.dot}`} />
                             {isPublished ? t("admin_report_status_published") : t("admin_report_status_draft")}
                           </span>
@@ -372,7 +372,9 @@ export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
                           <EmailStatusCell report={report} notified={notified} isPublished={isPublished} t={t} lang={lang} formatRelativeTime={formatRelativeTime} formatDate={formatDate} />
                         </td>
                         <td className="px-5 py-3.5">
+                          <div className="flex flex-wrap gap-2">
                           <ActionButtons report={report} notified={notified} isPublished={isPublished} isCoAdmin={isCoAdmin} t={t} onDialog={setEmailDialog} telegramSending={telegramSending} onTelegram={sendTelegram} />
+                          </div>
                         </td>
                       </tr>
                     );
