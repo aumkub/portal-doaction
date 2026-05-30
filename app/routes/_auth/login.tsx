@@ -104,7 +104,7 @@ export default function LoginPage() {
   /* ── Sent confirmation screen ─────────────────────────────────── */
   if (actionData?.sent) {
     return (
-      <div className="w-full max-w-sm">
+      <div className="w-full max-w-md">
         <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-violet-50 mx-auto mb-5">
             <FaEnvelope className="text-2xl text-violet-500" />
@@ -135,7 +135,7 @@ export default function LoginPage() {
 
   /* ── Main login form ──────────────────────────────────────────── */
   return (
-    <div className="w-full max-w-sm">
+    <div className="w-full max-w-md">
       <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
         {/* Top accent */}
         <div className="h-1 w-full bg-linear-to-r bg-[#FFD130]" />
