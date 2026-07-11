@@ -335,23 +335,67 @@ function BackupSection({
   const onRefresh = () =>
     fetcher.submit(null, { method: "post", action: "/api/admin/backup-refresh" });
 
+  const [tab, setTab] = useState<"log" | "sites">("log");
+
+  const logCount = useMemo(
+    () => (backup.ok ? buildBackupLog(backup.entries, backupPathLabels).length : 0),
+    [backup, backupPathLabels]
+  );
+  const siteCount = backup.ok ? backup.entries.length : 0;
+
+  const tabClass = (active: boolean) =>
+    `inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+      active
+        ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200"
+        : "text-slate-500 hover:text-slate-700"
+    }`;
+
   return (
-    <div className="grid gap-5 lg:grid-cols-2">
-      <BackupLogPanel
-        backup={backup}
-        backupPathLabels={backupPathLabels}
-        refreshing={refreshing}
-        onRefresh={onRefresh}
-        t={t}
-        lang={lang}
-      />
-      <BackupPanel
-        backup={backup}
-        refreshing={refreshing}
-        onRefresh={onRefresh}
-        t={t}
-        lang={lang}
-      />
+    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden flex flex-col">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-slate-100">
+        <div className="flex items-center gap-2 min-w-0">
+          <FaBoxArchive className="text-emerald-500 text-sm shrink-0" />
+          <h2 className="text-sm font-semibold text-slate-900">{t("admin_backup_title")}</h2>
+          {backup.ok && (
+            <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0 ${
+              backup.fromCache
+                ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+                : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+            }`}>
+              {backup.fromCache ? t("admin_backup_cached") : t("admin_backup_live")}
+              {` · ${formatRelativeTime(backup.fetchedAt, lang)}`}
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          disabled={refreshing}
+          onClick={onRefresh}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors shrink-0"
+        >
+          <FaArrowsRotate className={`text-[10px] ${refreshing ? "animate-spin" : ""}`} />
+          {refreshing ? t("admin_backup_refreshing") : t("admin_backup_refresh")}
+        </button>
+      </div>
+
+      <div className="flex items-center gap-1 px-3 py-2 border-b border-slate-100 bg-slate-50/60">
+        <button type="button" onClick={() => setTab("log")} className={tabClass(tab === "log")}>
+          <FaBoxArchive className="text-[10px]" />
+          {t("admin_backup_log_title")}
+          {logCount > 0 && <span className="text-slate-400">({logCount})</span>}
+        </button>
+        <button type="button" onClick={() => setTab("sites")} className={tabClass(tab === "sites")}>
+          <FaDatabase className="text-[10px]" />
+          {t("admin_backup_sites")}
+          {siteCount > 0 && <span className="text-slate-400">({siteCount})</span>}
+        </button>
+      </div>
+
+      {tab === "log" ? (
+        <BackupLogPanel backup={backup} backupPathLabels={backupPathLabels} t={t} lang={lang} />
+      ) : (
+        <BackupPanel backup={backup} t={t} lang={lang} />
+      )}
     </div>
   );
 }
@@ -359,15 +403,11 @@ function BackupSection({
 function BackupLogPanel({
   backup,
   backupPathLabels,
-  refreshing,
-  onRefresh,
   t,
   lang,
 }: {
   backup: BackupResult;
   backupPathLabels: Record<string, string>;
-  refreshing: boolean;
-  onRefresh: () => void;
   t: (k: any) => string;
   lang: "th" | "en";
 }) {
@@ -415,27 +455,9 @@ function BackupLogPanel({
   }, [filtered.length, page, totalPages]);
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden flex flex-col">
-      <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-slate-100">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <FaBoxArchive className="text-emerald-500 text-sm shrink-0" />
-            <h2 className="text-sm font-semibold text-slate-900">{t("admin_backup_log_title")}</h2>
-            {backup.ok && allLogItems.length > 0 && (
-              <span className="text-[11px] font-normal text-slate-400">({allLogItems.length})</span>
-            )}
-          </div>
-          <p className="text-[11px] text-slate-500 mt-0.5">{t("admin_backup_log_subtitle")}</p>
-        </div>
-        <button
-          type="button"
-          disabled={refreshing}
-          onClick={onRefresh}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors shrink-0"
-        >
-          <FaArrowsRotate className={`text-[10px] ${refreshing ? "animate-spin" : ""}`} />
-          {refreshing ? t("admin_backup_refreshing") : t("admin_backup_refresh")}
-        </button>
+    <div className="flex flex-col">
+      <div className="px-5 py-3 border-b border-slate-100">
+        <p className="text-[11px] text-slate-500">{t("admin_backup_log_subtitle")}</p>
       </div>
 
       {backup.ok && allLogItems.length > 0 && (
@@ -555,14 +577,10 @@ function BackupLogPanel({
 
 function BackupPanel({
   backup,
-  refreshing,
-  onRefresh,
   t,
   lang,
 }: {
   backup: BackupResult;
-  refreshing: boolean;
-  onRefresh: () => void;
   t: (k: any) => string;
   lang: "th" | "en";
 }) {
@@ -589,36 +607,7 @@ function BackupPanel({
   const collapseAll = () => setCollapsed(new Set(siteNames));
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-      <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-slate-100">
-        <div className="flex items-center gap-2 min-w-0">
-          <FaDatabase className="text-slate-400 text-sm shrink-0" />
-          <h2 className="text-sm font-semibold text-slate-900">{t("admin_backup_title")}</h2>
-          {backup.ok && (
-            <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0 ${
-              backup.fromCache
-                ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
-                : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-            }`}>
-              {backup.fromCache ? t("admin_backup_cached") : t("admin_backup_live")}
-              {` · ${formatRelativeTime(backup.fetchedAt, lang)}`}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="text-[11px] text-slate-400 font-mono hidden sm:inline">cloud.aumwp.com</span>
-          <button
-            type="button"
-            disabled={refreshing}
-            onClick={onRefresh}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors"
-          >
-            <FaArrowsRotate className={`text-[10px] ${refreshing ? "animate-spin" : ""}`} />
-            {refreshing ? t("admin_backup_refreshing") : t("admin_backup_refresh")}
-          </button>
-        </div>
-      </div>
-
+    <div className="flex flex-col">
       {!backup.ok ? (
         <div className="px-5 py-4">
           <p className="text-sm text-red-600">{t("admin_backup_error")}: {(backup as { error: string }).error}</p>
