@@ -68,7 +68,7 @@ function NavItems({ nav, onNavigate }: { nav: NavItem[]; onNavigate?: () => void
             cn(
               "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
               isActive
-                ? "bg-brand-yellow text-primary"
+                ? "bg-brand-yellow text-[#000000]"
                 : "text-slate-400 hover:text-white hover:bg-white/5"
             )
           }
@@ -98,7 +98,7 @@ function NavItemsWithRole({ nav, userRole, onNavigate }: { nav: NavItem[]; userR
               cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
                 isActive
-                  ? "bg-brand-yellow text-primary"
+                  ? "bg-brand-yellow text-black"
                   : "text-slate-400 hover:text-white hover:bg-white/5"
               )
             }
@@ -145,7 +145,7 @@ function ClientContactNavLink({ onNavigate }: { onNavigate?: () => void }) {
           cn(
             "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
             isActive
-              ? "bg-brand-yellow text-primary"
+              ? "bg-brand-yellow text-black"
               : "text-slate-400 hover:text-white hover:bg-white/5"
           )
         }

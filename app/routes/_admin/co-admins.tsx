@@ -1,11 +1,15 @@
-import { Form, redirect, useActionData } from "react-router";
+import { Form, Link, redirect, useSearchParams } from "react-router";
 import { z } from "zod";
 import type { Route } from "./+types/co-admins";
 import { requireAdmin, hashPassword, startImpersonation } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { generateId } from "~/lib/utils";
 import { useT } from "~/lib/i18n";
-import { sendTelegramNotification, sendTelegramNotificationToGroup } from "~/lib/telegram.server";
+import {
+  formatTelegramTarget,
+  sendTelegramNotification,
+  sendTelegramNotificationToGroup,
+} from "~/lib/telegram.server";
 import { NativeSelect } from "~/components/ui/native-select";
 import {
   FaCirclePlus,
@@ -19,6 +23,7 @@ import {
   FaUsers,
   FaChevronDown,
   FaPlus,
+  FaLaptopCode,
 } from "react-icons/fa6";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
@@ -32,6 +37,7 @@ const CreateSchema = z.object({
   name: z.string().min(1, "กรุณาระบุชื่อ"),
   email: z.string().email("รูปแบบอีเมลไม่ถูกต้อง"),
   password: z.string().min(6, "รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร"),
+  team_type: z.enum(["co-admin", "freelance"]).default("co-admin"),
   intent: z.literal("create"),
 });
 
@@ -106,23 +112,35 @@ export async function action({ request, context }: Route.ActionArgs) {
   const formData = await request.formData();
   const raw = Object.fromEntries(formData);
   const intent = formData.get("intent");
+  const tab = formData.get("tab") === "freelance" || formData.get("team_type") === "freelance"
+    ? "freelance"
+    : "co-admin";
+  const listUrl = tab === "freelance" ? "/admin/co-admins?tab=freelance" : "/admin/co-admins";
 
   if (intent === "create") {
     const parsed = CreateSchema.safeParse(raw);
     if (!parsed.success) return { errors: parsed.error.flatten().fieldErrors };
-    const { name, email, password } = parsed.data;
+    const { name, email, password, team_type } = parsed.data;
     const existing = await db.getUserByEmail(email);
     if (existing) return { errors: { email: ["อีเมลนี้ถูกใช้งานแล้ว"] } };
     const passwordHash = await hashPassword(password);
-    await db.createUser({ id: generateId(), email, name, role: "co-admin", password_hash: passwordHash, avatar_url: null });
-    return redirect("/admin/co-admins");
+    await db.createUser({
+      id: generateId(),
+      email,
+      name,
+      role: "co-admin",
+      team_type,
+      password_hash: passwordHash,
+      avatar_url: null,
+    });
+    return redirect(team_type === "freelance" ? "/admin/co-admins?tab=freelance" : "/admin/co-admins");
   }
 
   if (intent === "assign") {
     const parsed = AssignSchema.safeParse(raw);
     if (!parsed.success) return { errors: parsed.error.flatten().fieldErrors };
     const { co_admin_id, client_id, telegram_group_id } = parsed.data;
-    await db.addCoAdminClient(co_admin_id, client_id, telegram_group_id || null);
+    await db.addCoAdminClient(co_admin_id, client_id, formatTelegramTarget(telegram_group_id));
     return { success: { assigned: true } };
   }
 
@@ -137,7 +155,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     const parsed = UpdateTelegramSchema.safeParse(raw);
     if (!parsed.success) return { errors: parsed.error.flatten().fieldErrors };
     const { co_admin_id, client_id, telegram_group_id } = parsed.data;
-    await db.updateCoAdminClientTelegramGroup(co_admin_id, client_id, telegram_group_id || null);
+    await db.updateCoAdminClientTelegramGroup(co_admin_id, client_id, formatTelegramTarget(telegram_group_id));
     return { success: { telegram_updated: true } };
   }
 
@@ -168,8 +186,12 @@ export async function action({ request, context }: Route.ActionArgs) {
       } else {
         await sendTelegramNotification({ db, appUrl: env.APP_URL, notification: testNotification });
       }
-    } catch {
-      return { errors: { general: ["ส่งการแจ้งเตือนไม่สำเร็จ"] } };
+    } catch (err) {
+      return {
+        errors: {
+          general: [err instanceof Error ? err.message : "ส่งการแจ้งเตือนไม่สำเร็จ"],
+        },
+      };
     }
     return { success: { test_fire: true } };
   }
@@ -198,7 +220,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     const parsed = DeleteSchema.safeParse(raw);
     if (!parsed.success) return { errors: parsed.error.flatten().fieldErrors };
     await db.removeAllCoAdminAssignments(parsed.data.co_admin_id);
-    return redirect("/admin/co-admins");
+    return redirect(listUrl);
   }
 
   return { errors: { general: ["Invalid intent"] } };
@@ -223,30 +245,60 @@ function avatarColor(name: string) {
 export default function CoAdminsPage({ loaderData, actionData }: Route.ComponentProps) {
   const { coAdmins, clients } = loaderData;
   const { t } = useT();
+  const [searchParams] = useSearchParams();
+  const tab = searchParams.get("tab") === "freelance" ? "freelance" : "co-admin";
+  const isFreelance = tab === "freelance";
+  const members = coAdmins.filter((person) =>
+    isFreelance ? person.team_type === "freelance" : person.team_type !== "freelance"
+  );
   const errors = actionData?.errors as Record<string, string[]> | undefined;
   const success = actionData?.success as Record<string, boolean> | undefined;
 
-  const totalAssignments = coAdmins.reduce((sum, ca) => sum + ca.assigned_clients.length, 0);
+  const totalAssignments = members.reduce((sum, ca) => sum + ca.assigned_clients.length, 0);
+  const label = isFreelance ? "Freelance" : "Co-Admin";
+  const badgeCls = isFreelance
+    ? "text-sky-700 bg-sky-50 ring-sky-200"
+    : "text-emerald-700 bg-emerald-50 ring-emerald-200";
 
   return (
     <div className="space-y-6">
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900">จัดการ Co-Admin</h1>
-          <p className="text-slate-500 text-sm mt-0.5">จัดการผู้ดูแลระบบและการมอบหมายลูกค้า</p>
-        </div>
+      <div>
+        <h1 className="text-2xl font-semibold text-slate-900">จัดการทีมงาน</h1>
+        <p className="text-slate-500 text-sm mt-0.5">สลับแท็บเพื่อจัดการ Co-Admin หรือ Freelance แล้วมอบหมายลูกค้า</p>
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-200 p-1.5 flex gap-1.5 w-full sm:w-fit">
+        <Link
+          to="/admin/co-admins"
+          className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+            !isFreelance ? "bg-violet-600 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"
+          }`}
+        >
+          <FaUserSecret className="text-[11px]" />
+          {t("team_tab_co_admin")}
+        </Link>
+        <Link
+          to="/admin/co-admins?tab=freelance"
+          className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+            isFreelance ? "bg-violet-600 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"
+          }`}
+        >
+          <FaLaptopCode className="text-[11px]" />
+          {t("team_tab_freelance")}
+        </Link>
       </div>
 
       {/* ── Stats strip ── */}
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-xl border border-slate-200 bg-white px-4 py-3.5 flex items-center gap-3">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 shrink-0">
-            <FaUserSecret className="text-sm" />
+          <span className={`flex h-9 w-9 items-center justify-center rounded-lg shrink-0 ${
+            isFreelance ? "bg-sky-50 text-sky-600" : "bg-emerald-50 text-emerald-600"
+          }`}>
+            {isFreelance ? <FaLaptopCode className="text-sm" /> : <FaUserSecret className="text-sm" />}
           </span>
           <div>
-            <p className="text-xs text-slate-500">Co-Admin ทั้งหมด</p>
-            <p className="text-xl font-semibold text-slate-900">{coAdmins.length}</p>
+            <p className="text-xs text-slate-500">{label} ทั้งหมด</p>
+            <p className="text-xl font-semibold text-slate-900">{members.length}</p>
           </div>
         </div>
         <div className="rounded-xl border border-slate-200 bg-white px-4 py-3.5 flex items-center gap-3">
@@ -264,11 +316,13 @@ export default function CoAdminsPage({ loaderData, actionData }: Route.Component
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100">
           <FaCirclePlus className="text-violet-500 text-sm" />
-          <p className="text-sm font-semibold text-slate-900">เพิ่ม Co-Admin ใหม่</p>
+          <p className="text-sm font-semibold text-slate-900">เพิ่ม {label} ใหม่</p>
         </div>
         <div className="p-5">
           <Form method="post" className="grid sm:grid-cols-4 gap-4 items-end">
             <input type="hidden" name="intent" value="create" />
+            <input type="hidden" name="team_type" value={tab} />
+            <input type="hidden" name="tab" value={tab} />
             <div className="space-y-1.5">
               <Label htmlFor="create-name">ชื่อ</Label>
               <Input id="create-name" name="name" type="text" required placeholder="ชื่อผู้ใช้" />
@@ -286,14 +340,19 @@ export default function CoAdminsPage({ loaderData, actionData }: Route.Component
             </div>
             <Button type="submit" className="bg-violet-600 hover:bg-violet-700 text-white">
               <FaCirclePlus aria-hidden="true" />
-              เพิ่ม Co-Admin
+              เพิ่ม {label}
             </Button>
           </Form>
 
+          {errors?.general && (
+            <p className="mt-3 flex items-center gap-2 text-xs font-medium text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+              {errors.general[0]}
+            </p>
+          )}
           {/* Success toasts */}
           {success?.password_reset && (
             <p className="mt-3 flex items-center gap-2 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
-              <FaCircleCheck /> เปลี่ยนรหัสผ่าน Co-Admin เรียบร้อยแล้ว
+              <FaCircleCheck /> เปลี่ยนรหัสผ่านเรียบร้อยแล้ว
             </p>
           )}
           {success?.test_fire && (
@@ -305,14 +364,18 @@ export default function CoAdminsPage({ loaderData, actionData }: Route.Component
       </div>
 
       {/* ── Co-admin cards ── */}
-      {coAdmins.length === 0 ? (
+      {members.length === 0 ? (
         <div className="bg-white rounded-xl border border-slate-200 p-16 text-center">
-          <FaUserSecret className="mx-auto text-3xl text-slate-200 mb-3" />
-          <p className="text-sm text-slate-500">ยังไม่มี Co-Admin</p>
+          {isFreelance ? (
+            <FaLaptopCode className="mx-auto text-3xl text-slate-200 mb-3" />
+          ) : (
+            <FaUserSecret className="mx-auto text-3xl text-slate-200 mb-3" />
+          )}
+          <p className="text-sm text-slate-500">ยังไม่มี {label}</p>
         </div>
       ) : (
         <div className="space-y-4">
-          {coAdmins.map((coAdmin) => {
+          {members.map((coAdmin) => {
             const initials = getInitials(coAdmin.name);
             const avatarCls = avatarColor(coAdmin.name);
             const unassignedClients = clients.filter((c) => !coAdmin.assigned_client_ids.includes(c.id));
@@ -327,8 +390,8 @@ export default function CoAdminsPage({ loaderData, actionData }: Route.Component
                     <div>
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-semibold text-slate-900">{coAdmin.name}</p>
-                        <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full ring-1 ring-emerald-200">
-                          CO-ADMIN
+                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ring-1 ${badgeCls}`}>
+                          {isFreelance ? "FREELANCE" : "CO-ADMIN"}
                         </span>
                       </div>
                       <p className="text-xs text-slate-500 mt-0.5">{coAdmin.email}</p>
@@ -339,6 +402,7 @@ export default function CoAdminsPage({ loaderData, actionData }: Route.Component
                     <Form method="post">
                       <input type="hidden" name="intent" value="impersonate" />
                       <input type="hidden" name="co_admin_id" value={coAdmin.id} />
+                      <input type="hidden" name="tab" value={tab} />
                       <button
                         type="submit"
                         onClick={(e) => { if (!confirm(`จำลองบทบาทเป็น "${coAdmin.name}"?`)) e.preventDefault(); }}
@@ -352,9 +416,10 @@ export default function CoAdminsPage({ loaderData, actionData }: Route.Component
                     <Form method="post">
                       <input type="hidden" name="intent" value="delete" />
                       <input type="hidden" name="co_admin_id" value={coAdmin.id} />
+                      <input type="hidden" name="tab" value={tab} />
                       <button
                         type="submit"
-                        onClick={(e) => { if (!confirm("ลบ Co-Admin นี้?")) e.preventDefault(); }}
+                        onClick={(e) => { if (!confirm(`ลบ ${label} นี้?`)) e.preventDefault(); }}
                         className="inline-flex items-center gap-1.5 text-xs font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-1.5 rounded-lg transition-colors"
                       >
                         <FaTrash className="text-[10px]" />
@@ -430,9 +495,12 @@ export default function CoAdminsPage({ loaderData, actionData }: Route.Component
                       <Input
                         type="text"
                         name="telegram_group_id"
-                        placeholder="Telegram Group ID (optional)"
+                        placeholder="-1004487258170:5 หรือวางลิงก์ t.me/c/…"
                         className="h-9 text-xs flex-1 min-w-0"
                       />
+                      <p className="text-[11px] text-slate-500 sm:col-span-full">
+                        กลุ่มแบบ Topics ต้องมี <span className="font-mono">{":เลข topic"}</span> ไม่เช่นนั้นจะเข้า General
+                      </p>
                       <button
                         type="submit"
                         className="inline-flex items-center gap-1.5 h-9 px-4 text-xs font-medium text-white bg-slate-900 hover:bg-slate-700 rounded-lg transition-colors whitespace-nowrap shrink-0"
@@ -490,7 +558,7 @@ export default function CoAdminsPage({ loaderData, actionData }: Route.Component
                                   <Input
                                     type="text"
                                     name="telegram_group_id"
-                                    placeholder="Telegram Group ID"
+                                    placeholder="-100…:topic หรือลิงก์ t.me/c/…"
                                     defaultValue={client.telegram_group_id ?? ""}
                                     className="h-8 text-xs pl-7"
                                   />
@@ -546,10 +614,10 @@ export default function CoAdminsPage({ loaderData, actionData }: Route.Component
           <h3 className="text-sm font-semibold text-violet-900">ข้อมูลเพิ่มเติม</h3>
         </div>
         <ul className="text-xs text-violet-800 space-y-1.5 list-disc list-inside leading-relaxed">
-          <li>Co-Admins สามารถดูข้อมูลเฉพาะลูกค้าที่ได้รับมอบหมายเท่านั้น</li>
-          <li>Co-Admins สามารถตอบทิกเก็ตได้ แต่อ่านรายงานแบบ Read-Only</li>
-          <li>Co-Admins ไม่สามารถเข้าถึง Settings, Email Logs, และ Attachments</li>
-          <li>Co-Admins ต้องใช้รหัสผ่านในการเข้าสู่ระบบ (ไม่รองรับ Magic Link)</li>
+          <li>{label} สามารถดูข้อมูลเฉพาะลูกค้าที่ได้รับมอบหมายเท่านั้น</li>
+          <li>{label} สามารถตอบทิกเก็ตได้ แต่อ่านรายงานแบบ Read-Only</li>
+          <li>{label} ไม่สามารถเข้าถึง Settings, Email Logs, และ Attachments</li>
+          <li>{label} ต้องใช้รหัสผ่านในการเข้าสู่ระบบ (ไม่รองรับ Magic Link)</li>
           <li>สามารถตั้งค่า Telegram Group ID สำหรับแต่ละลูกค้าเพื่อรับการแจ้งเตือนเฉพาะกลุ่ม</li>
         </ul>
       </div>

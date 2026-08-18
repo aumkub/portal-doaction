@@ -1,5 +1,5 @@
 import { Form, useRevalidator } from "react-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
 import {
   DropdownMenu,
@@ -33,10 +33,17 @@ function usePolling(intervalMs: number) {
   const revalidator = useRevalidator();
   useEffect(() => {
     const id = setInterval(() => {
-      if (revalidator.state === "idle") revalidator.revalidate();
+      if (revalidator.state === "idle") {
+        void Promise.resolve(revalidator.revalidate()).catch(() => {});
+      }
     }, intervalMs);
     return () => clearInterval(id);
   }, [revalidator, intervalMs]);
+}
+
+function isUsableAvatarUrl(url: string | null | undefined): url is string {
+  if (!url) return false;
+  return /^(https?:\/\/|\/)/.test(url.trim());
 }
 
 // ─── Bell + Notification Dropdown ────────────────────────────────────────────
@@ -60,7 +67,7 @@ function NotificationDropdown({
         >
           <FaBell className="mx-auto h-4 w-4" aria-hidden="true" />
           {unread.length > 0 && (
-            <span className={`absolute top-1 right-1 w-4 h-4 bg-brand-blue text-white font-bold rounded-full flex items-center justify-center leading-none
+            <span className={`absolute top-1 right-1 w-4 h-4 bg-brand-yellow text-black font-bold rounded-full flex items-center justify-center leading-none
               ${unread.length > 9 ? "text-[8px]" : "text-[10px]"}`}>
               {unread.length > 9 ? "9+" : unread.length}
             </span>
@@ -127,7 +134,7 @@ function NotificationDropdown({
                       </p>
                     </div>
                     {!n.read && (
-                      <span className="w-2 h-2 bg-brand-blue rounded-full mt-1.5 shrink-0" />
+                      <span className="w-2 h-2 bg-brand-yellow rounded-full mt-1.5 shrink-0" />
                     )}
                   </div>
                 </button>
@@ -142,6 +149,38 @@ function NotificationDropdown({
         </div>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+function UserAvatar({
+  name,
+  src,
+  initials,
+}: {
+  name: string;
+  src: string | null;
+  initials: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  const showImage = !failed && isUsableAvatarUrl(src);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
+
+  return (
+    <Avatar className="h-7 w-7 bg-slate-900 text-white">
+      {showImage ? (
+        <AvatarImage
+          src={src}
+          alt={name}
+          onError={() => setFailed(true)}
+        />
+      ) : null}
+      <AvatarFallback className="bg-slate-900 text-white text-xs font-semibold">
+        {initials || "?"}
+      </AvatarFallback>
+    </Avatar>
   );
 }
 
@@ -186,14 +225,7 @@ export default function Topbar({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="ml-1 flex h-10 items-center gap-2 rounded-full border border-hairline bg-canvas px-2.5 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue/30">
-              <Avatar className="h-7 w-7">
-                {user.avatar_url && (
-                  <AvatarImage src={user.avatar_url} alt={user.name} />
-                )}
-                <AvatarFallback className="bg-ink text-white text-xs font-semibold">
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
+              <UserAvatar name={user.name} src={user.avatar_url} initials={initials} />
               <span className="text-sm text-charcoal hidden sm:block">
                 {user.name}
               </span>

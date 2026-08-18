@@ -2,6 +2,8 @@
 
 export type UserRole = "admin" | "client" | "co-admin";
 
+export type TeamType = "co-admin" | "freelance";
+
 export type UserLanguage = "th" | "en";
 
 export interface User {
@@ -9,6 +11,7 @@ export interface User {
   email: string;
   name: string;
   role: UserRole;
+  team_type?: TeamType | null;
   password_hash: string | null;
   avatar_url: string | null;
   language?: UserLanguage | null;

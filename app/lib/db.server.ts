@@ -40,13 +40,14 @@ export function createDB(d1: D1Database) {
     ): Promise<void> {
       await d1
         .prepare(
-          "INSERT INTO users (id, email, name, role, password_hash, avatar_url, first_login_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch(), unixepoch())"
+          "INSERT INTO users (id, email, name, role, team_type, password_hash, avatar_url, first_login_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, unixepoch(), unixepoch())"
         )
         .bind(
           user.id,
           user.email,
           user.name,
           user.role,
+          user.team_type ?? "co-admin",
           user.password_hash ?? null,
           user.avatar_url,
           user.first_login_at ?? null

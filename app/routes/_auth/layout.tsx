@@ -2,11 +2,11 @@ import { Outlet } from "react-router";
 
 export default function AuthLayout() {
   return (
-    <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-4 bg-slate-950">
+    <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-4" style={{ backgroundColor: '#1e3a5f' }}>
       {/* Animated background mesh gradient */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         {/* Base gradient overlay */}
-        <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950" />
+        <div className="absolute inset-0" style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #2d4f7c 50%, #1e3a5f 100%)' }} />
         
         {/* Animated gradient orbs */}
         <div className="absolute -top-40 -left-40 w-[500px] h-[500px] rounded-full bg-blue-500/20 blur-[120px] animate-float-slow" />

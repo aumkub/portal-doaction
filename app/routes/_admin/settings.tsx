@@ -391,7 +391,7 @@ export default function AdminSettingsPage({ loaderData, actionData }: any) {
                     name="telegram_default_group_id"
                     type="text"
                     defaultValue={telegramDefaultGroupId ?? ""}
-                    placeholder="-1001234567890"
+                    placeholder="-1004487258170:5 หรือ https://t.me/c/4487258170/5"
                     className={fieldCls("font-mono")}
                   />
                   {errors?.telegram_default_group_id && (

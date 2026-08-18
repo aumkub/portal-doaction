@@ -4,7 +4,7 @@ import { z } from "zod";
 import { requireUser } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { formatDate, generateId } from "~/lib/utils";
-import { sendTelegramNotification } from "~/lib/telegram.server";
+import { sendTelegramNotificationForClient } from "~/lib/telegram.server";
 import { sendTicketEmailToAdmin } from "~/lib/ticket-email.server";
 import { useTicketAttachments } from "~/hooks/use-ticket-attachments";
 import { useT } from "~/lib/i18n";
@@ -172,7 +172,7 @@ export async function action({ request, context, params }: any) {
   const msgSnapshot = parsed.data.message;
   context.cloudflare.ctx.waitUntil(
     Promise.allSettled([
-      sendTelegramNotification({
+      sendTelegramNotificationForClient({
         db,
         appUrl: env.APP_URL,
         notification: {
@@ -180,6 +180,7 @@ export async function action({ request, context, params }: any) {
           body: msgSnapshot.slice(0, 120),
           link: `/admin/tickets/${ticket.id}`,
         },
+        clientId: ticket.client_id,
       }),
       ...admins.map((admin) =>
         env.SEND_EMAIL

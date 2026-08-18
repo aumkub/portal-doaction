@@ -1,29 +1,40 @@
 import { Form, redirect, useNavigation } from "react-router";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
-import { requireCoAdminOrAdmin } from "~/lib/auth.server";
+import { requireAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { formatDate, generateId } from "~/lib/utils";
-import { sendTelegramNotification } from "~/lib/telegram.server";
+import { sendTelegramNotificationForClient } from "~/lib/telegram.server";
 import {
   sendTicketClosedEmailToClient,
   sendTicketEmailToClient,
 } from "~/lib/ticket-email.server";
-import { parseClientCcEmails } from "~/lib/client-cc";
-import { useTicketAttachments } from "~/hooks/use-ticket-attachments";
-import type { SupportTicket, TicketAttachment, TicketMessage, User, Client } from "~/types";
+import {
+  isAllowedAttachment,
+  isAttachmentTooLarge,
+  prepareAttachmentForUpload,
+  cleanupOrphanAttachment,
+  uploadAttachment,
+} from "~/lib/file-upload.client";
+import type {
+  SupportTicket,
+  TicketAttachment,
+  TicketMessage,
+  User,
+  Client,
+} from "~/types";
 import StatusBadge from "~/components/tickets/StatusBadge";
 import PriorityBadge from "~/components/tickets/PriorityBadge";
 import MessageBubble from "~/components/tickets/MessageBubble";
-import { TicketReplyDropZone } from "~/components/tickets/TicketReplyDropZone";
+import PageHeader from "~/components/layout/PageHeader";
 import { useT } from "~/lib/i18n";
 import type { TranslationKey } from "~/lib/translations";
-import { FaPaperclip, FaArrowLeft, FaX, FaTrash } from "react-icons/fa6";
 
 const ReplySchema = z.object({
   message: z.string().default(""),
   is_internal: z.string().optional(),
-  intent: z.enum(["reply", "status", "delete"]).default("reply"),
+  note_visibility: z.enum(["external", "internal"]).optional(),
+  intent: z.enum(["reply", "status"]).default("reply"),
   status: z.string().optional(),
 });
 
@@ -34,72 +45,75 @@ export function meta({ data }: any) {
 
 export async function loader({ request, context, params }: any) {
   const env = context.cloudflare.env;
-  const currentUser = await requireCoAdminOrAdmin(request, env.DB, env.SESSIONPORTAL);
+  const admin = await requireAdmin(request, env.DB, env.SESSIONPORTAL);
   const db = createDB(env.DB);
 
   const ticket = await db.getTicket(params.ticketId);
   if (!ticket) throw new Response("Ticket not found", { status: 404 });
 
-  if (currentUser.role === "co-admin") {
-    const assignments = await db.listCoAdminClients(currentUser.id);
-    const assignedClientIds = assignments.map((a: any) => a.client_id);
-    if (!assignedClientIds.includes(ticket.client_id)) {
-      throw new Response("You don't have access to this ticket", { status: 403 });
-    }
-  }
-
-  const [messages, attachments, admins, coAdmins, client] = await Promise.all([
+  const [messages, attachments, admins, client] = await Promise.all([
     db.listMessagesByTicket(ticket.id),
     db.listAttachmentsByTicket(ticket.id),
     db.listAdminUsers(),
-    db.listCoAdminUsers(),
     db.getClientById(ticket.client_id),
   ]);
 
   const usersById: Record<string, User> = {};
   for (const a of admins) usersById[a.id] = a;
-  for (const a of coAdmins) usersById[a.id] = a;
 
-  return { ticket, messages, attachments, usersById, client, currentUser };
+  return { ticket, messages, attachments, usersById, client, admin };
 }
 
-const STATUSES = ["open", "in_progress", "waiting", "resolved", "closed"] as const;
+const STATUSES = [
+  "open",
+  "in_progress",
+  "waiting",
+  "resolved",
+  "closed",
+] as const;
 
 function statusToKey(status: (typeof STATUSES)[number]): TranslationKey {
   if (status === "closed") return "status_closed_short";
   return `status_${status}` as TranslationKey;
 }
 
+/** Thai labels for server-side notifications to clients */
 const STATUS_LABEL_TH: Record<string, string> = {
-  open: "เปิด", in_progress: "กำลังดำเนิน", waiting: "รอข้อมูล", resolved: "เสร็จสิ้น", closed: "ปิด",
+  open: "เปิด",
+  in_progress: "กำลังดำเนิน",
+  waiting: "รอข้อมูล",
+  resolved: "เสร็จสิ้น",
+  closed: "ปิด",
 };
+
+function getAttachmentIcon(fileName: string, mimeType?: string): string {
+  const lower = fileName.toLowerCase();
+  if (mimeType === "application/pdf" || lower.endsWith(".pdf")) return "📄";
+  if (mimeType?.startsWith("image/") || /\.(png|jpe?g|gif|webp|svg)$/.test(lower)) return "🖼️";
+  if (mimeType?.startsWith("video/") || /\.(mp4|mov|webm|mkv|avi)$/.test(lower)) return "🎬";
+  return "📎";
+}
 
 export async function action({ request, context, params }: any) {
   const env = context.cloudflare.env;
-  const currentUser = await requireCoAdminOrAdmin(request, env.DB, env.SESSIONPORTAL);
+  const admin = await requireAdmin(request, env.DB, env.SESSIONPORTAL);
   const db = createDB(env.DB);
 
   const ticket = await db.getTicket(params.ticketId);
   if (!ticket) throw new Response("Ticket not found", { status: 404 });
 
-  if (currentUser.role === "co-admin") {
-    const assignments = await db.listCoAdminClients(currentUser.id);
-    const assignedClientIds = assignments.map((a: any) => a.client_id);
-    if (!assignedClientIds.includes(ticket.client_id)) {
-      throw new Response("You don't have access to this ticket", { status: 403 });
-    }
+  const formData = await request.formData();
+  const raw = Object.fromEntries(formData);
+  const parsed = ReplySchema.safeParse(raw);
+  if (!parsed.success) {
+    return { errors: parsed.error.flatten().fieldErrors };
   }
 
-  const formData = await request.formData();
-  const parsed = ReplySchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) return { errors: parsed.error.flatten().fieldErrors };
+  const { intent, message, is_internal, note_visibility, status } = parsed.data;
 
-  const { intent, message, is_internal, status } = parsed.data;
-  if (intent === "reply" && !message.trim()) return { errors: { message: ["กรุณาพิมพ์ข้อความ"] } };
-
-  if (intent === "delete") {
-    await db.softDeleteTicket(ticket.id, currentUser.id);
-    return redirect("/admin/tickets");
+  // Validate message only for reply intent
+  if (intent === "reply" && !message.trim()) {
+    return { errors: { message: ["กรุณาพิมพ์ข้อความ"] } };
   }
 
   if (intent === "status" && status) {
@@ -108,81 +122,119 @@ export async function action({ request, context, params }: any) {
     if (status === "open" || status === "in_progress") updateData.resolved_at = null;
     await db.updateTicket(ticket.id, updateData);
 
+    // Notify client of status change
     const client = await db.getClientById(ticket.client_id);
     if (client) {
       const clientUser = await db.getUserById(client.user_id);
+      const statusLabel = status ? STATUS_LABEL_TH[status] ?? status : "";
       const notification = {
-        id: generateId(), user_id: client.user_id, type: "ticket_update",
+        id: generateId(),
+        user_id: client.user_id,
+        type: "ticket_update",
         title: `Ticket อัปเดต: ${ticket.title}`,
-        body: `สถานะเปลี่ยนเป็น ${STATUS_LABEL_TH[status] ?? status}`,
-        link: `/tickets/${ticket.id}`, read: 0,
+        body: `สถานะเปลี่ยนเป็น ${statusLabel}`,
+        link: `/tickets/${ticket.id}`,
+        read: 0,
       } as const;
       await db.createNotification(notification);
-      const coAdmins = await db.getCoAdminEmailsForClient(client.id);
-      const customerCcEmails = parseClientCcEmails(client.cc_emails).map((email: string) => ({ email }));
-      const ccRecipients = [...coAdmins, ...customerCcEmails];
-      context.cloudflare.ctx.waitUntil(
-        Promise.allSettled([
-          sendTelegramNotification({ db, appUrl: env.APP_URL, notification }),
-          status === "closed" && clientUser?.email && env.SEND_EMAIL
-            ? sendTicketClosedEmailToClient({
-                to: clientUser.email, toName: clientUser.name, ticketTitle: ticket.title,
-                ticketUrl: `${env.APP_URL}/tickets/${ticket.id}`, sendEmail: env.SEND_EMAIL,
-                cc: ccRecipients, db, lang: clientUser.language === "en" ? "en" : "th",
-              })
-            : Promise.resolve(),
-        ])
-      );
+      await sendTelegramNotificationForClient({
+        db,
+        appUrl: env.APP_URL,
+        notification,
+        clientId: client.id,
+      });
+
+      if (status === "closed" && clientUser?.email && env.SMTP2GO_API_KEY) {
+        const ticketUrl = `${env.APP_URL}/tickets/${ticket.id}`;
+        await sendTicketClosedEmailToClient({
+          to: clientUser.email,
+          toName: clientUser.name,
+          ticketTitle: ticket.title,
+          ticketUrl,
+          apiKey: env.SMTP2GO_API_KEY,
+          db,
+        });
+      }
     }
     return redirect(`/admin/tickets/${ticket.id}`);
   }
 
-  const isInternal = is_internal === "1" ? 1 : 0;
+  // Reply
+  const isInternal = note_visibility === "internal" || is_internal === "1" ? 1 : 0;
   const messageId = generateId();
-  await db.createTicketMessage({ id: messageId, ticket_id: ticket.id, user_id: currentUser.id, message, is_internal: isInternal });
+  await db.createTicketMessage({
+    id: messageId,
+    ticket_id: ticket.id,
+    user_id: admin.id,
+    message,
+    is_internal: isInternal,
+  });
 
   const attachmentsRaw = formData.get("attachments_json");
-  if (typeof attachmentsRaw === "string" && attachmentsRaw.trim()) {
+  if (typeof attachmentsRaw === "string" && attachmentsRaw.trim() !== "") {
     try {
-      const items = JSON.parse(attachmentsRaw) as Array<{ fileKey: string; fileName: string; mimeType: string; sizeBytes: number }>;
+      const items = JSON.parse(attachmentsRaw) as Array<{
+        fileKey: string;
+        fileName: string;
+        mimeType: string;
+        sizeBytes: number;
+      }>;
       for (const item of items) {
         if (!item?.fileKey) continue;
         await db.createTicketAttachment({
-          id: generateId(), ticket_id: ticket.id, message_id: messageId,
-          uploader_user_id: currentUser.id, file_key: item.fileKey,
-          file_name: item.fileName || "attachment", mime_type: item.mimeType || "application/octet-stream",
+          id: generateId(),
+          ticket_id: ticket.id,
+          message_id: messageId,
+          uploader_user_id: admin.id,
+          file_key: item.fileKey,
+          file_name: item.fileName || "attachment",
+          mime_type: item.mimeType || "application/octet-stream",
           size_bytes: Number(item.sizeBytes) || 0,
         });
       }
-    } catch { /* ignore */ }
+    } catch {
+      // ignore malformed attachment payload
+    }
   }
 
   if (!isInternal) {
-    if (ticket.status === "open") await db.updateTicket(ticket.id, { status: "in_progress" });
+    // Update status to in_progress when admin replies
+    if (ticket.status === "open") {
+      await db.updateTicket(ticket.id, { status: "in_progress" });
+    }
+
+    // Notify client
     const client = await db.getClientById(ticket.client_id);
     if (client) {
       const clientUser = await db.getUserById(client.user_id);
       const notification = {
-        id: generateId(), user_id: client.user_id, type: "ticket_reply",
+        id: generateId(),
+        user_id: client.user_id,
+        type: "ticket_reply",
         title: `มีข้อความใหม่ใน: ${ticket.title}`,
-        body: message.slice(0, 100), link: `/tickets/${ticket.id}`, read: 0,
+        body: message.slice(0, 100),
+        link: `/tickets/${ticket.id}`,
+        read: 0,
       } as const;
       await db.createNotification(notification);
-      const coAdmins = await db.getCoAdminEmailsForClient(client.id);
-      const customerCcEmails = parseClientCcEmails(client.cc_emails).map((email: string) => ({ email }));
-      const ccRecipients = [...coAdmins, ...customerCcEmails];
-      context.cloudflare.ctx.waitUntil(
-        Promise.allSettled([
-          sendTelegramNotification({ db, appUrl: env.APP_URL, notification }),
-          clientUser?.email && env.SEND_EMAIL
-            ? sendTicketEmailToClient({
-                to: clientUser.email, toName: clientUser.name, ticketTitle: ticket.title,
-                message, ticketUrl: `${env.APP_URL}/tickets/${ticket.id}`, sendEmail: env.SEND_EMAIL,
-                cc: ccRecipients, db, lang: clientUser.language === "en" ? "en" : "th",
-              })
-            : Promise.resolve(),
-        ])
-      );
+      await sendTelegramNotificationForClient({
+        db,
+        appUrl: env.APP_URL,
+        notification,
+        clientId: client.id,
+      });
+      if (clientUser?.email && env.SMTP2GO_API_KEY) {
+        const ticketUrl = `${env.APP_URL}/tickets/${ticket.id}`;
+        await sendTicketEmailToClient({
+          to: clientUser.email,
+          toName: clientUser.name,
+          ticketTitle: ticket.title,
+          message,
+          ticketUrl,
+          apiKey: env.SMTP2GO_API_KEY,
+          db,
+        });
+      }
     }
   }
 
@@ -190,97 +242,129 @@ export async function action({ request, context, params }: any) {
 }
 
 export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
-  const { ticket, messages, attachments, usersById, client, currentUser } = loaderData as {
+  const { ticket, messages, attachments, usersById, client, admin } = loaderData as {
     ticket: SupportTicket;
     messages: TicketMessage[];
     attachments: TicketAttachment[];
     usersById: Record<string, User>;
     client: Client | null;
-    currentUser: User;
+    admin: User;
   };
   const errors = actionData?.errors;
   const { t, lang } = useT();
   const navigation = useNavigation();
-  const isSubmitting = navigation.state !== "idle";
   const formRef = useRef<HTMLFormElement | null>(null);
   const isSubmittingReplyRef = useRef(false);
-  const {
-    uploading,
-    uploadProgress,
-    uploadError,
-    uploadedFiles,
-    attachmentsJson,
-    onFileInputChange,
-    onPaste,
-    removeFile,
-    markSubmitSuccess,
-    isDragging,
-    dropZoneProps,
-  } = useTicketAttachments({ ticketId: ticket.id });
-
-  const attachmentsByMessage = attachments.reduce<Record<string, TicketAttachment[]>>((acc, a) => {
-    (acc[a.message_id] ||= []).push(a);
-    return acc;
-  }, {});
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadError, setUploadError] = useState<string>("");
+  const [uploadedFiles, setUploadedFiles] = useState<
+    Array<{ fileKey: string; fileName: string; mimeType: string; sizeBytes: number; url: string }>
+  >([]);
+  const attachmentsByMessage = attachments.reduce<Record<string, TicketAttachment[]>>(
+    (acc, a) => {
+      (acc[a.message_id] ||= []).push(a);
+      return acc;
+    },
+    {}
+  );
 
   useEffect(() => {
-    if (navigation.state !== "idle" || !isSubmittingReplyRef.current) return;
-    if (errors?.message) { isSubmittingReplyRef.current = false; return; }
+    if (navigation.state !== "idle") return;
+    if (!isSubmittingReplyRef.current) return;
+    if (errors?.message) {
+      isSubmittingReplyRef.current = false;
+      return;
+    }
+
     formRef.current?.reset();
-    markSubmitSuccess();
+    setUploadedFiles([]);
+    setUploadError("");
     isSubmittingReplyRef.current = false;
-  }, [navigation.state, errors?.message, markSubmitSuccess]);
+  }, [navigation.state, errors?.message]);
+
+  useEffect(() => {
+    const cleanupPendingUploads = () => {
+      if (isSubmittingReplyRef.current || uploadedFiles.length === 0) return;
+      for (const f of uploadedFiles) {
+        void cleanupOrphanAttachment({ ticketId: ticket.id, fileKey: f.fileKey });
+      }
+    };
+
+    const onBeforeUnload = () => cleanupPendingUploads();
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      cleanupPendingUploads();
+    };
+  }, [ticket.id, uploadedFiles]);
+
+  async function onAttachmentSelect(fileList: FileList | null) {
+    if (!fileList || fileList.length === 0) return;
+    setUploadError("");
+    setUploading(true);
+    setUploadProgress(0);
+    try {
+      for (const rawFile of Array.from(fileList)) {
+        if (!isAllowedAttachment(rawFile)) {
+          throw new Error("PDF, image, and video only");
+        }
+        const prepared = await prepareAttachmentForUpload(rawFile);
+        if (isAttachmentTooLarge(prepared)) {
+          throw new Error("Max file size is 2MB");
+        }
+        const uploaded = await uploadAttachment({
+          ticketId: ticket.id,
+          file: prepared,
+          onProgress: (percent) => setUploadProgress(percent),
+        });
+        setUploadedFiles((prev) => [...prev, uploaded]);
+      }
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+      setUploadProgress(0);
+    }
+  }
 
   return (
-    <div className="max-w-4xl space-y-5">
+    <div className="max-w-4xl space-y-6">
+      <PageHeader
+        title={ticket.title}
+        subtitle={client?.company_name ?? undefined}
+        breadcrumbs={[
+          { label: t("admin_breadcrumb_admin") },
+          { label: t("admin_breadcrumb_tickets"), href: "/admin/tickets" },
+          { label: `#${ticket.id.slice(0, 8)}` },
+        ]}
+      />
 
-      {/* ── Header ── */}
-      <div>
-        <a href="/admin/tickets" className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors mb-4">
-          <FaArrowLeft className="text-[10px]" />
-          {t("admin_breadcrumb_tickets")}
-        </a>
-
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-            <div className="space-y-2 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs text-slate-500 font-mono">#{ticket.id.slice(0, 8)}</span>
-                {client && (
-                  <a href={`/admin/clients/${ticket.client_id}`} className="text-xs text-violet-600 hover:underline underline-offset-2">
-                    {client.company_name}
-                  </a>
-                )}
-              </div>
-              <h1 className="text-xl font-semibold text-slate-900 leading-snug word-break-all">{ticket.title}</h1>
-              <div className="flex items-center gap-2 flex-wrap">
-                <StatusBadge status={ticket.status} />
-                <PriorityBadge priority={ticket.priority} />
-                <span className="text-xs text-slate-500">{t("admin_ticket_meta_opened")} {formatDate(ticket.created_at, lang)}</span>
-              </div>
-            </div>
-            <Form
-              method="post"
-              onSubmit={(e) => {
-                if (!confirm(`ลบ Ticket "${ticket.title}" ใช่หรือไม่? Ticket จะถูกย้ายไปถังขยะ`)) e.preventDefault();
-              }}
-            >
-              <input type="hidden" name="intent" value="delete" />
-              <button
-                type="submit"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-100 transition-colors shrink-0"
-              >
-                <FaTrash className="text-[10px]" />
-                ลบ Ticket
-              </button>
-            </Form>
-          </div>
+      {/* Meta row */}
+      <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-4">
+        <div>
+          <p className="text-xs text-slate-500 mb-1">{t("admin_ticket_meta_status")}</p>
+          <StatusBadge status={ticket.status} />
+        </div>
+        <div>
+          <p className="text-xs text-slate-500 mb-1">{t("admin_ticket_meta_priority")}</p>
+          <PriorityBadge priority={ticket.priority} />
+        </div>
+        <div>
+          <p className="text-xs text-slate-500 mb-1">{t("admin_ticket_meta_client")}</p>
+          <p className="text-sm font-medium text-slate-700">{client?.company_name ?? "—"}</p>
+        </div>
+        <div>
+          <p className="text-xs text-slate-500 mb-1">{t("admin_ticket_meta_opened")}</p>
+          <p className="text-sm text-slate-700">{formatDate(ticket.created_at, lang)}</p>
         </div>
       </div>
 
-      {/* ── Status switcher ── */}
-      <div className="bg-white rounded-xl border border-slate-200 px-5 py-4">
-        <p className="text-xs font-medium text-slate-500 mb-3">{t("admin_ticket_change_status")}</p>
+      {/* Status change */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <p className="text-xs font-medium text-slate-600 mb-3">
+          {t("admin_ticket_change_status")}
+        </p>
         <Form method="post" className="flex flex-wrap gap-2">
           <input type="hidden" name="intent" value="status" />
           {STATUSES.map((s) => (
@@ -289,7 +373,7 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
               type="submit"
               name="status"
               value={s}
-              disabled={ticket.status === s || isSubmitting}
+              disabled={ticket.status === s}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
                 ticket.status === s
                   ? "bg-slate-900 text-white border-slate-900 cursor-default"
@@ -302,124 +386,146 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
         </Form>
       </div>
 
-      {/* ── Message thread ── */}
-      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+      {/* External conversation */}
+      <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5 mb-1">
+          <span>💬</span> บทสนทนา — ลูกค้าเห็น
+        </p>
         <MessageBubble message={ticket.description} isClient={false} isInternal={false} />
-        {messages.map((msg) => {
-          const userRole = usersById[msg.user_id]?.role;
-          const isFromAdmin = userRole === "admin" || userRole === "co-admin";
-          return (
+        {messages.filter((m) => m.is_internal === 0).map((msg) => (
+          <div key={msg.id} id={`msg-${msg.id}`}>
+            <MessageBubble
+              message={msg.message}
+              isClient={usersById[msg.user_id]?.role === "admin"}
+              isInternal={false}
+              authorName={usersById[msg.user_id]?.name}
+              attachments={(attachmentsByMessage[msg.id] ?? []).map((att) => ({
+                id: att.id,
+                name: att.file_name,
+                href: `/api/attachments/${encodeURIComponent(att.file_key)}`,
+                icon: getAttachmentIcon(att.file_name, att.mime_type),
+              }))}
+            />
+          </div>
+        ))}
+        {messages.filter((m) => m.is_internal === 0).length === 0 && (
+          <p className="text-xs text-slate-400 text-center py-2">ยังไม่มีข้อความ</p>
+        )}
+      </div>
+
+      {/* Internal notes */}
+      {messages.some((m) => m.is_internal === 1) && (
+        <div className="space-y-3 rounded-2xl border border-amber-200 bg-amber-50/40 p-4">
+          <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide flex items-center gap-1.5 mb-1">
+            <span>🔒</span> บันทึกภายใน — ทีมเท่านั้น
+          </p>
+          {messages.filter((m) => m.is_internal === 1).map((msg) => (
             <div key={msg.id} id={`msg-${msg.id}`}>
               <MessageBubble
                 message={msg.message}
-                isClient={isFromAdmin}
-                isInternal={msg.is_internal === 1}
+                isClient={false}
+                isInternal={true}
                 authorName={usersById[msg.user_id]?.name}
                 attachments={(attachmentsByMessage[msg.id] ?? []).map((att) => ({
                   id: att.id,
                   name: att.file_name,
                   href: `/api/attachments/${encodeURIComponent(att.file_key)}`,
-                  mimeType: att.mime_type,
-                  sizeBytes: att.size_bytes,
+                  icon: getAttachmentIcon(att.file_name, att.mime_type),
                 }))}
               />
             </div>
-          );
-        })}
-      </div>
-
-      {/* ── Reply form ── */}
-      <div key={messages.length} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-100">
-          <p className="text-sm font-semibold text-slate-900">{t("admin_ticket_reply_label")}</p>
+          ))}
         </div>
-        <TicketReplyDropZone
-          isDragging={isDragging}
-          dropHandlers={dropZoneProps}
-          dropLabel={t("ticket_drop_files")}
-          className={isDragging ? "ring-2 ring-violet-400/50 ring-offset-2 rounded-lg -m-1 p-1" : ""}
-        >
-        <Form ref={formRef} method="post" className="p-5 space-y-4">
-          <input type="hidden" name="intent" value="reply" />
-          <input type="hidden" name="attachments_json" value={attachmentsJson} />
+      )}
 
+      {/* Reply form */}
+      <div key={messages.length} className="rounded-2xl border border-slate-200 bg-white p-4">
+        <Form method="post" className="space-y-3">
+          <input type="hidden" name="intent" value="reply" />
+          <input type="hidden" name="attachments_json" value={JSON.stringify(uploadedFiles)} />
+          <label className="block text-sm font-medium text-slate-700">
+            {t("admin_ticket_reply_label")}
+          </label>
           <textarea
             name="message"
             rows={4}
-            onPaste={onPaste}
-            className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400 transition resize-none"
+            required
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
             placeholder={t("admin_ticket_ph_reply")}
           />
-          {errors?.message && <p className="text-xs text-rose-600">{errors.message[0]}</p>}
-
-          {/* Attachment area */}
-          <div className="space-y-2">
-            <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-600 border border-slate-200 bg-slate-50 hover:bg-slate-100 rounded-lg px-3 py-2 transition-colors">
-              <FaPaperclip className="text-slate-500 text-[11px]" />
-              Attach file
-              <input
-                type="file"
-                accept="application/pdf,image/*,video/*"
-                multiple
-                onChange={(e) => onFileInputChange(e.target.files)}
-                className="sr-only"
-              />
+          {errors?.message && (
+            <p className="text-xs text-rose-600">{errors.message[0]}</p>
+          )}
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-slate-600">
+              Attach file (PDF/Image/Video, max 2MB)
             </label>
-            <p className="text-[11px] text-slate-500">{t("admin_ticket_attach_hint")}</p>
-
-            {uploading && (
-              <div className="space-y-1.5">
-                <p className="text-xs text-slate-500">Uploading… {uploadProgress}%</p>
-                <div className="h-1.5 w-full rounded-full bg-slate-200 overflow-hidden">
-                  <div className="h-full bg-violet-500 transition-all duration-150" style={{ width: `${uploadProgress}%` }} />
+            <input
+              type="file"
+              accept="application/pdf,image/*,video/*"
+              multiple
+              onChange={(e) => void onAttachmentSelect(e.target.files)}
+              className="block w-full text-xs text-slate-600 file:mr-3 file:rounded-md file:border file:border-slate-200 file:bg-white file:px-2.5 file:py-2 mt-2"
+            />
+            {uploading ? (
+              <div className="space-y-2 mt-2">
+                <p className="text-xs text-slate-500">Uploading... {uploadProgress}%</p>
+                <div className="h-1.5 w-full rounded bg-slate-200 overflow-hidden">
+                  <div
+                    className="h-full bg-violet-600 transition-all"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
                 </div>
               </div>
-            )}
-            {uploadError && <p className="text-xs text-rose-600">{uploadError}</p>}
-            {uploadedFiles.length > 0 && (
-              <ul className="space-y-1.5">
+            ) : null}
+            {uploadError ? <p className="text-xs text-rose-600">{uploadError}</p> : null}
+            {uploadedFiles.length > 0 ? (
+              <ul className="text-xs text-slate-600 space-y-2 mt-2 max-w-[500px] bg-slate-100 rounded-lg p-2">
                 {uploadedFiles.map((f) => (
-                  <li key={f.fileKey} className="flex items-center justify-between gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-                    <span className="flex items-center gap-1.5 text-xs text-slate-600 min-w-0">
-                      <FaPaperclip className="text-slate-500 shrink-0 text-[10px]" />
-                      <span className="truncate">{f.fileName}</span>
+                  <li
+                    key={f.fileKey}
+                    className="flex items-center justify-between gap-2 bg-slate-50 rounded px-2 py-1"
+                  >
+                    <span>
+                      {getAttachmentIcon(f.fileName, f.mimeType)} {f.fileName}
                     </span>
                     <button
                       type="button"
-                      onClick={() => removeFile(f.fileKey)}
-                      className="shrink-0 p-1 rounded text-slate-500 hover:text-rose-500 hover:bg-rose-50 transition-colors"
-                      aria-label="Remove"
+                      onClick={() => {
+                        setUploadedFiles((prev) =>
+                          prev.filter((item) => item.fileKey !== f.fileKey)
+                        );
+                        void cleanupOrphanAttachment({ ticketId: ticket.id, fileKey: f.fileKey });
+                      }}
+                      className="rounded border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-500 hover:bg-slate-50"
                     >
-                      <FaX className="text-[9px]" />
+                      Remove
                     </button>
                   </li>
                 ))}
               </ul>
-            )}
+            ) : null}
           </div>
-
-          {/* Footer */}
-          <div className="flex items-center justify-between pt-1">
-            <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                name="is_internal"
-                value="1"
-                className="rounded border-slate-300 accent-violet-600"
-              />
-              {t("admin_ticket_internal_note")}
+          <div className="flex items-center justify-between gap-3">
+            <label className="flex items-center gap-2 text-xs text-slate-600">
+              <span className="shrink-0">{t("admin_ticket_note_visibility")}</span>
+              <select
+                name="note_visibility"
+                defaultValue="external"
+                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500"
+              >
+                <option value="external">{t("admin_ticket_external_note")}</option>
+                <option value="internal">{t("admin_ticket_internal_note")}</option>
+              </select>
             </label>
             <button
               type="submit"
-              disabled={uploading || isSubmitting}
-              onClick={() => { isSubmittingReplyRef.current = true; }}
-              className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-5 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50 transition-colors"
+              className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 transition-colors"
             >
-              {uploading ? "Uploading…" : isSubmitting ? "Sending…" : t("admin_ticket_send")}
+              {t("admin_ticket_send")}
             </button>
           </div>
         </Form>
-        </TicketReplyDropZone>
       </div>
     </div>
   );

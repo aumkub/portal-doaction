@@ -39,7 +39,7 @@ export const links: Route.LinksFunction = () => [
 	},
 	{
 		rel: "stylesheet",
-		href: "https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,500..700;1,17..18,500..700&display=swap",
+		href: "https://fonts.googleapis.com/css2?family=Google+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&display=swap",
 	},
 ];
 
@@ -69,7 +69,7 @@ export default function App() {
 		<I18nProvider initialLang={lang}>
 			<div
 				aria-hidden="true"
-				className={`fixed top-0 left-0 z-[100] h-1 w-full bg-[#EED900] transition-all duration-300 ${
+				className={`fixed top-0 left-0 z-[100] h-1 w-full bg-[#F0D800] transition-all duration-300 ${
 					isNavigating ? "opacity-100" : "opacity-0"
 				}`}
 				style={{

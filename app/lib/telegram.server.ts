@@ -30,6 +30,35 @@ async function getLatestChatId(token: string): Promise<number | null> {
   return null;
 }
 
+/** Parse chat_id + optional forum topic from ID, `-100…:topic`, or t.me/c/… link. */
+export function parseTelegramTarget(raw: string): { chatId: string; threadId?: number } {
+  const value = raw.trim();
+  const urlMatch = value.match(/t\.me\/c\/(\d+)(?:\/(\d+))?/i);
+  if (urlMatch) {
+    return {
+      chatId: `-100${urlMatch[1]}`,
+      threadId: urlMatch[2] ? Number(urlMatch[2]) : undefined,
+    };
+  }
+
+  const withThread = value.match(/^(-?\d+)[:/](\d+)$/);
+  if (withThread) {
+    return { chatId: withThread[1], threadId: Number(withThread[2]) };
+  }
+
+  if (/^\d+$/.test(value)) {
+    return { chatId: `-100${value}` };
+  }
+
+  return { chatId: value };
+}
+
+export function formatTelegramTarget(raw: string | null | undefined): string | null {
+  if (!raw?.trim()) return null;
+  const { chatId, threadId } = parseTelegramTarget(raw);
+  return threadId ? `${chatId}:${threadId}` : chatId;
+}
+
 async function sendToTelegramChat(
   token: string,
   chatId: number | string,
@@ -43,15 +72,25 @@ async function sendToTelegramChat(
     absoluteLink ? `\n${absoluteLink}` : "",
   ].filter(Boolean);
 
-  await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+  const target = parseTelegramTarget(String(chatId));
+  const payload: Record<string, unknown> = {
+    chat_id: target.chatId,
+    text: lines.join("\n"),
+    disable_web_page_preview: true,
+  };
+  if (target.threadId) payload.message_thread_id = target.threadId;
+
+  const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text: lines.join("\n"),
-      disable_web_page_preview: true,
-    }),
+    body: JSON.stringify(payload),
   });
+  const data = (await res.json().catch(() => null)) as
+    | { ok?: boolean; description?: string }
+    | null;
+  if (!res.ok || !data?.ok) {
+    throw new Error(data?.description || `Telegram send failed (${res.status})`);
+  }
 }
 
 export async function sendTelegramNotification(params: {
@@ -143,11 +182,7 @@ export async function sendTelegramNotificationToGroup(params: {
 }): Promise<void> {
   const { db, appUrl, notification, telegramGroupId } = params;
   const token = await db.getAppSetting("telegram_bot_token");
-  if (!token) return;
+  if (!token) throw new Error("ยังไม่ได้ตั้งค่า Telegram bot token");
 
-  try {
-    await sendToTelegramChat(token, telegramGroupId, notification, appUrl);
-  } catch {
-    // Do not block app notifications when Telegram fails.
-  }
+  await sendToTelegramChat(token, telegramGroupId, notification, appUrl);
 }

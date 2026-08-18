@@ -5,7 +5,7 @@ import { createDB } from "~/lib/db.server";
 import { generateId } from "~/lib/utils";
 import { useT } from "~/lib/i18n";
 import { NativeSelect } from "~/components/ui/native-select";
-import { sendTelegramNotification } from "~/lib/telegram.server";
+import { sendTelegramNotificationForClient } from "~/lib/telegram.server";
 
 const TicketSchema = z.object({
   title: z.string().min(1, "กรุณากรอกหัวข้อ"),
@@ -61,10 +61,11 @@ export async function action({ request, context }: any) {
       })
     )
   );
-  await sendTelegramNotification({
+  await sendTelegramNotificationForClient({
     db,
     appUrl: context.cloudflare.env.APP_URL,
     notification: { title: notificationTitle, body: parsed.data.title, link: "/admin/tickets" },
+    clientId: client.id,
   });
 
   return redirect(`/tickets/${ticketId}`);

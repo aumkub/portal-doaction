@@ -165,8 +165,6 @@ function buildMimeMessage({
   ].join("\r\n");
 }
 
-const LOGO_URL = "https://portal.doaction.co.th/logo-black.svg";
-
 // ─── Magic Link Template ──────────────────────────────────────────────────────
 
 const magicLinkStrings = {
@@ -222,6 +220,7 @@ export async function sendMagicLinkEmail({
 
   const displayName = toName ?? to;
   const s = magicLinkStrings[lang];
+  const logoUrl = `${new URL(magicUrl).origin}/logo-black.png`;
 
   const mainRecipient = to.trim().toLowerCase();
   const normalizedCc = (cc ?? [])
@@ -248,7 +247,7 @@ export async function sendMagicLinkEmail({
     toName,
     cc: ccRecipients,
     subject: s.subject,
-    html: magicLinkHtml({ displayName, magicUrl, s }),
+    html: magicLinkHtml({ displayName, magicUrl, logoUrl, s }),
     text: s.textBody(displayName, magicUrl),
     boundary,
   });
@@ -271,7 +270,7 @@ export async function sendMagicLinkEmail({
         to_name: toName ?? null,
         cc_emails: ccRecipients.length > 0 ? JSON.stringify(uniqueCc.map(c => c.email)) : null,
         subject: s.subject,
-        html_body: magicLinkHtml({ displayName, magicUrl, s }),
+        html_body: magicLinkHtml({ displayName, magicUrl, logoUrl, s }),
         text_body: s.textBody(displayName, magicUrl),
         source: source ?? "magic_link",
         status: "sent",
@@ -285,7 +284,7 @@ export async function sendMagicLinkEmail({
         to_name: toName ?? null,
         cc_emails: ccRecipients.length > 0 ? JSON.stringify(uniqueCc.map(c => c.email)) : null,
         subject: s.subject,
-        html_body: magicLinkHtml({ displayName, magicUrl, s }),
+        html_body: magicLinkHtml({ displayName, magicUrl, logoUrl, s }),
         text_body: s.textBody(displayName, magicUrl),
         source: source ?? "magic_link",
         status: "failed",
@@ -299,10 +298,12 @@ export async function sendMagicLinkEmail({
 function magicLinkHtml({
   displayName,
   magicUrl,
+  logoUrl,
   s,
 }: {
   displayName: string;
   magicUrl: string;
+  logoUrl: string;
   s: (typeof magicLinkStrings)["th"] | (typeof magicLinkStrings)["en"];
 }): string {
   return /* html */ `<!DOCTYPE html>
@@ -326,7 +327,7 @@ function magicLinkHtml({
           <!-- Logo row -->
           <tr>
             <td style="padding:32px 40px 0;">
-              <img src="${LOGO_URL}" alt="do action" width="140" style="display:block;height:auto;border:0;outline:none;text-decoration:none;" />
+              <img src="${logoUrl}" alt="do action" width="140" style="display:block;height:auto;border:0;outline:none;text-decoration:none;" />
             </td>
           </tr>
 
