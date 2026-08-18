@@ -33,7 +33,9 @@ export default function AdminLayout({ loaderData }: Route.ComponentProps) {
             isLoading ? "opacity-60" : "opacity-100 animate-fade-in"
           }`}
         >
-          <Outlet context={{ user }} />
+          <div className="max-w-screen-xl">
+            <Outlet context={{ user }} />
+          </div>
         </main>
       </div>
     </div>

@@ -95,7 +95,9 @@ export default function ClientLayout({ loaderData }: Route.ComponentProps) {
           </div>
         ) : null}
         <main className="flex-1 overflow-y-auto p-4 lg:p-6 animate-fade-in">
-          <Outlet context={{ user, client }} />
+          <div className="max-w-screen-xl">
+            <Outlet context={{ user, client }} />
+          </div>
         </main>
       </div>
     </div>

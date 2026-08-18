@@ -383,15 +383,18 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
         </Form>
       </div>
 
-      {/* Message thread */}
+      {/* External conversation */}
       <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5 mb-1">
+          <span>💬</span> บทสนทนา — ลูกค้าเห็น
+        </p>
         <MessageBubble message={ticket.description} isClient={false} isInternal={false} />
-        {messages.map((msg) => (
+        {messages.filter((m) => m.is_internal === 0).map((msg) => (
           <div key={msg.id} id={`msg-${msg.id}`}>
             <MessageBubble
               message={msg.message}
               isClient={usersById[msg.user_id]?.role === "admin"}
-              isInternal={msg.is_internal === 1}
+              isInternal={false}
               authorName={usersById[msg.user_id]?.name}
               attachments={(attachmentsByMessage[msg.id] ?? []).map((att) => ({
                 id: att.id,
@@ -402,7 +405,35 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
             />
           </div>
         ))}
+        {messages.filter((m) => m.is_internal === 0).length === 0 && (
+          <p className="text-xs text-slate-400 text-center py-2">ยังไม่มีข้อความ</p>
+        )}
       </div>
+
+      {/* Internal notes */}
+      {messages.some((m) => m.is_internal === 1) && (
+        <div className="space-y-3 rounded-2xl border border-amber-200 bg-amber-50/40 p-4">
+          <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide flex items-center gap-1.5 mb-1">
+            <span>🔒</span> บันทึกภายใน — ทีมเท่านั้น
+          </p>
+          {messages.filter((m) => m.is_internal === 1).map((msg) => (
+            <div key={msg.id} id={`msg-${msg.id}`}>
+              <MessageBubble
+                message={msg.message}
+                isClient={false}
+                isInternal={true}
+                authorName={usersById[msg.user_id]?.name}
+                attachments={(attachmentsByMessage[msg.id] ?? []).map((att) => ({
+                  id: att.id,
+                  name: att.file_name,
+                  href: `/api/attachments/${encodeURIComponent(att.file_key)}`,
+                  icon: getAttachmentIcon(att.file_name, att.mime_type),
+                }))}
+              />
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Reply form */}
       <div key={messages.length} className="rounded-2xl border border-slate-200 bg-white p-4">

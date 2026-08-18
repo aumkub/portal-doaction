@@ -14,19 +14,30 @@ export default function MessageBubble({
   alignRight?: boolean;
 }) {
   const shouldAlignRight = alignRight ?? isClient;
-  const attachmentClass = isClient
+
+  const bubbleClass = isInternal
+    ? "bg-amber-50 text-amber-900 border border-amber-300"
+    : isClient
+    ? "bg-white text-slate-800 border border-slate-200"
+    : "bg-violet-600 text-white";
+
+  const attachmentClass = isInternal
+    ? "border-amber-300 bg-white text-amber-800 hover:bg-amber-50"
+    : isClient
     ? "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
     : "border-white/30 bg-white/10 text-white hover:bg-white/20";
 
   return (
     <div className={`flex ${shouldAlignRight ? "justify-end" : "justify-start"}`}>
-      <div
-        className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm shadow-sm ${
-          isClient
-            ? "bg-white text-slate-800 border border-slate-200"
-            : "bg-violet-600 text-white"
-        }`}
-      >
+      <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm shadow-sm ${bubbleClass}`}>
+        {isInternal && (
+          <div className="flex items-center gap-1.5 mb-2 pb-2 border-b border-amber-200">
+            <span className="text-[11px]">🔒</span>
+            <span className="text-[11px] font-semibold text-amber-700 uppercase tracking-wide">
+              บันทึกภายใน
+            </span>
+          </div>
+        )}
         {authorName ? (
           <p className="mb-1 text-xs font-medium opacity-80">{authorName}</p>
         ) : null}
@@ -46,11 +57,6 @@ export default function MessageBubble({
               </a>
             ))}
           </div>
-        ) : null}
-        {isInternal ? (
-          <p className="mt-2 text-[11px] uppercase tracking-wide opacity-75">
-            บันทึกภายใน
-          </p>
         ) : null}
       </div>
     </div>
