@@ -61,5 +61,9 @@
 		"preview": "npm run build && vite preview",
 		"typecheck": "npm run typegen && tsc -b"
 	},
-	"type": "module"
+	"type": "module",
+	"packageManager": "pnpm@10.33.2",
+	"pnpm": {
+		"onlyBuiltDependencies": ["esbuild", "workerd", "@node-rs/argon2"]
+	}
 }
