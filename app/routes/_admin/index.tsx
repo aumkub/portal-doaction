@@ -2,7 +2,7 @@ import { requireCoAdminOrAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { useT } from "~/lib/i18n";
 import { formatRelativeTime, formatBytes } from "~/lib/utils";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useFetcher } from "react-router";
 import { getBackupList } from "~/lib/backup.server";
 import {
@@ -91,31 +91,10 @@ export async function loader({ request, context }: any) {
   let backup: BackupResult = { ok: false, error: "Not available for co-admins" };
   const backupPathLabels: Record<string, string> = {};
   if (user.role === "admin") {
-    // Read WebDAV settings from database
-    const [enabled, url, username, password, path] = await Promise.all([
-      db.getAppSetting("webdav_enabled"),
-      db.getAppSetting("webdav_url"),
-      db.getAppSetting("webdav_username"),
-      db.getAppSetting("webdav_password"),
-      db.getAppSetting("webdav_path"),
-    ]);
-    let webdavConfig = null;
+    backup = await getBackupList(null, context.cloudflare.env.SESSIONPORTAL, {
+      cacheOnly: true,
+    });
 
-    if (enabled === "0") {
-      backup = { ok: false, error: "WebDAV backup is disabled in settings" };
-    } else {
-      if (!url || !username || !password) {
-        backup = { ok: false, error: "WebDAV credentials not configured. Please configure in Settings." };
-      } else {
-        webdavConfig = { url, username, password, path: path || "/home/Backup" };
-      }
-    }
-    
-    if (webdavConfig) {
-      const env = context.cloudflare.env;
-      backup = await getBackupList(webdavConfig, env.SESSIONPORTAL);
-    }
-    
     for (const c of allClients) {
       if (c.backup_path) backupPathLabels[c.backup_path] = c.company_name;
     }
@@ -332,6 +311,15 @@ function BackupSection({
   const refreshing = fetcher.state !== "idle";
   const onRefresh = () =>
     fetcher.submit(null, { method: "post", action: "/api/admin/backup-refresh" });
+
+  // The loader only reads cache, so pull a fresh list once the page is up.
+  const requested = useRef(false);
+  useEffect(() => {
+    if (requested.current) return;
+    if (initialBackup.ok || initialBackup.error !== "not_loaded") return;
+    requested.current = true;
+    fetcher.submit(null, { method: "post", action: "/api/admin/backup-refresh" });
+  }, [initialBackup, fetcher]);
 
   const [tab, setTab] = useState<"log" | "sites">("log");
 

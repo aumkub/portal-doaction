@@ -17,25 +17,49 @@ const WEBDAV_TIMEOUT_MS = 8000;
 
 type WebDAVCredentials = { host: string; user: string; pass: string };
 
-export async function getBackupList(
-  webdavConfig: {
-    url: string;
-    username: string;
-    password: string;
-    path?: string;
-  } | null,
-  kv: KVNamespace,
-  options?: { forceRefresh?: boolean }
-): Promise<BackupResult> {
-  if (!webdavConfig) {
-    return { ok: false, error: "WebDAV not configured in settings" };
-  }
+export type WebDAVConfig = {
+  url: string;
+  username: string;
+  password: string;
+  path?: string;
+};
 
+/** Reads the WebDAV settings rows, returning null when it is off or unset. */
+export async function readWebDAVConfig(
+  db: { getAppSetting(key: string): Promise<string | null> }
+): Promise<WebDAVConfig | null> {
+  const [enabled, url, username, password, path] = await Promise.all([
+    db.getAppSetting("webdav_enabled"),
+    db.getAppSetting("webdav_url"),
+    db.getAppSetting("webdav_username"),
+    db.getAppSetting("webdav_password"),
+    db.getAppSetting("webdav_path"),
+  ]);
+  if (enabled === "0") return null;
+  if (!url || !username || !password) return null;
+  return { url, username, password, path: path || "/home/Backup" };
+}
+
+export async function getBackupList(
+  webdavConfig: WebDAVConfig | null,
+  kv: KVNamespace,
+  options?: { forceRefresh?: boolean; cacheOnly?: boolean }
+): Promise<BackupResult> {
   if (!options?.forceRefresh) {
     const cached = await kv.get(CACHE_KEY, "json") as BackupResult | null;
     if (cached) {
       return { ...cached, fromCache: true };
     }
+  }
+
+  // The dashboard renders from cache only — reaching a possibly unresponsive
+  // WebDAV host is left to the refresh action so it cannot block the page.
+  if (options?.cacheOnly) {
+    return { ok: false, error: "not_loaded", fromCache: false };
+  }
+
+  if (!webdavConfig) {
+    return { ok: false, error: "WebDAV not configured in settings" };
   }
 
   const fresh = await fetchBackupList(webdavConfig);
