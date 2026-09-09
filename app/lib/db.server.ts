@@ -702,6 +702,21 @@ export function createDB(d1: D1Database) {
       return row?.value ?? null;
     },
 
+    /** Reads many settings in one round trip; missing keys come back null. */
+    async getAppSettings(keys: string[]): Promise<Record<string, string | null>> {
+      const out: Record<string, string | null> = {};
+      for (const k of keys) out[k] = null;
+      if (keys.length === 0) return out;
+      const result = await d1
+        .prepare(
+          `SELECT key, value FROM app_settings WHERE key IN (${keys.map(() => "?").join(",")})`
+        )
+        .bind(...keys)
+        .all<{ key: string; value: string }>();
+      for (const row of result.results) out[row.key] = row.value;
+      return out;
+    },
+
     async setAppSetting(key: string, value: string): Promise<void> {
       await d1
         .prepare(

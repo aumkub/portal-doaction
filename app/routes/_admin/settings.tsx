@@ -64,21 +64,38 @@ export async function loader({ request, context }: any) {
   const env = context.cloudflare.env;
   const admin = await requireAdmin(request, env.DB, env.SESSIONPORTAL);
   const db = createDB(env.DB);
-  const adminUsers = await db.listAdminUsers();
-  const telegramBotToken = await db.getAppSetting("telegram_bot_token");
-  const telegramDefaultGroupId = await db.getAppSetting("telegram_default_group_id");
-  const contractWarningFirstDays = Number((await db.getAppSetting("contract_warning_first_days")) ?? "14");
-  const contractWarningSecondDays = Number((await db.getAppSetting("contract_warning_second_days")) ?? "7");
-  const contractWarningThirdDays = Number((await db.getAppSetting("contract_warning_third_days")) ?? "1");
+  const [adminUsers, s] = await Promise.all([
+    db.listAdminUsers(),
+    db.getAppSettings([
+      "telegram_bot_token",
+      "telegram_default_group_id",
+      "contract_warning_first_days",
+      "contract_warning_second_days",
+      "contract_warning_third_days",
+      "ticket_reminder_enabled",
+      "ticket_reminder_days",
+      "ticket_reminder_hour",
+      "webdav_enabled",
+      "webdav_url",
+      "webdav_username",
+      "webdav_path",
+      "webdav_password",
+    ]),
+  ]);
+  const telegramBotToken = s.telegram_bot_token;
+  const telegramDefaultGroupId = s.telegram_default_group_id;
+  const contractWarningFirstDays = Number(s.contract_warning_first_days ?? "14");
+  const contractWarningSecondDays = Number(s.contract_warning_second_days ?? "7");
+  const contractWarningThirdDays = Number(s.contract_warning_third_days ?? "1");
   const uptimeKey = (env as any).UPTIMEROBOT_API_KEY ?? "ur2618139-5281beb51ff9820a629669c2";
-  const ticketReminderEnabled = (await db.getAppSetting("ticket_reminder_enabled")) !== "0";
-  const ticketReminderDays = Number((await db.getAppSetting("ticket_reminder_days")) ?? "1");
-  const ticketReminderHour = Number((await db.getAppSetting("ticket_reminder_hour")) ?? "9");
-  const webdavEnabled = (await db.getAppSetting("webdav_enabled")) !== "0";
-  const webdavUrl = (await db.getAppSetting("webdav_url")) ?? "";
-  const webdavUsername = (await db.getAppSetting("webdav_username")) ?? "";
-  const webdavPath = (await db.getAppSetting("webdav_path")) ?? "";
-  const webdavHasPassword = !!(await db.getAppSetting("webdav_password"));
+  const ticketReminderEnabled = s.ticket_reminder_enabled !== "0";
+  const ticketReminderDays = Number(s.ticket_reminder_days ?? "1");
+  const ticketReminderHour = Number(s.ticket_reminder_hour ?? "9");
+  const webdavEnabled = s.webdav_enabled !== "0";
+  const webdavUrl = s.webdav_url ?? "";
+  const webdavUsername = s.webdav_username ?? "";
+  const webdavPath = s.webdav_path ?? "";
+  const webdavHasPassword = !!s.webdav_password;
   return {
     admin, adminUsers, uptimeKey,
     telegramBotToken, telegramDefaultGroupId,

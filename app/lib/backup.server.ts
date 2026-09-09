@@ -26,18 +26,19 @@ export type WebDAVConfig = {
 
 /** Reads the WebDAV settings rows, returning null when it is off or unset. */
 export async function readWebDAVConfig(
-  db: { getAppSetting(key: string): Promise<string | null> }
+  db: { getAppSettings(keys: string[]): Promise<Record<string, string | null>> }
 ): Promise<WebDAVConfig | null> {
-  const [enabled, url, username, password, path] = await Promise.all([
-    db.getAppSetting("webdav_enabled"),
-    db.getAppSetting("webdav_url"),
-    db.getAppSetting("webdav_username"),
-    db.getAppSetting("webdav_password"),
-    db.getAppSetting("webdav_path"),
+  const s = await db.getAppSettings([
+    "webdav_enabled",
+    "webdav_url",
+    "webdav_username",
+    "webdav_password",
+    "webdav_path",
   ]);
-  if (enabled === "0") return null;
+  if (s.webdav_enabled === "0") return null;
+  const { webdav_url: url, webdav_username: username, webdav_password: password } = s;
   if (!url || !username || !password) return null;
-  return { url, username, password, path: path || "/home/Backup" };
+  return { url, username, password, path: s.webdav_path || "/home/Backup" };
 }
 
 export async function getBackupList(
