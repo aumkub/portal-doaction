@@ -17,6 +17,8 @@ interface ImpersonationData {
 }
 
 const SESSION_CACHE_TTL_MS = 2000;
+/** Smallest expiry bump worth spending a KV write on. */
+const SESSION_EXTENSION_MIN_MS = 24 * 60 * 60 * 1000;
 const sessionUserCache = new Map<
   string,
   { cachedAt: number; user: User | null }
@@ -156,6 +158,12 @@ function createKVAdapter(kv: KVNamespace, db: ReturnType<typeof createDB>) {
     ): Promise<void> {
       const raw = await kv.get<KVSessionData>(`session:${sessionId}`, "json");
       if (!raw) return;
+      // Lucia asks for this on every request once a session is past its
+      // half-life, but KV allows only one write per second per key, so
+      // writing each time makes concurrent requests queue behind each other.
+      // Persisting only a meaningful bump keeps the session rolling at a
+      // fraction of the writes.
+      if (expiresAt.getTime() - raw.expiresAt < SESSION_EXTENSION_MIN_MS) return;
       const ttlSeconds = Math.max(
         1,
         Math.floor((expiresAt.getTime() - Date.now()) / 1000)

@@ -12,6 +12,8 @@ export type { BackupEntry, BackupResult };
 const ALLOWED_HOST = "cloud.aumwp.com";
 const CACHE_KEY = BACKUP_CACHE_KEY;
 const CACHE_TTL_SECONDS = 15 * 60; // 15 minutes
+const FAILURE_CACHE_TTL_SECONDS = 60;
+const WEBDAV_TIMEOUT_MS = 8000;
 
 type WebDAVCredentials = { host: string; user: string; pass: string };
 
@@ -31,7 +33,7 @@ export async function getBackupList(
 
   if (!options?.forceRefresh) {
     const cached = await kv.get(CACHE_KEY, "json") as BackupResult | null;
-    if (cached?.ok) {
+    if (cached) {
       return { ...cached, fromCache: true };
     }
   }
@@ -44,6 +46,11 @@ export async function getBackupList(
     });
     return { ...payload, fromCache: false };
   }
+  // Without this, an unreachable WebDAV host makes every dashboard load pay
+  // the full timeout again.
+  await kv.put(CACHE_KEY, JSON.stringify(fresh), {
+    expirationTtl: FAILURE_CACHE_TTL_SECONDS,
+  });
   return { ...fresh, fromCache: false };
 }
 
@@ -143,6 +150,7 @@ async function propfind(creds: WebDAVCredentials, path: string): Promise<string>
       "Content-Type": "application/xml; charset=utf-8",
     },
     body: `<?xml version="1.0" encoding="utf-8"?><propfind xmlns="DAV:"><prop><getlastmodified/><getcontentlength/><resourcetype/><displayname/></prop></propfind>`,
+    signal: AbortSignal.timeout(WEBDAV_TIMEOUT_MS),
   });
 
   if (resp.status !== 207 && !resp.ok) {

@@ -56,22 +56,12 @@ export async function loader({ request, context }: any) {
     assignedClientIds = assignments.map((a) => a.client_id);
   }
 
-  const allClients = await db.listClients();
-  const clients =
-    user.role === "co-admin"
-      ? allClients.filter((c) => assignedClientIds.includes(c.id))
-      : allClients;
-
   const dueReportsQuery =
     user.role === "co-admin"
       ? `SELECT COUNT(*) as count FROM monthly_reports WHERE year = ? AND month = ? AND client_id IN (${assignedClientIds.map(() => "?").join(",")})`
       : "SELECT COUNT(*) as count FROM monthly_reports WHERE year = ? AND month = ?";
   const dueReportsParams =
     user.role === "co-admin" ? [year, month, ...assignedClientIds] : [year, month];
-  const dueReports = await context.cloudflare.env.DB.prepare(dueReportsQuery)
-    .bind(...dueReportsParams)
-    .first();
-
   const openTicketsQuery =
     user.role === "co-admin"
       ? `SELECT t.id, t.title, t.priority, t.status, c.company_name, c.id as client_id
@@ -83,9 +73,16 @@ export async function loader({ request, context }: any) {
          WHERE t.status IN ('open', 'in_progress')
          ORDER BY t.created_at DESC LIMIT 6`;
   const openTicketsParams = user.role === "co-admin" ? [...assignedClientIds] : [];
-  const openTicketsResult = await context.cloudflare.env.DB.prepare(openTicketsQuery)
-    .bind(...openTicketsParams)
-    .all();
+
+  const [allClients, dueReports, openTicketsResult] = await Promise.all([
+    db.listClients(),
+    context.cloudflare.env.DB.prepare(dueReportsQuery).bind(...dueReportsParams).first(),
+    context.cloudflare.env.DB.prepare(openTicketsQuery).bind(...openTicketsParams).all(),
+  ]);
+  const clients =
+    user.role === "co-admin"
+      ? allClients.filter((c) => assignedClientIds.includes(c.id))
+      : allClients;
 
   const urgentTickets: DashboardTicket[] =
     (openTicketsResult as { results?: DashboardTicket[] }).results ?? [];
@@ -95,17 +92,18 @@ export async function loader({ request, context }: any) {
   const backupPathLabels: Record<string, string> = {};
   if (user.role === "admin") {
     // Read WebDAV settings from database
-    const webdavEnabled = (await db.getAppSetting("webdav_enabled")) !== "0";
+    const [enabled, url, username, password, path] = await Promise.all([
+      db.getAppSetting("webdav_enabled"),
+      db.getAppSetting("webdav_url"),
+      db.getAppSetting("webdav_username"),
+      db.getAppSetting("webdav_password"),
+      db.getAppSetting("webdav_path"),
+    ]);
     let webdavConfig = null;
-    
-    if (!webdavEnabled) {
+
+    if (enabled === "0") {
       backup = { ok: false, error: "WebDAV backup is disabled in settings" };
     } else {
-      const url = await db.getAppSetting("webdav_url");
-      const username = await db.getAppSetting("webdav_username");
-      const password = await db.getAppSetting("webdav_password");
-      const path = await db.getAppSetting("webdav_path");
-      
       if (!url || !username || !password) {
         backup = { ok: false, error: "WebDAV credentials not configured. Please configure in Settings." };
       } else {
