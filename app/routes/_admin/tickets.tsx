@@ -17,23 +17,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const user = await requireCoAdminOrAdmin(request, env.DB, env.SESSIONPORTAL);
   const db = createDB(env.DB);
 
-  let clients;
+  let assignedClientIds: string[] | undefined;
   if (user.role === "co-admin") {
     const assignments = await db.listCoAdminClients(user.id);
-    const clientIds = assignments.map((a) => a.client_id);
-    clients = (await db.listClients()).filter((c) => clientIds.includes(c.id));
-  } else {
-    clients = await db.listClients();
+    assignedClientIds = assignments.map((a) => a.client_id);
   }
 
-  const ticketBuckets = await Promise.all(
-    clients.map(async (client) => {
-      const tickets = await db.listTicketsByClient(client.id);
-      return tickets.map((t) => ({ ...t, company_name: client.company_name }));
-    })
-  );
-  const allTickets = ticketBuckets.flat();
-  allTickets.sort((a, b) => b.updated_at - a.updated_at);
+  const allTickets = await db.listTicketsWithClient(assignedClientIds);
 
   const counts: Record<string, number> = { all: allTickets.length };
   for (const t of allTickets) {

@@ -57,6 +57,7 @@ export default [
   route("logout", "routes/api/logout.ts"),
   route("api/send-magic-link", "routes/api/send-magic-link.ts"),
   route("api/notifications/read", "routes/api/notifications-read.ts"),
+  route("api/notifications", "routes/api/notifications-poll.ts"),
   route("api/language", "routes/api/language.ts"),
   route("api/report-email-preview", "routes/api/report-email-preview.ts"),
   route("api/report-notify", "routes/api/report-notify.ts"),

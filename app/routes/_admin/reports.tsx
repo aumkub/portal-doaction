@@ -30,29 +30,19 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const user = await requireCoAdminOrAdmin(request, env.DB, env.SESSIONPORTAL);
   const db = createDB(env.DB);
 
-  let clients;
+  let assignedClientIds: string[] | undefined;
   if (user.role === "co-admin") {
     const assignments = await db.listCoAdminClients(user.id);
-    const clientIds = assignments.map((a) => a.client_id);
-    clients = (await db.listClients()).filter((c) => clientIds.includes(c.id));
-  } else {
-    clients = await db.listClients();
+    assignedClientIds = assignments.map((a) => a.client_id);
   }
 
-  const allReports: ReportRowForEmail[] = [];
-  for (const client of clients) {
-    const u = await db.getUserById(client.user_id);
-    const reports = await db.listReportsByClient(client.id);
-    for (const r of reports.slice(0, 3)) {
-      allReports.push({
-        ...r,
-        company_name: client.company_name,
-        client_email: u?.email ?? "",
-        client_contact_name: u?.name ?? "",
-      });
-    }
-  }
-  allReports.sort((a, b) => b.created_at - a.created_at);
+  const [allClients, allReports] = await Promise.all([
+    db.listClients(),
+    db.listRecentReportsWithClient(3, assignedClientIds),
+  ]);
+  const clients = assignedClientIds
+    ? allClients.filter((c) => assignedClientIds.includes(c.id))
+    : allClients;
 
   const url = new URL(request.url);
   const bulkCreated = Number(url.searchParams.get("bulkCreated") ?? "0");

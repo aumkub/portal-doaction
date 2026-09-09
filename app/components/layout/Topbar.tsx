@@ -1,4 +1,4 @@
-import { Form, useRevalidator } from "react-router";
+import { Form, useFetcher } from "react-router";
 import { useEffect, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
 import {
@@ -25,20 +25,27 @@ interface TopbarProps {
   user: User;
   companyName?: string | null;
   notifications?: Notification[];
-  role?: "client" | "admin";
+  role?: "client" | "admin" | "co-admin";
 }
 
-// ─── 30-second polling ───────────────────────────────────────────────────────
-function usePolling(intervalMs: number) {
-  const revalidator = useRevalidator();
+/**
+ * Polls only the notifications endpoint. Using a fetcher rather than
+ * revalidate() keeps the poll from re-running every loader on the page.
+ */
+function usePolledNotifications(
+  initial: Notification[],
+  intervalMs: number
+): Notification[] {
+  const fetcher = useFetcher<{ notifications: Notification[] }>();
+
   useEffect(() => {
     const id = setInterval(() => {
-      if (revalidator.state === "idle") {
-        void Promise.resolve(revalidator.revalidate()).catch(() => {});
-      }
+      if (fetcher.state === "idle") fetcher.load("/api/notifications");
     }, intervalMs);
     return () => clearInterval(id);
-  }, [revalidator, intervalMs]);
+  }, [fetcher, intervalMs]);
+
+  return fetcher.data?.notifications ?? initial;
 }
 
 function isUsableAvatarUrl(url: string | null | undefined): url is string {
@@ -188,13 +195,12 @@ function UserAvatar({
 export default function Topbar({
   user,
   companyName,
-  notifications = [],
+  notifications: initialNotifications = [],
   role = "client",
 }: TopbarProps) {
   const { t } = useT();
 
-  // Poll every 30 s so notification count stays fresh
-  usePolling(30_000);
+  const notifications = usePolledNotifications(initialNotifications, 30_000);
 
   const initials = user.name
     .split(" ")
@@ -203,7 +209,8 @@ export default function Topbar({
     .join("")
     .toUpperCase();
 
-  const settingsHref = role === "admin" ? "/admin/settings" : "/settings";
+  const settingsHref =
+    role === "admin" ? "/admin/settings" : role === "client" ? "/settings" : null;
 
   return (
     <header className="h-16 bg-canvas border-b border-hairline flex items-center justify-between px-4 lg:px-6 shrink-0">
@@ -239,12 +246,16 @@ export default function Topbar({
               <p className="text-xs text-muted-foreground truncate">{user.email}</p>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <a href={settingsHref}>
-                <span className=""><FaGear aria-hidden="true" /></span> {t("topbar_account_settings")}
-              </a>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
+            {settingsHref && (
+              <>
+                <DropdownMenuItem asChild>
+                  <a href={settingsHref}>
+                    <span className=""><FaGear aria-hidden="true" /></span> {t("topbar_account_settings")}
+                  </a>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            )}
             <Form method="post" action="/logout">
               <button
                 type="submit"

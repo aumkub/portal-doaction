@@ -1,7 +1,7 @@
 import { Form, redirect, useNavigation } from "react-router";
 import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
-import { requireAdmin } from "~/lib/auth.server";
+import { requireCoAdminOrAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { formatDate, generateId } from "~/lib/utils";
 import { sendTelegramNotificationForClient } from "~/lib/telegram.server";
@@ -45,11 +45,12 @@ export function meta({ data }: any) {
 
 export async function loader({ request, context, params }: any) {
   const env = context.cloudflare.env;
-  const admin = await requireAdmin(request, env.DB, env.SESSIONPORTAL);
+  const admin = await requireCoAdminOrAdmin(request, env.DB, env.SESSIONPORTAL);
   const db = createDB(env.DB);
 
   const ticket = await db.getTicket(params.ticketId);
   if (!ticket) throw new Response("Ticket not found", { status: 404 });
+  await assertCanAccessTicket(db, admin, ticket.client_id);
 
   const [messages, attachments, admins, client] = await Promise.all([
     db.listMessagesByTicket(ticket.id),
@@ -71,6 +72,18 @@ const STATUSES = [
   "resolved",
   "closed",
 ] as const;
+
+async function assertCanAccessTicket(
+  db: ReturnType<typeof createDB>,
+  user: User,
+  clientId: string
+) {
+  if (user.role !== "co-admin") return;
+  const assignments = await db.listCoAdminClients(user.id);
+  if (!assignments.some((a) => a.client_id === clientId)) {
+    throw new Response("Forbidden", { status: 403 });
+  }
+}
 
 function statusToKey(status: (typeof STATUSES)[number]): TranslationKey {
   if (status === "closed") return "status_closed_short";
@@ -96,11 +109,12 @@ function getAttachmentIcon(fileName: string, mimeType?: string): string {
 
 export async function action({ request, context, params }: any) {
   const env = context.cloudflare.env;
-  const admin = await requireAdmin(request, env.DB, env.SESSIONPORTAL);
+  const admin = await requireCoAdminOrAdmin(request, env.DB, env.SESSIONPORTAL);
   const db = createDB(env.DB);
 
   const ticket = await db.getTicket(params.ticketId);
   if (!ticket) throw new Response("Ticket not found", { status: 404 });
+  await assertCanAccessTicket(db, admin, ticket.client_id);
 
   const formData = await request.formData();
   const raw = Object.fromEntries(formData);

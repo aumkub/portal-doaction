@@ -232,6 +232,72 @@ export function createDB(d1: D1Database) {
       return result.results;
     },
 
+    /** All tickets joined with their client's company name. */
+    async listTicketsWithClient(
+      clientIds?: string[]
+    ): Promise<(SupportTicket & { company_name: string })[]> {
+      if (clientIds && clientIds.length === 0) return [];
+      const filter = clientIds
+        ? `AND t.client_id IN (${clientIds.map(() => "?").join(",")})`
+        : "";
+      const result = await d1
+        .prepare(
+          `SELECT t.*, c.company_name
+           FROM support_tickets t
+           JOIN clients c ON c.id = t.client_id
+           WHERE t.deleted_at IS NULL AND c.deleted_at IS NULL ${filter}
+           ORDER BY t.updated_at DESC`
+        )
+        .bind(...(clientIds ?? []))
+        .all<SupportTicket & { company_name: string }>();
+      return result.results;
+    },
+
+    /**
+     * Latest `perClient` reports for every client, joined with company and
+     * contact details. Replaces a per-client query loop.
+     */
+    async listRecentReportsWithClient(
+      perClient: number,
+      clientIds?: string[]
+    ): Promise<
+      (MonthlyReport & {
+        company_name: string;
+        client_email: string;
+        client_contact_name: string;
+      })[]
+    > {
+      if (clientIds && clientIds.length === 0) return [];
+      const filter = clientIds
+        ? `AND r.client_id IN (${clientIds.map(() => "?").join(",")})`
+        : "";
+      const result = await d1
+        .prepare(
+          `SELECT * FROM (
+             SELECT r.*, c.company_name,
+                    COALESCE(u.email, '') AS client_email,
+                    COALESCE(u.name, '') AS client_contact_name,
+                    ROW_NUMBER() OVER (
+                      PARTITION BY r.client_id ORDER BY r.year DESC, r.month DESC
+                    ) AS rn
+             FROM monthly_reports r
+             JOIN clients c ON c.id = r.client_id
+             LEFT JOIN users u ON u.id = c.user_id
+             WHERE c.deleted_at IS NULL ${filter}
+           ) WHERE rn <= ?
+           ORDER BY created_at DESC`
+        )
+        .bind(...(clientIds ?? []), perClient)
+        .all<
+          MonthlyReport & {
+            company_name: string;
+            client_email: string;
+            client_contact_name: string;
+          }
+        >();
+      return result.results;
+    },
+
     async listClientsWithoutReportForMonth(
       year: number,
       month: number
