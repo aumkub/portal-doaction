@@ -20,6 +20,13 @@ export async function loader({ request, context, params }: any) {
     }
   }
 
+  if (user.role === "co-admin") {
+    const assignments = await db.listCoAdminClients(user.id);
+    if (!assignments.some((a) => a.client_id === ticket.client_id)) {
+      return new Response("Forbidden", { status: 403 });
+    }
+  }
+
   const object = await env.ATTACHMENTS.get(key);
   if (!object) return new Response("Not Found", { status: 404 });
 
@@ -27,6 +34,8 @@ export async function loader({ request, context, params }: any) {
   object.writeHttpMetadata(headers);
   headers.set("etag", object.httpEtag);
   headers.set("content-disposition", `inline; filename="${attachment.file_name}"`);
+  // Keys are unique per upload and never rewritten, so the body is immutable.
+  headers.set("cache-control", "private, max-age=31536000, immutable");
 
   return new Response(object.body, { headers });
 }

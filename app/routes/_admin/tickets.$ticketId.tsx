@@ -418,6 +418,7 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
                 name: att.file_name,
                 href: `/api/attachments/${encodeURIComponent(att.file_key)}`,
                 icon: getAttachmentIcon(att.file_name, att.mime_type),
+                mimeType: att.mime_type,
               }))}
             />
           </div>
@@ -445,6 +446,7 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
                   name: att.file_name,
                   href: `/api/attachments/${encodeURIComponent(att.file_key)}`,
                   icon: getAttachmentIcon(att.file_name, att.mime_type),
+                  mimeType: att.mime_type,
                 }))}
               />
             </div>

@@ -40,6 +40,13 @@ export async function action({ request, context }: any) {
       }
     }
 
+    if (user.role === "co-admin") {
+      const assignments = await db.listCoAdminClients(user.id);
+      if (!assignments.some((a) => a.client_id === ticket.client_id)) {
+        return Response.json({ error: "forbidden" }, { status: 403 });
+      }
+    }
+
     const linkedAttachment = await db.getTicketAttachmentByKey(fileKey);
     if (linkedAttachment) {
       return Response.json({ ok: true, skipped: "linked" });
@@ -61,6 +68,13 @@ export async function action({ request, context }: any) {
   if (user.role === "client") {
     const client = await db.getClientByUserId(user.id);
     if (!client || client.id !== ticket.client_id) {
+      return Response.json({ error: "forbidden" }, { status: 403 });
+    }
+  }
+
+  if (user.role === "co-admin") {
+    const assignments = await db.listCoAdminClients(user.id);
+    if (!assignments.some((a) => a.client_id === ticket.client_id)) {
       return Response.json({ error: "forbidden" }, { status: 403 });
     }
   }
