@@ -1,5 +1,5 @@
 import type { Route } from "./+types/language";
-import { createAuth, evictSessionUserCache, requireUser } from "~/lib/auth.server";
+import { createAuth, evictSessionUserCache, evictUserCache, requireUser } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { createLanguageCookie, resolveLanguage } from "~/lib/i18n";
 
@@ -13,6 +13,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   const db = createDB(env.DB);
   try {
     await db.updateUser(user.id, { language });
+    await evictUserCache(env.SESSIONPORTAL, user.id);
   } catch (error) {
     // Keep language switching working even before DB migrations are applied.
     console.warn("[language] failed to persist language in DB:", error);

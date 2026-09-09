@@ -1,6 +1,6 @@
 import { Form, redirect, useSearchParams } from "react-router";
 import { z } from "zod";
-import { requireUser } from "~/lib/auth.server";
+import { requireUser, evictUserCache } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { useT } from "~/lib/i18n";
 import { FaUser, FaBuilding, FaCircleQuestion, FaTicket } from "react-icons/fa6";
@@ -45,6 +45,7 @@ export async function action({ request, context }: any) {
   const parsed = ProfileSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { errors: parsed.error.flatten().fieldErrors };
   await db.updateUser(user.id, { name: parsed.data.name });
+  await evictUserCache(env.SESSIONPORTAL, user.id);
   return redirect("/settings");
 }
 

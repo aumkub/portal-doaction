@@ -1,6 +1,6 @@
 import { redirect } from "react-router";
 import type { Route } from "./+types/magic-link";
-import { createAuth } from "~/lib/auth.server";
+import { createAuth, evictUserCache } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { FaTriangleExclamation, FaSpinner } from "react-icons/fa6";
 
@@ -28,6 +28,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     await db.updateUser(record.user_id, {
       first_login_at: Math.floor(Date.now() / 1000),
     });
+    await evictUserCache(env.SESSIONPORTAL, record.user_id);
   }
   const destination = user?.role === "admin" ? "/admin/clients" : "/dashboard";
 

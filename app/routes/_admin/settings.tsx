@@ -1,6 +1,6 @@
 import { Form, redirect, useSearchParams } from "react-router";
 import { z } from "zod";
-import { requireAdmin } from "~/lib/auth.server";
+import { requireAdmin, evictUserCache } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { useT } from "~/lib/i18n";
 import { sendTelegramNotification } from "~/lib/telegram.server";
@@ -187,6 +187,7 @@ export async function action({ request, context }: any) {
   const parsed = ProfileSchema.safeParse(raw);
   if (!parsed.success) return { errors: parsed.error.flatten().fieldErrors };
   await db.updateUser(admin.id, { name: parsed.data.name });
+  await evictUserCache(env.SESSIONPORTAL, admin.id);
   return redirect("/admin/settings");
 }
 

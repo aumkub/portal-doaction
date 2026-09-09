@@ -19,6 +19,41 @@ interface ImpersonationData {
 const SESSION_CACHE_TTL_MS = 2000;
 /** Smallest expiry bump worth spending a KV write on. */
 const SESSION_EXTENSION_MIN_MS = 24 * 60 * 60 * 1000;
+/**
+ * A D1 round trip costs 150-700ms from the edge while a KV read costs single
+ * digits, and every authenticated request needs the session's user. Caching
+ * that record in KV keeps D1 off the hot path; writers call evictUserCache so
+ * a change is visible immediately rather than after the TTL.
+ */
+const USER_CACHE_TTL_SECONDS = 300;
+
+function userCacheKey(userId: string) {
+  return `user:${userId}`;
+}
+
+export async function evictUserCache(kv: KVNamespace, userId: string) {
+  await kv.delete(userCacheKey(userId));
+}
+
+async function readUserCached(
+  kv: KVNamespace,
+  db: ReturnType<typeof createDB>,
+  userId: string
+): Promise<User | null> {
+  try {
+    const cached = await kv.get<User>(userCacheKey(userId), "json");
+    if (cached) return cached;
+  } catch {
+    // fall through to D1
+  }
+  const user = await db.getUserById(userId);
+  if (user) {
+    await kv.put(userCacheKey(userId), JSON.stringify(user), {
+      expirationTtl: USER_CACHE_TTL_SECONDS,
+    });
+  }
+  return user;
+}
 const sessionUserCache = new Map<
   string,
   { cachedAt: number; user: User | null }
@@ -113,7 +148,7 @@ function createKVAdapter(kv: KVNamespace, db: ReturnType<typeof createDB>) {
         return [null, null];
       }
 
-      const user = await db.getUserById(raw.userId);
+      const user = await readUserCached(kv, db, raw.userId);
       if (!user) return [null, null];
 
       return [

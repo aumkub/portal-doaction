@@ -1,7 +1,7 @@
 import { Form, Link, redirect, useSearchParams } from "react-router";
 import { z } from "zod";
 import type { Route } from "./+types/co-admins";
-import { requireAdmin, hashPassword, startImpersonation } from "~/lib/auth.server";
+import { requireAdmin, hashPassword, startImpersonation, evictUserCache } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { generateId } from "~/lib/utils";
 import { useT } from "~/lib/i18n";
@@ -213,6 +213,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     const coAdmin = await db.getUserById(co_admin_id);
     if (!coAdmin || coAdmin.role !== "co-admin") return { errors: { co_admin_id: ["ไม่พบ Co-Admin"] } };
     await db.updateUserPasswordHash(co_admin_id, await hashPassword(new_password));
+    await evictUserCache(context.cloudflare.env.SESSIONPORTAL, co_admin_id);
     return { success: { password_reset: true } };
   }
 

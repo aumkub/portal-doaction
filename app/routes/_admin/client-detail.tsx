@@ -1,7 +1,7 @@
 import { Form, redirect, useActionData, useSearchParams, type FormEvent as ReactFormEvent } from "react-router";
 import { z } from "zod";
 import { useState } from "react";
-import { requireCoAdminOrAdmin, startImpersonation, generateMagicToken } from "~/lib/auth.server";
+import { requireCoAdminOrAdmin, startImpersonation, generateMagicToken, evictUserCache } from "~/lib/auth.server";
 import { getBackupList } from "~/lib/backup.server";
 import { createDB } from "~/lib/db.server";
 import { generateId } from "~/lib/utils";
@@ -170,6 +170,7 @@ export async function action({ request, params, context }: any) {
     if (!user) throw new Response("Not Found", { status: 404 });
 
     await db.updateUser(client.user_id, { name });
+    await evictUserCache(env.SESSIONPORTAL, client.user_id);
     await db.updateClient(client.id, {
       company_name,
       website_url: website_url || null,
@@ -193,6 +194,7 @@ export async function action({ request, params, context }: any) {
       return { errors: { email: ["admin_change_email_duplicate"] }, emailDuplicate: true };
     }
     await db.updateUser(client.user_id, { email: newEmail });
+    await evictUserCache(env.SESSIONPORTAL, client.user_id);
     return { success: { email_changed: true, email: newEmail } };
   }
 
