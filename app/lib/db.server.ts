@@ -13,6 +13,7 @@ import type {
   CoAdminClient,
   CustomerNote,
   CustomerNoteWithUser,
+  MessageAuthor,
 } from "~/types";
 
 // ─── DB wrapper ───────────────────────────────────────────────────────────────
@@ -513,6 +514,42 @@ export function createDB(d1: D1Database) {
         .bind(ticket_id)
         .all<TicketMessage>();
       return result.results;
+    },
+
+    /**
+     * Everyone who has written in the ticket, limited to the columns the
+     * conversation view renders — this map is serialized to the browser, so
+     * it must never carry email or password_hash.
+     */
+    async listMessageAuthors(ticket_id: string): Promise<MessageAuthor[]> {
+      const result = await d1
+        .prepare(
+          `SELECT id, name, role, avatar_url FROM users
+           WHERE id IN (SELECT DISTINCT user_id FROM ticket_messages WHERE ticket_id = ?)`
+        )
+        .bind(ticket_id)
+        .all<MessageAuthor>();
+      return result.results;
+    },
+
+    async getTicketMessage(id: string): Promise<TicketMessage | null> {
+      return d1
+        .prepare("SELECT * FROM ticket_messages WHERE id = ?")
+        .bind(id)
+        .first<TicketMessage>();
+    },
+
+    /** Deletes a message and its attachment rows; returns the R2 keys to purge. */
+    async deleteTicketMessage(id: string): Promise<string[]> {
+      const keys = await d1
+        .prepare("SELECT file_key FROM ticket_attachments WHERE message_id = ?")
+        .bind(id)
+        .all<{ file_key: string }>();
+      await d1.batch([
+        d1.prepare("DELETE FROM ticket_attachments WHERE message_id = ?").bind(id),
+        d1.prepare("DELETE FROM ticket_messages WHERE id = ?").bind(id),
+      ]);
+      return keys.results.map((r) => r.file_key);
     },
 
     async createTicketMessage(

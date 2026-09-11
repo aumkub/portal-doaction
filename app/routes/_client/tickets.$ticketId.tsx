@@ -1,19 +1,21 @@
-import { Form, Link, redirect, useNavigation } from "react-router";
-import { useEffect, useRef } from "react";
+import { Form, Link, redirect, useFetcher, useNavigation } from "react-router";
 import { z } from "zod";
 import { requireUser } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { formatDate, generateId } from "~/lib/utils";
 import { sendTelegramNotificationForClient } from "~/lib/telegram.server";
 import { sendTicketEmailToAdmin } from "~/lib/ticket-email.server";
-import { useTicketAttachments } from "~/hooks/use-ticket-attachments";
 import { useT } from "~/lib/i18n";
-import type { SupportTicket, TicketAttachment, TicketMessage, User } from "~/types";
+import type { MessageAuthor, SupportTicket, TicketAttachment, TicketMessage } from "~/types";
 import StatusBadge from "~/components/tickets/StatusBadge";
 import PriorityBadge from "~/components/tickets/PriorityBadge";
 import MessageBubble from "~/components/tickets/MessageBubble";
-import { TicketReplyDropZone } from "~/components/tickets/TicketReplyDropZone";
-import { FaPaperclip, FaCircleCheck, FaCircleXmark, FaXmark } from "react-icons/fa6";
+import {
+  TicketReplyComposer,
+  pendingReplyAttachments,
+  replyFetcherKey,
+} from "~/components/tickets/TicketReplyComposer";
+import { FaCircleCheck, FaCircleXmark, FaXmark } from "react-icons/fa6";
 
 const ReplySchema = z.object({
   message: z.string().min(1, "กรุณาพิมพ์ข้อความ"),
@@ -23,8 +25,8 @@ type LoaderData = {
   ticket: SupportTicket;
   messages: TicketMessage[];
   attachments: TicketAttachment[];
-  usersById: Record<string, User>;
-  currentUserId: string;
+  usersById: Record<string, MessageAuthor>;
+  currentUser: MessageAuthor;
 };
 
 export async function loader({ request, context, params }: any) {
@@ -44,17 +46,30 @@ export async function loader({ request, context, params }: any) {
     }
   }
 
-  const [messages, attachments, admins] = await Promise.all([
+  const [allMessages, allAttachments, authors] = await Promise.all([
     db.listMessagesByTicket(ticket.id),
     db.listAttachmentsByTicket(ticket.id),
-    db.listAdminUsers(),
+    db.listMessageAuthors(ticket.id),
   ]);
 
-  const usersById: Record<string, User> = {};
-  for (const admin of admins) usersById[admin.id] = admin;
-  usersById[user.id] = user;
+  // Loader data is serialized into the page, so internal notes and their files
+  // must be dropped here — hiding them at render time still ships them.
+  const messages = allMessages.filter((m) => m.is_internal === 0);
+  const visibleIds = new Set(messages.map((m) => m.id));
+  const attachments = allAttachments.filter((a) => visibleIds.has(a.message_id));
+  const visibleAuthorIds = new Set(messages.map((m) => m.user_id));
 
-  return { ticket, messages, attachments, usersById, currentUserId: user.id };
+  const currentUser: MessageAuthor = {
+    id: user.id,
+    name: user.name,
+    role: user.role,
+    avatar_url: user.avatar_url,
+  };
+  const usersById: Record<string, MessageAuthor> = {};
+  for (const a of authors) if (visibleAuthorIds.has(a.id)) usersById[a.id] = a;
+  usersById[user.id] = currentUser;
+
+  return { ticket, messages, attachments, usersById, currentUser };
 }
 
 export async function action({ request, context, params }: any) {
@@ -103,6 +118,12 @@ export async function action({ request, context, params }: any) {
     return redirect("/tickets");
   }
 
+  // The loader enforces this, but the action is reachable on its own.
+  const client = await db.getClientByUserId(user.id);
+  if (user.role === "client" && (!client || client.id !== ticket.client_id)) {
+    throw new Response("Forbidden", { status: 403 });
+  }
+
   const parsed = ReplySchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
     return { errors: parsed.error.flatten().fieldErrors };
@@ -126,30 +147,33 @@ export async function action({ request, context, params }: any) {
         mimeType: string;
         sizeBytes: number;
       }>;
-      for (const item of items) {
-        if (!item?.fileKey) continue;
-        await db.createTicketAttachment({
-          id: generateId(),
-          ticket_id: ticket.id,
-          message_id: messageId,
-          uploader_user_id: user.id,
-          file_key: item.fileKey,
-          file_name: item.fileName || "attachment",
-          mime_type: item.mimeType || "application/octet-stream",
-          size_bytes: Number(item.sizeBytes) || 0,
-        });
-      }
+      await Promise.all(
+        items
+          .filter((item) => item?.fileKey)
+          .map((item) =>
+            db.createTicketAttachment({
+              id: generateId(),
+              ticket_id: ticket.id,
+              message_id: messageId,
+              uploader_user_id: user.id,
+              file_key: item.fileKey,
+              file_name: item.fileName || "attachment",
+              mime_type: item.mimeType || "application/octet-stream",
+              size_bytes: Number(item.sizeBytes) || 0,
+            })
+          )
+      );
     } catch {
       // ignore malformed attachment payload
     }
   }
 
-  if (ticket.status === "resolved" || ticket.status === "closed") {
-    await db.updateTicket(ticket.id, { status: "in_progress", resolved_at: null });
-  }
-
-  const client = await db.getClientByUserId(user.id);
-  const admins = await db.listAdminUsers();
+  const [admins] = await Promise.all([
+    db.listAdminUsers(),
+    ticket.status === "resolved" || ticket.status === "closed"
+      ? db.updateTicket(ticket.id, { status: "in_progress", resolved_at: null })
+      : Promise.resolve(),
+  ]);
   const adminNotificationTitle = `ลูกค้าตอบกลับ Ticket: ${ticket.title}`;
   const ticketUrl = `${env.APP_URL}/admin/tickets/${ticket.id}`;
 
@@ -199,35 +223,18 @@ export async function action({ request, context, params }: any) {
     ])
   );
 
-  return redirect(`/tickets/${ticket.id}`);
+  // Submitted through a fetcher, which revalidates the loaders on its own.
+  return { ok: true };
 }
 
 export default function TicketDetailPage({ loaderData, actionData }: any) {
-  const { ticket, messages, attachments, usersById, currentUserId } = loaderData as LoaderData;
+  const { ticket, messages, attachments, usersById, currentUser } = loaderData as LoaderData;
   const errors = actionData?.errors;
   const { t, lang } = useT();
   const navigation = useNavigation();
   const isSubmitting = navigation.state !== "idle";
-  const formRef = useRef<HTMLFormElement | null>(null);
-  const isSubmittingReplyRef = useRef(false);
-  const {
-    uploading,
-    uploadProgress,
-    uploadError,
-    uploadedFiles,
-    attachmentsJson,
-    onFileInputChange,
-    onPaste,
-    removeFile,
-    markSubmitSuccess,
-    isDragging,
-    dropZoneProps,
-  } = useTicketAttachments({
-    ticketId: ticket.id,
-    invalidTypeMessage: "รองรับเฉพาะ PDF, รูปภาพ, วิดีโอ",
-    tooLargeMessage: "ไฟล์ต้องมีขนาดไม่เกิน 2MB",
-    uploadFailedMessage: "อัปโหลดไฟล์ไม่สำเร็จ",
-  });
+  const replyFetcher = useFetcher({ key: replyFetcherKey(ticket.id) });
+  const pendingReply = replyFetcher.state !== "idle" ? replyFetcher.formData : undefined;
   const attachmentsByMessage = attachments.reduce<Record<string, TicketAttachment[]>>(
     (acc, a) => {
       (acc[a.message_id] ||= []).push(a);
@@ -235,19 +242,6 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
     },
     {}
   );
-
-  useEffect(() => {
-    if (navigation.state !== "idle") return;
-    if (!isSubmittingReplyRef.current) return;
-    if (errors?.message) {
-      isSubmittingReplyRef.current = false;
-      return;
-    }
-
-    formRef.current?.reset();
-    markSubmitSuccess();
-    isSubmittingReplyRef.current = false;
-  }, [navigation.state, errors?.message, markSubmitSuccess]);
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -281,6 +275,11 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
           </Form>
         )}
       </div>
+      {errors?.message ? (
+        <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+          {errors.message[0]}
+        </p>
+      ) : null}
 
       <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-3">
         <div>
@@ -378,107 +377,52 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
         <MessageBubble message={ticket.description} isClient={true} isInternal={false} alignRight={true} />
         {messages
           .filter((msg) => msg.is_internal === 0)
-          .map((msg) => (
-            <MessageBubble
-              key={msg.id}
-              message={msg.message}
-              isClient={usersById[msg.user_id]?.role !== "admin"}
-              alignRight={usersById[msg.user_id]?.role !== "admin"}
-              isInternal={msg.is_internal === 1}
-              authorName={usersById[msg.user_id]?.name}
-              attachments={(attachmentsByMessage[msg.id] ?? []).map((att) => ({
-                id: att.id,
-                name: att.file_name,
-                href: `/api/attachments/${encodeURIComponent(att.file_key)}`,
-                mimeType: att.mime_type,
-                sizeBytes: att.size_bytes,
-              }))}
-            />
-          ))}
+          .map((msg) => {
+            const role = usersById[msg.user_id]?.role;
+            const fromCustomer = role !== "admin" && role !== "co-admin";
+            return (
+              <MessageBubble
+                key={msg.id}
+                message={msg.message}
+                isClient={fromCustomer}
+                alignRight={fromCustomer}
+                isInternal={msg.is_internal === 1}
+                authorName={usersById[msg.user_id]?.name}
+                attachments={(attachmentsByMessage[msg.id] ?? []).map((att) => ({
+                  id: att.id,
+                  name: att.file_name,
+                  href: `/api/attachments/${encodeURIComponent(att.file_key)}`,
+                  mimeType: att.mime_type,
+                }))}
+              />
+            );
+          })}
+        {pendingReply ? (
+          <MessageBubble
+            pending
+            message={String(pendingReply.get("message") ?? "")}
+            isClient={true}
+            alignRight={true}
+            isInternal={false}
+            authorName={currentUser.name}
+            attachments={pendingReplyAttachments(pendingReply)}
+          />
+        ) : null}
       </div>
 
-      <div key={messages.length} className="rounded-2xl border border-slate-200 bg-white p-4">
-        <TicketReplyDropZone
-          isDragging={isDragging}
-          dropHandlers={dropZoneProps}
+      <div className="rounded-2xl border border-slate-200 bg-white p-4">
+        <TicketReplyComposer
+          ticketId={ticket.id}
+          label={t("ticket_reply_label")}
+          placeholder={t("ticket_ph_reply")}
+          attachHint={t("ticket_attach_hint")}
           dropLabel={t("ticket_drop_files")}
-          className={isDragging ? "ring-2 ring-violet-400/50 ring-offset-2 rounded-xl" : ""}
-        >
-        <Form method="post" className="space-y-3">
-          <input type="hidden" name="attachments_json" value={attachmentsJson} />
-          <label className="block text-sm font-medium text-slate-700">
-            {t("ticket_reply_label")}
-          </label>
-          <textarea
-            name="message"
-            rows={4}
-            required
-            placeholder={t("ticket_ph_reply")}
-            onPaste={onPaste}
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-          />
-          {errors?.message ? (
-            <p className="text-xs text-rose-600">{errors.message[0]}</p>
-          ) : null}
-          <div className="space-y-1">
-            <label className="block text-xs font-medium text-slate-600">
-              {t("ticket_attach_hint")}
-            </label>
-            <input
-              type="file"
-              accept="application/pdf,image/*,video/*"
-              multiple
-              onChange={(e) => onFileInputChange(e.target.files)}
-              className="block w-full text-xs text-slate-600 file:mr-3 file:rounded-md file:border file:border-slate-200 file:bg-white file:px-2.5 file:py-2 mt-2"
-            />
-            {uploading ? (
-              <div className="space-y-2 mt-2">
-                <p className="text-xs text-slate-500">Uploading... {uploadProgress}%</p>
-                <div className="h-1.5 w-full rounded bg-slate-200 overflow-hidden">
-                  <div
-                    className="h-full bg-violet-600 transition-all"
-                    style={{ width: `${uploadProgress}%` }}
-                  />
-                </div>
-              </div>
-            ) : null}
-            {uploadError ? (
-              <p className="text-xs text-rose-600">{uploadError}</p>
-            ) : null}
-            {uploadedFiles.length > 0 ? (
-              <ul className="text-xs text-slate-600 space-y-2 mt-2 max-w-[500px] bg-slate-100 rounded-lg p-2">
-              {uploadedFiles.map((f) => (
-                <li
-                  key={f.fileKey}
-                  className="flex items-center justify-between gap-2 bg-slate-50 rounded px-2 py-1"
-                >
-                    <span>
-                      <FaPaperclip className="inline mr-1" aria-hidden="true" />
-                      {f.fileName}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => removeFile(f.fileKey)}
-                      className="rounded border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-500 hover:bg-slate-50"
-                    >
-                      Remove
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
-          <div className="flex justify-end">
-            <button
-              type="submit"
-              disabled={uploading || isSubmitting}
-              className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
-            >
-              {uploading ? "Uploading..." : isSubmitting ? "Sending..." : t("btn_send_message")}
-            </button>
-          </div>
-        </Form>
-        </TicketReplyDropZone>
+          sendLabel={t("btn_send_message")}
+          sendingLabel="กำลังส่ง…"
+          invalidTypeMessage="รองรับเฉพาะ PDF, รูปภาพ, วิดีโอ"
+          tooLargeMessage="ไฟล์ต้องมีขนาดไม่เกิน 2MB"
+          uploadFailedMessage="อัปโหลดไฟล์ไม่สำเร็จ"
+        />
       </div>
     </div>
   );

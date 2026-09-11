@@ -2,8 +2,13 @@ const MAX_BYTES = 2 * 1024 * 1024;
 
 export async function prepareAttachmentForUpload(file: File): Promise<File> {
   if (file.type.startsWith("image/")) {
-    const compressed = await compressImage(file);
-    if (compressed.size <= MAX_BYTES) return compressed;
+    try {
+      const compressed = await compressImage(file);
+      if (compressed.size <= MAX_BYTES) return compressed;
+    } catch {
+      // Formats the browser cannot decode (TIFF/HEIC from some clipboards)
+      // go up as-is rather than failing the whole upload.
+    }
   }
   return file;
 }

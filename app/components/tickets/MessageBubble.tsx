@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 type Attachment = {
   id: string;
   name: string;
@@ -16,15 +18,23 @@ export default function MessageBubble({
   isClient,
   isInternal,
   authorName,
+  authorBadge,
   attachments = [],
   alignRight,
+  pending,
+  actions,
 }: {
   message: string;
   isClient: boolean;
   isInternal: boolean;
   authorName?: string;
+  authorBadge?: string;
   attachments?: Attachment[];
   alignRight?: boolean;
+  /** Not yet confirmed by the server. */
+  pending?: boolean;
+  /** Rendered beside the author line, e.g. a delete control. */
+  actions?: ReactNode;
 }) {
   const shouldAlignRight = alignRight ?? isClient;
 
@@ -48,7 +58,12 @@ export default function MessageBubble({
 
   return (
     <div className={`flex ${shouldAlignRight ? "justify-end" : "justify-start"}`}>
-      <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm shadow-sm ${bubbleClass}`}>
+      <div
+        className={`group max-w-[80%] rounded-2xl px-4 py-3 text-sm shadow-sm transition-opacity ${bubbleClass} ${
+          pending ? "opacity-60" : ""
+        }`}
+        aria-busy={pending || undefined}
+      >
         {isInternal && (
           <div className="flex items-center gap-1.5 mb-2 pb-2 border-b border-amber-200">
             <span className="text-[11px]">🔒</span>
@@ -57,14 +72,25 @@ export default function MessageBubble({
             </span>
           </div>
         )}
-        {authorName ? (
-          <p className="mb-1 text-xs font-medium opacity-80">{authorName}</p>
+        {authorName || actions ? (
+          <div className="mb-1 flex items-center justify-between gap-3">
+            <p className="text-xs font-medium opacity-80">
+              {authorName}
+              {authorBadge ? (
+                <span className="ml-1.5 rounded bg-black/10 px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide">
+                  {authorBadge}
+                </span>
+              ) : null}
+            </p>
+            {actions}
+          </div>
         ) : null}
         <p className="whitespace-pre-wrap">{message}</p>
         {attachments.length > 0 ? (
           <div className="mt-2 flex flex-wrap gap-2">
             {attachments.map((a) =>
-              isImage(a) ? (
+              // A pending file is not linked to a message yet, so its URL 404s.
+              isImage(a) && !pending ? (
                 <a
                   key={a.id}
                   href={a.href}
@@ -95,6 +121,9 @@ export default function MessageBubble({
               )
             )}
           </div>
+        ) : null}
+        {pending ? (
+          <p className="mt-1.5 text-[11px] opacity-70">กำลังส่ง…</p>
         ) : null}
       </div>
     </div>

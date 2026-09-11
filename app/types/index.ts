@@ -124,6 +124,9 @@ export interface SupportTicket {
   deleted_by: string | null;
 }
 
+/** The slice of a user that is safe to send to the browser alongside messages. */
+export type MessageAuthor = Pick<User, "id" | "name" | "role" | "avatar_url">;
+
 export interface TicketMessage {
   id: string;
   ticket_id: string;

@@ -14,8 +14,15 @@ export async function loader({ request, context, params }: any) {
   if (!ticket) return new Response("Not Found", { status: 404 });
 
   if (user.role === "client") {
-    const client = await db.getClientByUserId(user.id);
+    const [client, message] = await Promise.all([
+      db.getClientByUserId(user.id),
+      db.getTicketMessage(attachment.message_id),
+    ]);
     if (!client || client.id !== ticket.client_id) {
+      return new Response("Forbidden", { status: 403 });
+    }
+    // Files on internal notes are team-only.
+    if (!message || message.is_internal === 1) {
       return new Response("Forbidden", { status: 403 });
     }
   }

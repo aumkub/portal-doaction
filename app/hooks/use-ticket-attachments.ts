@@ -3,7 +3,6 @@ import {
   useEffect,
   useRef,
   useState,
-  type ClipboardEvent,
   type DragEvent,
 } from "react";
 import {
@@ -56,7 +55,9 @@ function clipboardBlobToFile(blob: File): File {
 }
 
 /** PDF, image, or video files from clipboard (Ctrl+V). */
-export function getAttachmentFilesFromClipboard(e: ClipboardEvent): File[] {
+export function getAttachmentFilesFromClipboard(e: {
+  clipboardData: DataTransfer | null;
+}): File[] {
   const files: File[] = [];
   const dt = e.clipboardData;
   if (!dt) return files;
@@ -104,8 +105,12 @@ export function useTicketAttachments({
   const [uploadError, setUploadError] = useState("");
   const [uploadedFiles, setUploadedFiles] = useState<UploadedAttachment[]>([]);
   const [isDragging, setIsDragging] = useState(false);
-  const skipCleanupRef = useRef(false);
   const dragDepthRef = useRef(0);
+  // Read by the unmount/unload cleanup. Keeping it out of the effect's deps
+  // matters: re-running on every list change would fire the previous
+  // cleanup and delete files that are still waiting to be sent.
+  const pendingFilesRef = useRef<UploadedAttachment[]>([]);
+  pendingFilesRef.current = uploadedFiles;
 
   const uploadFiles = useCallback(
     async (fileList: File[]) => {
@@ -147,15 +152,19 @@ export function useTicketAttachments({
     [uploadFiles]
   );
 
-  const onPaste = useCallback(
-    (e: ClipboardEvent<HTMLTextAreaElement>) => {
+  // Listening on the document means a pasted image uploads wherever focus is
+  // on the page, not only while the textarea is focused.
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
       const pasted = getAttachmentFilesFromClipboard(e);
       if (pasted.length === 0) return;
-      e.preventDefault();
+      // Leave mixed text+file pastes alone so the text still lands.
+      if (!e.clipboardData?.getData("text/plain")) e.preventDefault();
       void uploadFiles(pasted);
-    },
-    [uploadFiles]
-  );
+    };
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  }, [uploadFiles]);
 
   const onDragEnter = useCallback((e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -200,16 +209,22 @@ export function useTicketAttachments({
     [ticketId]
   );
 
-  const markSubmitSuccess = useCallback(() => {
-    skipCleanupRef.current = true;
+  /** Hands the files to an in-flight submit so unload no longer purges them. */
+  const takeFiles = useCallback(() => {
+    const files = pendingFilesRef.current;
     setUploadedFiles([]);
     setUploadError("");
+    return files;
+  }, []);
+
+  /** Puts files back after a submit that the server rejected. */
+  const restoreFiles = useCallback((files: UploadedAttachment[]) => {
+    setUploadedFiles((prev) => [...files, ...prev]);
   }, []);
 
   useEffect(() => {
     const cleanup = () => {
-      if (skipCleanupRef.current || uploadedFiles.length === 0) return;
-      for (const f of uploadedFiles) {
+      for (const f of pendingFilesRef.current) {
         void cleanupOrphanAttachment({ ticketId, fileKey: f.fileKey });
       }
     };
@@ -218,7 +233,7 @@ export function useTicketAttachments({
       window.removeEventListener("beforeunload", cleanup);
       cleanup();
     };
-  }, [ticketId, uploadedFiles]);
+  }, [ticketId]);
 
   return {
     uploading,
@@ -226,11 +241,10 @@ export function useTicketAttachments({
     uploadError,
     uploadedFiles,
     isDragging,
-    attachmentsJson: JSON.stringify(uploadedFiles),
     onFileInputChange,
-    onPaste,
     removeFile,
-    markSubmitSuccess,
+    takeFiles,
+    restoreFiles,
     dropZoneProps: { onDragEnter, onDragLeave, onDragOver, onDrop },
   };
 }
