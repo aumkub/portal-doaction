@@ -463,9 +463,13 @@ function BackupLogPanel({
 
       {!backup.ok ? (
         <div className="px-5 py-4">
-          <p className="text-sm text-red-600">
-            {t("admin_backup_error")}: {(backup as { error: string }).error}
-          </p>
+          {(backup as { error: string }).error === "not_loaded" ? (
+            <p className="text-sm text-slate-500">{t("admin_backup_loading")}</p>
+          ) : (
+            <p className="text-sm text-red-600">
+              {t("admin_backup_error")}: {(backup as { error: string }).error}
+            </p>
+          )}
         </div>
       ) : allLogItems.length === 0 ? (
         <p className="px-5 py-8 text-center text-sm text-slate-500">{t("admin_backup_log_empty")}</p>
@@ -596,7 +600,13 @@ function BackupPanel({
     <div className="flex flex-col">
       {!backup.ok ? (
         <div className="px-5 py-4">
-          <p className="text-sm text-red-600">{t("admin_backup_error")}: {(backup as { error: string }).error}</p>
+          {(backup as { error: string }).error === "not_loaded" ? (
+            <p className="text-sm text-slate-500">{t("admin_backup_loading")}</p>
+          ) : (
+            <p className="text-sm text-red-600">
+              {t("admin_backup_error")}: {(backup as { error: string }).error}
+            </p>
+          )}
         </div>
       ) : entries.length === 0 ? (
         <p className="px-5 py-8 text-center text-sm text-slate-500">{t("admin_backup_empty")}</p>
