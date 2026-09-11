@@ -48,12 +48,36 @@ const coAdminNav: NavItem[] = [
   { labelKey: "nav_all_tickets", href: "/admin/tickets", icon: FaTicket },
 ];
 
+/** Counts shown beside nav items, keyed by href. */
+export type NavBadges = Record<string, number>;
+
 interface SidebarProps {
   role: "client" | "admin" | "co-admin";
   companyName?: string | null;
+  navBadges?: NavBadges;
 }
 
-function NavItems({ nav, onNavigate }: { nav: NavItem[]; onNavigate?: () => void }) {
+function NavBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span
+      className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[11px] font-semibold leading-none text-white"
+      aria-label={`${count} ticket ที่ยังไม่ได้แก้`}
+    >
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
+
+function NavItems({
+  nav,
+  onNavigate,
+  navBadges,
+}: {
+  nav: NavItem[];
+  onNavigate?: () => void;
+  navBadges?: NavBadges;
+}) {
   const { t } = useT();
   return (
     <nav className="flex-1 py-4 px-3 space-y-0.5">
@@ -75,6 +99,7 @@ function NavItems({ nav, onNavigate }: { nav: NavItem[]; onNavigate?: () => void
         >
           <item.icon className="text-base leading-none" aria-hidden="true" />
           {t(item.labelKey)}
+          <NavBadge count={navBadges?.[item.href] ?? 0} />
         </NavLink>
       ))}
     </nav>
@@ -177,6 +202,7 @@ function LogoutButton() {
 function SidebarContent({
   role,
   companyName,
+  navBadges,
   onNavigate,
 }: SidebarProps & { onNavigate?: () => void }) {
   const { t } = useT();
@@ -194,7 +220,7 @@ function SidebarContent({
         </div>
       ) : null}
       <ScrollArea className="flex-1">
-        <NavItems nav={nav} onNavigate={onNavigate} />
+        <NavItems nav={nav} onNavigate={onNavigate} navBadges={navBadges} />
       </ScrollArea>
       {role === "client" ? <ClientContactNavLink onNavigate={onNavigate} /> : null}
       <LogoutButton />
@@ -203,16 +229,16 @@ function SidebarContent({
 }
 
 /** Desktop sidebar (always visible, 240 px wide). */
-export function DesktopSidebar({ role, companyName }: SidebarProps) {
+export function DesktopSidebar({ role, companyName, navBadges }: SidebarProps) {
   return (
     <aside className="w-60 shrink-0 hidden lg:flex flex-col h-full">
-      <SidebarContent role={role} companyName={companyName} />
+      <SidebarContent role={role} companyName={companyName} navBadges={navBadges} />
     </aside>
   );
 }
 
 /** Mobile sidebar trigger + Sheet. */
-export function MobileSidebarTrigger({ role, companyName }: SidebarProps) {
+export function MobileSidebarTrigger({ role, companyName, navBadges }: SidebarProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -241,6 +267,7 @@ export function MobileSidebarTrigger({ role, companyName }: SidebarProps) {
         <SidebarContent
           role={role}
           companyName={companyName}
+          navBadges={navBadges}
           onNavigate={() => setOpen(false)}
         />
       </SheetContent>

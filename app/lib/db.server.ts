@@ -233,6 +233,27 @@ export function createDB(d1: D1Database) {
       return result.results;
     },
 
+    /**
+     * Tickets still waiting on the team (not resolved or closed). Pass a
+     * co-admin id to count only their assigned clients.
+     */
+    async countUnresolvedTickets(coAdminId: string | null): Promise<number> {
+      const row = await d1
+        .prepare(
+          `SELECT COUNT(*) AS n
+           FROM support_tickets t
+           JOIN clients c ON c.id = t.client_id
+           WHERE t.deleted_at IS NULL AND c.deleted_at IS NULL
+             AND t.status IN ('open', 'in_progress', 'waiting')
+             AND (? IS NULL OR t.client_id IN (
+               SELECT client_id FROM co_admin_clients WHERE co_admin_id = ?
+             ))`
+        )
+        .bind(coAdminId, coAdminId)
+        .first<{ n: number }>();
+      return row?.n ?? 0;
+    },
+
     /** All tickets joined with their client's company name. */
     async listTicketsWithClient(
       clientIds?: string[]

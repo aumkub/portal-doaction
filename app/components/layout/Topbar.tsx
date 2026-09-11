@@ -9,7 +9,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
-import { MobileSidebarTrigger } from "~/components/layout/Sidebar";
+import { MobileSidebarTrigger, type NavBadges } from "~/components/layout/Sidebar";
 import { formatRelativeTime } from "~/lib/utils";
 import { useT, LanguageSwitcher } from "~/lib/i18n";
 import type { User, Notification } from "~/types";
@@ -26,6 +26,7 @@ interface TopbarProps {
   companyName?: string | null;
   notifications?: Notification[];
   role?: "client" | "admin" | "co-admin";
+  navBadges?: NavBadges;
 }
 
 /**
@@ -197,6 +198,7 @@ export default function Topbar({
   companyName,
   notifications: initialNotifications = [],
   role = "client",
+  navBadges,
 }: TopbarProps) {
   const { t } = useT();
 
@@ -216,7 +218,7 @@ export default function Topbar({
     <header className="h-16 bg-canvas border-b border-hairline flex items-center justify-between px-4 lg:px-6 shrink-0">
       {/* Left */}
       <div className="flex items-center gap-3">
-        <MobileSidebarTrigger role={role} companyName={companyName} />
+        <MobileSidebarTrigger role={role} companyName={companyName} navBadges={navBadges} />
         {companyName && (
           <span className="text-sm text-muted-foreground hidden sm:block">
             {companyName}
