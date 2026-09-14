@@ -10,6 +10,10 @@ import type {
   MagicLinkToken,
   TicketAttachment,
   EmailLog,
+  CoAdminClient,
+  CustomerNote,
+  CustomerNoteWithUser,
+  MessageAuthor,
 } from "~/types";
 
 // ─── DB wrapper ───────────────────────────────────────────────────────────────
@@ -37,13 +41,15 @@ export function createDB(d1: D1Database) {
     ): Promise<void> {
       await d1
         .prepare(
-          "INSERT INTO users (id, email, name, role, avatar_url, first_login_at) VALUES (?, ?, ?, ?, ?, ?)"
+          "INSERT INTO users (id, email, name, role, team_type, password_hash, avatar_url, first_login_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, unixepoch(), unixepoch())"
         )
         .bind(
           user.id,
           user.email,
           user.name,
           user.role,
+          user.team_type ?? "co-admin",
+          user.password_hash ?? null,
           user.avatar_url,
           user.first_login_at ?? null
         )
@@ -52,7 +58,7 @@ export function createDB(d1: D1Database) {
 
     async updateUser(
       id: string,
-      data: Partial<Pick<User, "name" | "avatar_url" | "language" | "first_login_at">>
+      data: Partial<Pick<User, "name" | "email" | "avatar_url" | "language" | "first_login_at">>
     ): Promise<void> {
       const fields = Object.keys(data)
         .map((k) => `${k} = ?`)
@@ -71,6 +77,20 @@ export function createDB(d1: D1Database) {
         .prepare("SELECT * FROM users WHERE role = 'admin' ORDER BY name")
         .all<User>();
       return result.results;
+    },
+
+    async listCoAdminUsers(): Promise<User[]> {
+      const result = await d1
+        .prepare("SELECT * FROM users WHERE role = 'co-admin' ORDER BY name")
+        .all<User>();
+      return result.results;
+    },
+
+    async updateUserPasswordHash(id: string, password_hash: string): Promise<void> {
+      await d1
+        .prepare("UPDATE users SET password_hash = ?, updated_at = unixepoch() WHERE id = ?")
+        .bind(password_hash, id)
+        .run();
     },
 
     // ── Sessions ─────────────────────────────────────────────────────────────
@@ -163,14 +183,15 @@ export function createDB(d1: D1Database) {
     ): Promise<void> {
       await d1
         .prepare(
-          `INSERT INTO clients (id, user_id, company_name, website_url, package, contract_start, contract_end, notes)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO clients (id, user_id, company_name, website_url, cc_emails, package, contract_start, contract_end, notes)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .bind(
           client.id,
           client.user_id,
           client.company_name,
           client.website_url,
+          client.cc_emails ?? null,
           client.package,
           client.contract_start,
           client.contract_end,
@@ -209,6 +230,114 @@ export function createDB(d1: D1Database) {
         )
         .bind(client_id)
         .all<MonthlyReport>();
+      return result.results;
+    },
+
+    /**
+     * Tickets still waiting on the team (not resolved or closed). Pass a
+     * co-admin id to count only their assigned clients.
+     */
+    async countUnresolvedTickets(coAdminId: string | null): Promise<number> {
+      const row = await d1
+        .prepare(
+          `SELECT COUNT(*) AS n
+           FROM support_tickets t
+           JOIN clients c ON c.id = t.client_id
+           WHERE t.deleted_at IS NULL AND c.deleted_at IS NULL
+             AND t.status IN ('open', 'in_progress', 'waiting')
+             AND (? IS NULL OR t.client_id IN (
+               SELECT client_id FROM co_admin_clients WHERE co_admin_id = ?
+             ))`
+        )
+        .bind(coAdminId, coAdminId)
+        .first<{ n: number }>();
+      return row?.n ?? 0;
+    },
+
+    /** All tickets joined with their client's company name. */
+    async listTicketsWithClient(
+      clientIds?: string[]
+    ): Promise<(SupportTicket & { company_name: string })[]> {
+      if (clientIds && clientIds.length === 0) return [];
+      const filter = clientIds
+        ? `AND t.client_id IN (${clientIds.map(() => "?").join(",")})`
+        : "";
+      const result = await d1
+        .prepare(
+          `SELECT t.*, c.company_name
+           FROM support_tickets t
+           JOIN clients c ON c.id = t.client_id
+           WHERE t.deleted_at IS NULL AND c.deleted_at IS NULL ${filter}
+           ORDER BY t.updated_at DESC`
+        )
+        .bind(...(clientIds ?? []))
+        .all<SupportTicket & { company_name: string }>();
+      return result.results;
+    },
+
+    /**
+     * Latest `perClient` reports for every client, joined with company and
+     * contact details. Replaces a per-client query loop.
+     */
+    async listRecentReportsWithClient(
+      perClient: number,
+      clientIds?: string[]
+    ): Promise<
+      (MonthlyReport & {
+        company_name: string;
+        client_email: string;
+        client_contact_name: string;
+      })[]
+    > {
+      if (clientIds && clientIds.length === 0) return [];
+      const filter = clientIds
+        ? `AND r.client_id IN (${clientIds.map(() => "?").join(",")})`
+        : "";
+      const result = await d1
+        .prepare(
+          `SELECT * FROM (
+             SELECT r.*, c.company_name,
+                    COALESCE(u.email, '') AS client_email,
+                    COALESCE(u.name, '') AS client_contact_name,
+                    ROW_NUMBER() OVER (
+                      PARTITION BY r.client_id ORDER BY r.year DESC, r.month DESC
+                    ) AS rn
+             FROM monthly_reports r
+             JOIN clients c ON c.id = r.client_id
+             LEFT JOIN users u ON u.id = c.user_id
+             WHERE c.deleted_at IS NULL ${filter}
+           ) WHERE rn <= ?
+           ORDER BY created_at DESC`
+        )
+        .bind(...(clientIds ?? []), perClient)
+        .all<
+          MonthlyReport & {
+            company_name: string;
+            client_email: string;
+            client_contact_name: string;
+          }
+        >();
+      return result.results;
+    },
+
+    async listClientsWithoutReportForMonth(
+      year: number,
+      month: number
+    ): Promise<(Client & { user_email: string; user_name: string })[]> {
+      const result = await d1
+        .prepare(`
+          SELECT c.*, u.email as user_email, u.name as user_name
+          FROM clients c
+          JOIN users u ON u.id = c.user_id
+          WHERE c.deleted_at IS NULL
+            AND c.id NOT IN (
+              SELECT client_id FROM monthly_reports
+              WHERE year = ? AND month = ?
+            )
+          ORDER BY c.company_name
+        `)
+        .bind(year, month)
+        .all<(Client & { user_email: string; user_name: string })>();
       return result.results;
     },
 
@@ -313,10 +442,38 @@ export function createDB(d1: D1Database) {
     async listTicketsByClient(client_id: string): Promise<SupportTicket[]> {
       const result = await d1
         .prepare(
-          "SELECT * FROM support_tickets WHERE client_id = ? ORDER BY created_at DESC"
+          "SELECT * FROM support_tickets WHERE client_id = ? AND deleted_at IS NULL ORDER BY created_at DESC"
         )
         .bind(client_id)
         .all<SupportTicket>();
+      return result.results;
+    },
+
+    async listAllOpenTickets(): Promise<(SupportTicket & { company_name: string })[]> {
+      const result = await d1
+        .prepare(
+          `SELECT st.*, c.company_name
+           FROM support_tickets st
+           LEFT JOIN clients c ON c.id = st.client_id
+           WHERE st.status IN ('open', 'in_progress', 'waiting')
+             AND st.deleted_at IS NULL
+             AND (c.deleted_at IS NULL OR c.deleted_at = 0)
+           ORDER BY st.created_at ASC`
+        )
+        .all<SupportTicket & { company_name: string }>();
+      return result.results;
+    },
+
+    async listTrashedTickets(): Promise<(SupportTicket & { company_name: string })[]> {
+      const result = await d1
+        .prepare(
+          `SELECT st.*, c.company_name
+           FROM support_tickets st
+           LEFT JOIN clients c ON c.id = st.client_id
+           WHERE st.deleted_at IS NOT NULL
+           ORDER BY st.deleted_at DESC`
+        )
+        .all<SupportTicket & { company_name: string }>();
       return result.results;
     },
 
@@ -380,6 +537,42 @@ export function createDB(d1: D1Database) {
       return result.results;
     },
 
+    /**
+     * Everyone who has written in the ticket, limited to the columns the
+     * conversation view renders — this map is serialized to the browser, so
+     * it must never carry email or password_hash.
+     */
+    async listMessageAuthors(ticket_id: string): Promise<MessageAuthor[]> {
+      const result = await d1
+        .prepare(
+          `SELECT id, name, role, avatar_url FROM users
+           WHERE id IN (SELECT DISTINCT user_id FROM ticket_messages WHERE ticket_id = ?)`
+        )
+        .bind(ticket_id)
+        .all<MessageAuthor>();
+      return result.results;
+    },
+
+    async getTicketMessage(id: string): Promise<TicketMessage | null> {
+      return d1
+        .prepare("SELECT * FROM ticket_messages WHERE id = ?")
+        .bind(id)
+        .first<TicketMessage>();
+    },
+
+    /** Deletes a message and its attachment rows; returns the R2 keys to purge. */
+    async deleteTicketMessage(id: string): Promise<string[]> {
+      const keys = await d1
+        .prepare("SELECT file_key FROM ticket_attachments WHERE message_id = ?")
+        .bind(id)
+        .all<{ file_key: string }>();
+      await d1.batch([
+        d1.prepare("DELETE FROM ticket_attachments WHERE message_id = ?").bind(id),
+        d1.prepare("DELETE FROM ticket_messages WHERE id = ?").bind(id),
+      ]);
+      return keys.results.map((r) => r.file_key);
+    },
+
     async createTicketMessage(
       msg: Omit<TicketMessage, "created_at">
     ): Promise<void> {
@@ -439,6 +632,26 @@ export function createDB(d1: D1Database) {
 
     async deleteTicketAttachment(id: string): Promise<void> {
       await d1.prepare("DELETE FROM ticket_attachments WHERE id = ?").bind(id).run();
+    },
+
+    async softDeleteTicket(id: string, deletedBy: string): Promise<void> {
+      await d1
+        .prepare("UPDATE support_tickets SET deleted_at = unixepoch(), deleted_by = ? WHERE id = ?")
+        .bind(deletedBy, id)
+        .run();
+    },
+
+    async restoreTicket(id: string): Promise<void> {
+      await d1
+        .prepare("UPDATE support_tickets SET deleted_at = NULL, deleted_by = NULL WHERE id = ?")
+        .bind(id)
+        .run();
+    },
+
+    async permanentlyDeleteTicket(id: string): Promise<void> {
+      await d1.prepare("DELETE FROM ticket_messages WHERE ticket_id = ?").bind(id).run();
+      await d1.prepare("DELETE FROM ticket_attachments WHERE ticket_id = ?").bind(id).run();
+      await d1.prepare("DELETE FROM support_tickets WHERE id = ?").bind(id).run();
     },
 
     async listAllTicketAttachments(): Promise<
@@ -547,6 +760,21 @@ export function createDB(d1: D1Database) {
       return row?.value ?? null;
     },
 
+    /** Reads many settings in one round trip; missing keys come back null. */
+    async getAppSettings(keys: string[]): Promise<Record<string, string | null>> {
+      const out: Record<string, string | null> = {};
+      for (const k of keys) out[k] = null;
+      if (keys.length === 0) return out;
+      const result = await d1
+        .prepare(
+          `SELECT key, value FROM app_settings WHERE key IN (${keys.map(() => "?").join(",")})`
+        )
+        .bind(...keys)
+        .all<{ key: string; value: string }>();
+      for (const row of result.results) out[row.key] = row.value;
+      return out;
+    },
+
     async setAppSetting(key: string, value: string): Promise<void> {
       await d1
         .prepare(
@@ -562,10 +790,138 @@ export function createDB(d1: D1Database) {
       await d1.prepare("DELETE FROM app_settings WHERE key = ?").bind(key).run();
     },
 
+    // ── Co-Admin Clients (Many-to-Many) ────────────────────────────────────────
+
+    async listCoAdminClients(co_admin_id: string): Promise<(CoAdminClient & { telegram_group_id: string | null })[]> {
+      const result = await d1
+        .prepare("SELECT * FROM co_admin_clients WHERE co_admin_id = ?")
+        .bind(co_admin_id)
+        .all<CoAdminClient & { telegram_group_id: string | null }>();
+      return result.results;
+    },
+
+    async listCoAdminsForClient(client_id: string): Promise<(User & { telegram_group_id: string | null })[]> {
+      const result = await d1
+        .prepare(`
+          SELECT u.*, cac.telegram_group_id FROM users u
+          INNER JOIN co_admin_clients cac ON u.id = cac.co_admin_id
+          WHERE cac.client_id = ? AND u.role = 'co-admin'
+          ORDER BY u.name
+        `)
+        .bind(client_id)
+        .all<(User & { telegram_group_id: string | null })>();
+      return result.results;
+    },
+
+    async addCoAdminClient(
+      co_admin_id: string,
+      client_id: string,
+      telegram_group_id?: string | null
+    ): Promise<void> {
+      const id = crypto.randomUUID();
+      await d1
+        .prepare(
+          "INSERT INTO co_admin_clients (id, co_admin_id, client_id, telegram_group_id) VALUES (?, ?, ?, ?)"
+        )
+        .bind(id, co_admin_id, client_id, telegram_group_id ?? null)
+        .run();
+    },
+
+    async removeCoAdminClient(co_admin_id: string, client_id: string): Promise<void> {
+      await d1
+        .prepare("DELETE FROM co_admin_clients WHERE co_admin_id = ? AND client_id = ?")
+        .bind(co_admin_id, client_id)
+        .run();
+    },
+
+    async removeAllCoAdminAssignments(co_admin_id: string): Promise<void> {
+      await d1
+        .prepare("DELETE FROM co_admin_clients WHERE co_admin_id = ?")
+        .bind(co_admin_id)
+        .run();
+    },
+
+    async updateCoAdminClientTelegramGroup(
+      co_admin_id: string,
+      client_id: string,
+      telegram_group_id: string | null
+    ): Promise<void> {
+      await d1
+        .prepare("UPDATE co_admin_clients SET telegram_group_id = ? WHERE co_admin_id = ? AND client_id = ?")
+        .bind(telegram_group_id, co_admin_id, client_id)
+        .run();
+    },
+
+    async getCoAdminClientTelegramGroup(
+      co_admin_id: string,
+      client_id: string
+    ): Promise<string | null> {
+      const row = await d1
+        .prepare("SELECT telegram_group_id FROM co_admin_clients WHERE co_admin_id = ? AND client_id = ?")
+        .bind(co_admin_id, client_id)
+        .first<{ telegram_group_id: string | null }>();
+      return row?.telegram_group_id ?? null;
+    },
+
+    // ── Customer Notes ──────────────────────────────────────────────────────────
+
+    async listCustomerNotes(client_id: string): Promise<CustomerNoteWithUser[]> {
+      const result = await d1
+        .prepare(`
+          SELECT cn.*, u.name as user_name, u.role as user_role
+          FROM customer_notes cn
+          JOIN users u ON u.id = cn.user_id
+          WHERE cn.client_id = ?
+          ORDER BY cn.created_at DESC
+        `)
+        .bind(client_id)
+        .all<CustomerNoteWithUser>();
+      return result.results;
+    },
+
+    async createCustomerNote(note: Omit<CustomerNote, "created_at" | "updated_at">): Promise<void> {
+      await d1
+        .prepare(
+          "INSERT INTO customer_notes (id, client_id, user_id, note) VALUES (?, ?, ?, ?)"
+        )
+        .bind(note.id, note.client_id, note.user_id, note.note)
+        .run();
+    },
+
+    async deleteCustomerNote(id: string): Promise<void> {
+      await d1
+        .prepare("DELETE FROM customer_notes WHERE id = ?")
+        .bind(id)
+        .run();
+    },
+
+    async getCustomerNoteById(id: string): Promise<CustomerNote | null> {
+      return d1
+        .prepare("SELECT * FROM customer_notes WHERE id = ?")
+        .bind(id)
+        .first<CustomerNote>();
+    },
+
+    async getCoAdminEmailsForClient(client_id: string): Promise<Array<{ email: string; name: string }>> {
+      const result = await d1
+        .prepare(`
+          SELECT u.email, u.name
+          FROM users u
+          INNER JOIN co_admin_clients cac ON u.id = cac.co_admin_id
+          WHERE cac.client_id = ? AND u.role = 'co-admin'
+        `)
+        .bind(client_id)
+        .all<{ email: string; name: string }>();
+      return result.results;
+    },
+
+    // ── Email Logs ─────────────────────────────────────────────────────────────
+
     async createEmailLog(log: {
       id: string;
       to_email: string;
       to_name?: string | null;
+      cc_emails?: string | null;
       subject: string;
       html_body: string;
       text_body: string;
@@ -576,13 +932,14 @@ export function createDB(d1: D1Database) {
       await d1
         .prepare(
           `INSERT INTO email_logs
-            (id, to_email, to_name, subject, html_body, text_body, source, status, error_message)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            (id, to_email, to_name, cc_emails, subject, html_body, text_body, source, status, error_message)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .bind(
           log.id,
           log.to_email,
           log.to_name ?? null,
+          log.cc_emails ?? null,
           log.subject,
           log.html_body,
           log.text_body,
@@ -599,6 +956,23 @@ export function createDB(d1: D1Database) {
         .bind(limit)
         .all<EmailLog>();
       return result.results;
+    },
+
+    async hasRecentMagicLinkSent(to_email: string, withinSeconds = 60): Promise<boolean> {
+      const row = await d1
+        .prepare(
+          `SELECT id
+           FROM email_logs
+           WHERE to_email = ?
+             AND source = 'api_send_magic_link'
+             AND status = 'sent'
+             AND created_at >= unixepoch() - ?
+           ORDER BY created_at DESC
+           LIMIT 1`
+        )
+        .bind(to_email.trim().toLowerCase(), withinSeconds)
+        .first<{ id: string }>();
+      return Boolean(row?.id);
     },
 
     async hasContractWarningLog(

@@ -38,6 +38,18 @@
   /* DoAction brand colors */
   --color-brand-yellow:       #F0D800;
   --color-brand-yellow-deep:  #C9B500;
+  --color-brand-blue:         #2563eb;
+  --color-blue-pressed:       #1d4ed8;
+  --color-surface-pricing-featured: oklch(0.95 0.03 250);
+  --color-ink:                oklch(0.18 0.04 266);
+  --color-canvas:             oklch(1 0 0);
+  --color-charcoal:           oklch(0.32 0.03 260);
+  --color-steel:              oklch(0.48 0.03 257);
+  --color-stone:              oklch(0.62 0.02 257);
+  --color-surface:            oklch(0.97 0.01 248);
+  --color-hairline:           oklch(0.90 0.01 256);
+  --color-hairline-soft:      oklch(0.94 0.01 256);
+  --color-hairline-strong:    oklch(0.83 0.02 256);
 
   /* DoAction brand — violet primary */
   --color-primary:            oklch(0.40 0.20 280);   /* violet-600 */
@@ -140,6 +152,23 @@ html, body {
 
 * {
   @apply border-border;
+}
+
+::selection {
+  background-color: #2563eb;
+  color: #ffffff;
+}
+
+input::selection,
+textarea::selection {
+  background-color: #2563eb;
+  color: #ffffff;
+}
+
+select,
+select option {
+  color: #0f172a;
+  background-color: #ffffff;
 }
 
 /* ── Utility classes for animations ──────────────────────────────────────── */

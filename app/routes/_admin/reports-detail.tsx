@@ -4,7 +4,7 @@ import type { Route } from "./+types/reports-detail";
 import { requireAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { generateId, getMonthName, getThaiMonth } from "~/lib/utils";
-import { sendTelegramNotification } from "~/lib/telegram.server";
+import { sendTelegramNotificationForClient } from "~/lib/telegram.server";
 import PageHeader from "~/components/layout/PageHeader";
 import ReportEditor from "~/routes/_admin/reports-editor";
 import { useT } from "~/lib/i18n";
@@ -119,14 +119,15 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         user_id: client.user_id,
         type: "report_published",
         title: `รายงานประจำเดือน ${getThaiMonth(existing.month)} ${existing.year + 543} พร้อมแล้ว`,
-        body: "ทีม DoAction ได้เผยแพร่รายงานสรุปงานสำหรับเดือนนี้แล้ว",
+        body: "ทีม do action ได้เผยแพร่รายงานสรุปงานสำหรับเดือนนี้แล้ว",
         link: `/reports/${existing.id}`,
         read: 0,
       } as const;
       await db.createNotification(notification);
-      await sendTelegramNotification({
+      await sendTelegramNotificationForClient({
         db,
         appUrl: env.APP_URL,
+        clientId: existing.client_id,
         notification,
       });
     }

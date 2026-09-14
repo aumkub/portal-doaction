@@ -1,6 +1,8 @@
 // ─── User & Auth ─────────────────────────────────────────────────────────────
 
-export type UserRole = "admin" | "client";
+export type UserRole = "admin" | "client" | "co-admin";
+
+export type TeamType = "co-admin" | "freelance";
 
 export type UserLanguage = "th" | "en";
 
@@ -9,6 +11,8 @@ export interface User {
   email: string;
   name: string;
   role: UserRole;
+  team_type?: TeamType | null;
+  password_hash: string | null;
   avatar_url: string | null;
   language?: UserLanguage | null;
   first_login_at?: number | null;
@@ -39,10 +43,13 @@ export interface Client {
   user_id: string;
   company_name: string;
   website_url: string | null;
+  cc_emails: string | null;
   package: ClientPackage;
   contract_start: string | null;
   contract_end: string | null;
   notes: string | null;
+  /** Folder name on backup server (admin maps per client) */
+  backup_path: string | null;
   deleted_at?: number | null;
   created_at: number;
 }
@@ -75,6 +82,8 @@ export interface MonthlyReport {
   client_notified_at?: number | null;
   client_notification_subject?: string | null;
   client_notification_html?: string | null;
+  /** When Telegram notification was last sent for this report */
+  telegram_notified_at?: number | null;
 }
 
 export interface ReportTask {
@@ -111,7 +120,12 @@ export interface SupportTicket {
   resolved_at: number | null;
   created_at: number;
   updated_at: number;
+  deleted_at: number | null;
+  deleted_by: string | null;
 }
+
+/** The slice of a user that is safe to send to the browser alongside messages. */
+export type MessageAuthor = Pick<User, "id" | "name" | "role" | "avatar_url">;
 
 export interface TicketMessage {
   id: string;
@@ -149,10 +163,36 @@ export interface Notification {
   created_at: number;
 }
 
+// ─── Co-Admin ─────────────────────────────────────────────────────────────────
+
+export interface CoAdminClient {
+  id: string;
+  co_admin_id: string;
+  client_id: string;
+  created_at: number;
+}
+
+export interface CustomerNote {
+  id: string;
+  client_id: string;
+  user_id: string;
+  note: string;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface CustomerNoteWithUser extends CustomerNote {
+  user_name: string;
+  user_role: UserRole;
+}
+
+// ─── Email Log ───────────────────────────────────────────────────────────────
+
 export interface EmailLog {
   id: string;
   to_email: string;
   to_name: string | null;
+  cc_emails: string | null;
   subject: string;
   html_body: string;
   text_body: string;

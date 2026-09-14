@@ -29,13 +29,14 @@
 		"react": "^19.0.0",
 		"react-dom": "^19.0.0",
 		"react-hook-form": "^7.72.0",
+		"react-icons": "^5.6.0",
 		"react-router": "7.9.6",
 		"sonner": "^2.0.7",
 		"tailwind-merge": "^3.5.0",
 		"zod": "^4.3.6"
 	},
 	"devDependencies": {
-		"@cloudflare/vite-plugin": "1.15.3",
+		"@cloudflare/vite-plugin": "^1.52.1",
 		"@react-router/dev": "7.9.6",
 		"@tailwindcss/vite": "4.1.17",
 		"@types/node": "24.10.1",
@@ -45,7 +46,7 @@
 		"typescript": "5.9.3",
 		"vite": "^6.0.0",
 		"vite-tsconfig-paths": "5.1.4",
-		"wrangler": "4.56.0"
+		"wrangler": "^4.123.0"
 	},
 	"private": true,
 	"scripts": {
@@ -55,9 +56,14 @@
 		"cf-typegen": "wrangler types && react-router typegen",
 		"check": "tsc && react-router build && wrangler deploy --dry-run",
 		"deploy": "wrangler deploy",
-		"dev": "react-router dev",
+		"dev": "env -u HTTP_PROXY -u HTTPS_PROXY -u http_proxy -u https_proxy -u ALL_PROXY -u all_proxy react-router dev",
+		"dev:local": "react-router dev",
 		"preview": "npm run build && vite preview",
 		"typecheck": "npm run typegen && tsc -b"
 	},
-	"type": "module"
+	"type": "module",
+	"packageManager": "pnpm@10.33.2",
+	"pnpm": {
+		"onlyBuiltDependencies": ["esbuild", "workerd", "@node-rs/argon2"]
+	}
 }

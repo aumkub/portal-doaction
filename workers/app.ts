@@ -1,4 +1,5 @@
 import { createRequestHandler } from "react-router";
+import { runTicketReminder } from "~/lib/ticket-reminder.server";
 
 // AppLoadContext is augmented in app/types/cloudflare.d.ts
 
@@ -12,5 +13,8 @@ export default {
     return requestHandler(request, {
       cloudflare: { env, ctx },
     });
+  },
+  async scheduled(_controller: ScheduledController, env: CloudflareEnv, ctx: ExecutionContext) {
+    ctx.waitUntil(runTicketReminder(env));
   },
 } satisfies ExportedHandler<CloudflareEnv>;

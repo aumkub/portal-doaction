@@ -3,6 +3,7 @@ import { requireAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { buildReportCustomerNotification } from "~/lib/report-customer-email.server";
 import { createReportAccessToken } from "~/lib/report-access.server";
+import { parseClientCcEmails } from "~/lib/client-cc";
 
 /** GET /api/report-email-preview?reportId= — admin-only JSON for modal preview */
 export async function loader({ request, context }: Route.LoaderArgs) {
@@ -45,11 +46,14 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     reportUrl,
   });
 
+  const ccEmails = parseClientCcEmails(client.cc_emails);
+
   return Response.json({
     subject,
     html,
     text,
     to: user.email,
     toName: user.name,
+    cc: ccEmails,
   });
 }

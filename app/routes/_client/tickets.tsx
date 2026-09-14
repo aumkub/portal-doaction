@@ -6,6 +6,8 @@ import { createDB } from "~/lib/db.server";
 import { generateId, formatRelativeTime } from "~/lib/utils";
 import { z } from "zod";
 import type { SupportTicket, TicketStatus, TicketPriority } from "~/types";
+import { FaCircle } from "react-icons/fa6";
+import { NativeSelect } from "~/components/ui/native-select";
 
 export function meta() {
   return [{ title: "Support Tickets — do action portal" }];
@@ -56,28 +58,28 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
 const statusConfig: Record<
   TicketStatus,
-  { label: string; color: string; dot: string }
+  { label: string; color: string; dotClass: string }
 > = {
-  open: { label: "เปิด", color: "text-amber-600 bg-amber-50", dot: "🟡" },
+  open: { label: "เปิด", color: "text-amber-600 bg-amber-50", dotClass: "text-amber-500" },
   in_progress: {
     label: "กำลังดำเนิน",
     color: "text-blue-600 bg-blue-50",
-    dot: "🔵",
+    dotClass: "text-blue-500",
   },
   waiting: {
     label: "รอข้อมูล",
     color: "text-slate-600 bg-slate-100",
-    dot: "⚪",
+    dotClass: "text-slate-500",
   },
   resolved: {
     label: "เสร็จสิ้น",
     color: "text-emerald-600 bg-emerald-50",
-    dot: "🟢",
+    dotClass: "text-emerald-500",
   },
   closed: {
     label: "ปิดแล้ว",
-    color: "text-slate-400 bg-slate-100",
-    dot: "⚫",
+    color: "text-slate-500 bg-slate-100",
+    dotClass: "text-slate-500",
   },
 };
 
@@ -150,16 +152,12 @@ export default function TicketsPage({ loaderData, actionData }: Route.ComponentP
               <label className="block text-sm font-medium text-slate-700 mb-1">
                 ความสำคัญ
               </label>
-              <select
-                name="priority"
-                defaultValue="medium"
-                className="rounded-lg border border-slate-200 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
-              >
+              <NativeSelect name="priority" defaultValue="medium">
                 <option value="low">ต่ำ</option>
                 <option value="medium">กลาง</option>
                 <option value="high">สูง</option>
                 <option value="urgent">เร่งด่วน</option>
-              </select>
+              </NativeSelect>
             </div>
             <div className="flex gap-2 justify-end">
               <button
@@ -204,7 +202,7 @@ export default function TicketsPage({ loaderData, actionData }: Route.ComponentP
       <div className="space-y-3">
         {filtered.length === 0 ? (
           <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
-            <p className="text-slate-400 text-sm">ไม่มี Ticket</p>
+            <p className="text-slate-500 text-sm">ไม่มี Ticket</p>
           </div>
         ) : (
           filtered.map((ticket) => {
@@ -219,7 +217,7 @@ export default function TicketsPage({ loaderData, actionData }: Route.ComponentP
                     <p className="text-sm font-medium text-slate-700 truncate">
                       {ticket.title}
                     </p>
-                    <p className="text-xs text-slate-400 mt-1">
+                    <p className="text-xs text-slate-500 mt-1">
                       {formatRelativeTime(ticket.created_at)} ·{" "}
                       {priorityLabels[ticket.priority]}
                     </p>
@@ -227,7 +225,7 @@ export default function TicketsPage({ loaderData, actionData }: Route.ComponentP
                   <span
                     className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full whitespace-nowrap ${st.color}`}
                   >
-                    {st.dot} {st.label}
+                    <FaCircle className={`text-[9px] ${st.dotClass}`} aria-hidden="true" /> {st.label}
                   </span>
                 </div>
               </div>

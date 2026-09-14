@@ -1,31 +1,62 @@
 import { Form } from "react-router";
-import type { FormEvent } from "react";
+import { useState, useMemo, type FormEvent } from "react";
 import type { Route } from "./+types/clients";
-import { requireAdmin } from "~/lib/auth.server";
+import Pagination from "~/components/ui/Pagination";
+import { requireCoAdminOrAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { formatRelativeTime } from "~/lib/utils";
 import type { Client } from "~/types";
 import { useT } from "~/lib/i18n";
 import type { TranslationKey } from "~/lib/translations";
+import { FaCirclePlus, FaEye, FaUserSecret, FaMagnifyingGlass, FaUsers, FaClock, FaCloud, FaFileCircleXmark, FaCircleCheck } from "react-icons/fa6";
 
 export function meta() {
   return [{ title: "จัดการลูกค้า — Admin" }];
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
-  await requireAdmin(request, context.cloudflare.env.DB, context.cloudflare.env.SESSIONPORTAL);
+  const user = await requireCoAdminOrAdmin(request, context.cloudflare.env.DB, context.cloudflare.env.SESSIONPORTAL);
   const db = createDB(context.cloudflare.env.DB);
-  const clients = await db.listClients();
-  const clientsWithStatus = await Promise.all(
+
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1; // 1-12
+
+  let clients = await db.listClients();
+  if (user.role === "co-admin") {
+    const assignments = await db.listCoAdminClients(user.id);
+    const assignedClientIds = assignments.map((a) => a.client_id);
+    clients = clients.filter((c) => assignedClientIds.includes(c.id));
+  }
+
+  const allClientsWithStatus = await Promise.all(
     clients.map(async (client) => {
-      const user = await db.getUserById(client.user_id);
-      return {
-        ...client,
-        first_login_at: user?.first_login_at ?? null,
+      const u = await db.getUserById(client.user_id);
+      // Hardcode: บริษัท ดู แอคชั่น จำกัด doesn't need monthly reports (testing account)
+      const skipReportCheck = client.company_name === "บริษัท ดู แอคชั่น จำกัด";
+      let has_monthly_report = false;
+      if (!skipReportCheck) {
+        const report = await db.getReportByMonth(client.id, currentYear, currentMonth);
+        has_monthly_report = report !== null;
+      }
+      return { 
+        ...client, 
+        first_login_at: u?.first_login_at ?? null,
+        has_monthly_report: skipReportCheck ? true : has_monthly_report,
+        skip_report_check: skipReportCheck
       };
     })
   );
-  return { clients: clientsWithStatus };
+
+  const PAGE_SIZE = 20;
+  const url = new URL(request.url);
+  const page = Math.max(1, Number(url.searchParams.get("page") ?? "1"));
+  const total = allClientsWithStatus.length;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const clientsWithStatus = allClientsWithStatus.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  return { clients: clientsWithStatus, userRole: user.role, page: safePage, totalPages, total, currentMonth, currentYear };
 }
 
 const packageKeys: Record<Client["package"], TranslationKey> = {
@@ -33,154 +64,404 @@ const packageKeys: Record<Client["package"], TranslationKey> = {
   standard: "admin_pkg_standard",
   premium: "admin_pkg_premium",
 };
-const packageColors = {
-  basic: "bg-slate-100 text-slate-600",
-  standard: "bg-blue-50 text-blue-600",
-  premium: "bg-[#F0D800]/20 text-amber-700",
+
+const packageStyles = {
+  basic:    { badge: "bg-slate-100 text-slate-600 ring-1 ring-slate-200",    dot: "bg-slate-400" },
+  standard: { badge: "bg-blue-50 text-blue-600 ring-1 ring-blue-200",        dot: "bg-blue-500" },
+  premium:  { badge: "bg-amber-50 text-amber-700 ring-1 ring-amber-200",     dot: "bg-amber-500" },
 };
 
+function getInitials(name: string) {
+  return name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase();
+}
+
+function avatarColor(name: string) {
+  const colors = [
+    "bg-violet-100 text-violet-700",
+    "bg-blue-100 text-blue-700",
+    "bg-emerald-100 text-emerald-700",
+    "bg-orange-100 text-orange-700",
+    "bg-rose-100 text-rose-700",
+    "bg-indigo-100 text-indigo-700",
+    "bg-teal-100 text-teal-700",
+    "bg-pink-100 text-pink-700",
+  ];
+  let hash = 0;
+  for (const c of name) hash = (hash * 31 + c.charCodeAt(0)) & 0xffff;
+  return colors[hash % colors.length];
+}
+
+function BackupConnectedIcon({
+  path,
+  t,
+}: {
+  path: string | null | undefined;
+  t: (key: TranslationKey) => string;
+}) {
+  if (!path?.trim()) {
+    return <span className="text-slate-300 text-xs" aria-hidden="true">—</span>;
+  }
+  return (
+    <span
+      className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200"
+      title={t("admin_col_backup_linked").replace("{path}", path)}
+    >
+      <FaCloud className="text-xs" aria-label={t("admin_col_backup_linked").replace("{path}", path)} />
+    </span>
+  );
+}
+
+function ClientActions({
+  client,
+  isCoAdmin,
+  t,
+  confirmMsg,
+}: {
+  client: Client & { first_login_at: number | null };
+  isCoAdmin: boolean;
+  t: (key: TranslationKey) => string;
+  confirmMsg: string;
+}) {
+  const btnCls = "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors";
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <a
+        href={`/admin/clients/${client.id}`}
+        className={`${btnCls} border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:border-slate-300`}
+      >
+        <FaEye className="text-[10px]" aria-hidden="true" />
+        {t("admin_view_details")}
+      </a>
+      {!isCoAdmin && (
+        <Form method="post" action="/api/impersonation/start" onSubmit={(e: FormEvent) => { if (!confirm(confirmMsg)) e.preventDefault(); }}>
+          <input type="hidden" name="clientId" value={client.id} />
+          <button type="submit" className={`${btnCls} border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 hover:border-violet-300`}>
+            <FaUserSecret className="text-[10px]" aria-hidden="true" />
+            {t("admin_impersonate")}
+          </button>
+        </Form>
+      )}
+    </div>
+  );
+}
+
 export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
-  const { clients } = loaderData as {
-    clients: Array<Client & { first_login_at: number | null }>;
+  const { clients, userRole, page, totalPages, total, currentMonth, currentYear } = loaderData as {
+    clients: Array<Client & { first_login_at: number | null; has_monthly_report: boolean; skip_report_check?: boolean }>;
+    userRole: string;
+    page: number;
+    totalPages: number;
+    total: number;
+    currentMonth: number;
+    currentYear: number;
   };
   const { t, lang } = useT();
+  const [search, setSearch] = useState("");
+  const [reportFilter, setReportFilter] = useState<"all" | "missing" | "has">("all");
+
+  const activated = clients.filter((c) => c.first_login_at).length;
+  const pending    = clients.length - activated;
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return clients.filter((c) => {
+      const matchesSearch =
+        !q ||
+        c.company_name.toLowerCase().includes(q) ||
+        (c.website_url ?? "").toLowerCase().includes(q);
+      const matchesReport =
+        reportFilter === "all" ||
+        (reportFilter === "missing" && !c.has_monthly_report) ||
+        (reportFilter === "has" && c.has_monthly_report);
+      return matchesSearch && matchesReport;
+    });
+  }, [clients, search, reportFilter]);
+
+  const isCoAdmin = userRole === "co-admin";
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      {/* ── Header ── */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">
-            {t("admin_clients_title")}
+            {isCoAdmin ? "ลูกค้าที่ดูแล" : t("admin_clients_title")}
           </h1>
-          <p className="text-slate-500 text-sm mt-1">
-            {t("admin_clients_subtitle").replace("{count}", String(clients.length))}
+          <p className="text-slate-500 text-sm mt-0.5">
+            {isCoAdmin
+              ? `รายการลูกค้าที่คุณรับผิดชอบ (${total})`
+              : t("admin_clients_subtitle").replace("{count}", String(total))}
           </p>
         </div>
-        <a
-          href="/admin/clients/new"
-          className="flex items-center gap-2 bg-[#F0D800] text-slate-900 rounded-lg px-4 py-2 text-sm font-medium hover:bg-yellow-400 transition-colors"
-        >
-          {t("admin_clients_add")}
-        </a>
+        {!isCoAdmin && (
+          <a
+            href="/admin/clients/new"
+            className="inline-flex items-center gap-2 bg-[#F0D800] text-slate-900 rounded-lg px-4 py-2.5 text-sm font-semibold hover:bg-yellow-400 transition-colors shadow-sm self-start sm:self-auto"
+          >
+            <FaCirclePlus aria-hidden="true" />
+            {t("admin_clients_add")}
+          </a>
+        )}
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden overflow-x-auto">
-        <table className="w-full text-sm min-w-[800px]">
-          <thead>
-            <tr className="border-b border-slate-100">
-              <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">
-                {t("admin_col_client")}
-              </th>
-              <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">
-                {t("admin_col_website")}
-              </th>
-              <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">
-                {t("admin_col_package")}
-              </th>
-              <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">
-                {t("admin_col_contract")}
-              </th>
-              <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">
-                {t("admin_col_login_status")}
-              </th>
-              <th className="px-5 py-3" />
-            </tr>
-          </thead>
-          <tbody>
-            {clients.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={6}
-                  className="px-5 py-12 text-center text-slate-400"
-                >
-                  {t("admin_clients_empty")}
-                </td>
-              </tr>
-            ) : (
-              clients.map((client) => (
-                <tr
-                  key={client.id}
-                  className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors"
-                >
-                  <td className="px-5 py-4 font-medium text-slate-900">
-                    {client.company_name}
-                  </td>
-                  <td className="px-5 py-4 text-slate-500">
-                    {client.website_url ? (
-                      <a
-                        href={client.website_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="hover:text-slate-900 underline underline-offset-2"
-                      >
-                        {client.website_url.replace(/^https?:\/\//, "")}
-                      </a>
-                    ) : (
-                      "—"
+      {/* ── Stats strip ── */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3.5 flex items-center gap-3">
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600 shrink-0">
+            <FaUsers className="text-sm" />
+          </span>
+          <div>
+            <p className="text-xs text-slate-500">ทั้งหมด</p>
+            <p className="text-xl font-semibold text-slate-900">{clients.length}</p>
+          </div>
+        </div>
+        <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3.5 flex items-center gap-3">
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600 shrink-0">
+            <FaCircleCheck className="text-sm" />
+          </span>
+          <div>
+            <p className="text-xs text-emerald-600">{t("admin_login_status_activated")}</p>
+            <p className="text-xl font-semibold text-emerald-700">{activated}</p>
+          </div>
+        </div>
+        <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3.5 flex items-center gap-3">
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-100 text-amber-600 shrink-0">
+            <FaClock className="text-sm" />
+          </span>
+          <div>
+            <p className="text-xs text-amber-600">{t("admin_login_status_pending")}</p>
+            <p className="text-xl font-semibold text-amber-700">{pending}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Filters ── */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <FaMagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs" />
+          <input
+            type="search"
+            placeholder="ค้นหาบริษัท หรือเว็บไซต์..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400 transition"
+          />
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          {([
+            { value: "all" as const, label: "ทั้งหมด" },
+            { value: "missing" as const, label: "ยังไม่มี Report" },
+            { value: "has" as const, label: "มี Report แล้ว" },
+          ] as const).map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => setReportFilter(opt.value)}
+              className={`px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${
+                reportFilter === opt.value
+                  ? "bg-slate-900 text-white border-slate-900"
+                  : "bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── List ── */}
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        {filtered.length === 0 ? (
+          <div className="px-5 py-16 text-center">
+            <div className="flex flex-col items-center gap-2 text-slate-500">
+              <FaUsers className="text-3xl opacity-30" />
+              <p className="text-sm">{search || reportFilter !== "all" ? "ไม่พบลูกค้าที่ค้นหา" : t("admin_clients_empty")}</p>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Desktop table — lg+ */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-sm md:min-w-[1024px]">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50/60">
+                    <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">{t("admin_col_client")}</th>
+                    <th className="text-center text-xs font-medium text-slate-500 px-3 py-3 w-14" title="Report ประจำเดือน">
+                      <FaFileCircleXmark className="inline text-slate-400 text-[10px]" aria-hidden="true" />
+                      <span className="sr-only">Report ประจำเดือน</span>
+                    </th>
+                    <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">{t("admin_col_website")}</th>
+                    <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">{t("admin_col_package")}</th>
+                    <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">{t("admin_col_contract")}</th>
+                    <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">{t("admin_col_login_status")}</th>
+                    {!isCoAdmin && (
+                      <th className="text-center text-xs font-medium text-slate-500 px-3 py-3 w-14" title={t("admin_col_backup")}>
+                        <FaCloud className="inline text-slate-400 text-[10px]" aria-hidden="true" />
+                        <span className="sr-only">{t("admin_col_backup")}</span>
+                      </th>
                     )}
-                  </td>
-                  <td className="px-5 py-4">
-                    <span
-                      className={`text-xs font-medium px-2 py-1 rounded-full ${packageColors[client.package]}`}
-                    >
-                      {t(packageKeys[client.package])}
-                    </span>
-                  </td>
-                  <td className="px-5 py-4 text-slate-500">
-                    {client.contract_end ?? t("settings_contract_no_expiry")}
-                  </td>
-                  <td className="px-5 py-4">
-                    {client.first_login_at ? (
-                      <div className="space-y-1">
-                        <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">
-                          {t("admin_login_status_activated")}
-                        </span>
-                        <p className="text-[11px] text-slate-500">
-                          {formatRelativeTime(client.first_login_at, lang)}
-                        </p>
+                    <th className="px-5 py-3" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filtered.map((client) => {
+                    const styles = packageStyles[client.package];
+                    const initials = getInitials(client.company_name);
+                    const avatarCls = avatarColor(client.company_name);
+                    const missingReport = !client.has_monthly_report;
+                    return (
+                      <tr key={client.id} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="px-5 py-3.5">
+                          <div className="flex items-center gap-3">
+                            <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${avatarCls}`}>{initials}</span>
+                            <span className="font-medium text-slate-900">{client.company_name}</span>
+                          </div>
+                        </td>
+                        <td className="px-5 py-3.5">
+                          {missingReport ? (
+                            <span
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-rose-50 text-rose-600 ring-1 ring-rose-200"
+                              title={`${currentMonth}/${currentYear} - ยังไม่มี Report`}
+                            >
+                              <FaFileCircleXmark className="text-xs" aria-label="ยังไม่มี Report" />
+                            </span>
+                          ) : (
+                            <span className="text-slate-300" aria-label="มี Report แล้ว">
+                              <FaCircleCheck className="text-emerald-500" />
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5 text-slate-500">
+                          {client.website_url ? (
+                            <a href={client.website_url} target="_blank" rel="noopener noreferrer"
+                              className="hover:text-slate-900 hover:underline underline-offset-2 transition-colors max-w-[200px] truncate block">
+                              {client.website_url.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                            </a>
+                          ) : <span className="text-slate-300">—</span>}
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${styles.badge}`}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${styles.dot}`} />
+                            {t(packageKeys[client.package])}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5 text-slate-500 text-sm">
+                          {client.contract_end ?? <span className="text-slate-500 text-xs">{t("settings_contract_no_expiry")}</span>}
+                        </td>
+                        <td className="px-5 py-3.5">
+                          {client.first_login_at ? (
+                            <div>
+                              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">
+                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />{t("admin_login_status_activated")}
+                              </span>
+                              <p className="text-[11px] text-slate-500 mt-1">{formatRelativeTime(client.first_login_at, lang)}</p>
+                            </div>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 ring-1 ring-amber-200 whitespace-nowrap">
+                              <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />{t("admin_login_status_pending")}
+                            </span>
+                          )}
+                        </td>
+                        {!isCoAdmin && (
+                          <td className="px-3 py-3.5 text-center">
+                            <BackupConnectedIcon path={client.backup_path} t={t} />
+                          </td>
+                        )}
+                        <td className="px-5 py-3.5">
+                          <ClientActions client={client} isCoAdmin={isCoAdmin} t={t} confirmMsg={`${t("admin_impersonate_confirm")} ${client.company_name}?`} />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Cards — below lg */}
+            <div className="lg:hidden divide-y divide-slate-100">
+              {filtered.map((client) => {
+                const styles = packageStyles[client.package];
+                const initials = getInitials(client.company_name);
+                const avatarCls = avatarColor(client.company_name);
+                const missingReport = !client.has_monthly_report;
+                return (
+                  <div key={client.id} className="p-4 space-y-3">
+                    {/* Top: avatar + name + report status */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${avatarCls}`}>{initials}</span>
+                        <div className="min-w-0">
+                          <p className="font-medium text-slate-900 text-sm truncate">{client.company_name}</p>
+                          {client.website_url && (
+                            <a href={client.website_url} target="_blank" rel="noopener noreferrer"
+                              className="text-xs text-slate-500 hover:text-slate-700 hover:underline underline-offset-2 truncate block max-w-[200px]">
+                              {client.website_url.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                            </a>
+                          )}
+                        </div>
                       </div>
-                    ) : (
-                      <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
-                        {t("admin_login_status_pending")}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-5 py-4 text-right">
-                    <div className="flex items-center gap-2">
-                      <a
-                        href={`/admin/clients/${client.id}`}
-                        className="inline-block text-center text-xs font-medium text-violet-700 bg-violet-50 hover:bg-violet-100 hover:text-violet-900 border border-violet-200 px-3 py-1 rounded-lg transition-colors"
-                      >
-                        {t("admin_view_details")}
-                      </a>
-                      <Form
-                        method="post"
-                        action={`/admin/clients/${client.id}`}
-                        onSubmit={(e: FormEvent<HTMLFormElement>) => {
-                          if (
-                            !confirm(
-                              `${t("admin_impersonate_confirm")} ${client.company_name}?`
-                            )
-                          ) {
-                            e.preventDefault();
-                          }
-                        }}
-                      >
-                        <input type="hidden" name="intent" value="impersonate" />
-                        <button
-                          type="submit"
-                          className="text-xs text-amber-600 hover:text-amber-700 font-medium transition-colors border border-amber-200 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg"
+                      {missingReport ? (
+                        <span
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-rose-50 text-rose-600 ring-1 ring-rose-200"
+                          title={`${currentMonth}/${currentYear} - ยังไม่มี Report`}
                         >
-                          {t("admin_impersonate")}
-                        </button>
-                      </Form>
+                          <FaFileCircleXmark className="text-xs" aria-label="ยังไม่มี Report" />
+                        </span>
+                      ) : (
+                        <span className="text-emerald-500" aria-label="มี Report แล้ว">
+                          <FaCircleCheck className="text-sm" />
+                        </span>
+                      )}
                     </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+
+                    {/* Package badge */}
+                    <div className="flex items-center gap-3">
+                      <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${styles.badge}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${styles.dot}`} />
+                        {t(packageKeys[client.package])}
+                      </span>
+                    </div>
+
+                    {/* Meta row */}
+                    <div className="flex items-center gap-3 flex-wrap">
+                      {client.first_login_at ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />{t("admin_login_status_activated")}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 ring-1 ring-amber-200 whitespace-nowrap">
+                          <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />{t("admin_login_status_pending")}
+                        </span>
+                      )}
+                      {client.contract_end && (
+                        <span className="text-xs text-slate-500">{t("admin_col_contract")}: {client.contract_end}</span>
+                      )}
+                      {!isCoAdmin && (
+                        <BackupConnectedIcon path={client.backup_path} t={t} />
+                      )}
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex gap-2 flex-wrap">
+                      <ClientActions client={client} isCoAdmin={isCoAdmin} t={t} confirmMsg={`${t("admin_impersonate_confirm")} ${client.company_name}?`} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        {filtered.length > 0 && (
+          <div className="border-t border-slate-100 px-5 py-2.5 bg-slate-50/40">
+            <p className="text-xs text-slate-500">แสดง {filtered.length} จาก {total} รายการ</p>
+          </div>
+        )}
+        <Pagination page={page} totalPages={totalPages} />
       </div>
     </div>
   );

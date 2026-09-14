@@ -5,10 +5,12 @@ import { generateId } from "~/lib/utils";
 import { requireAdmin, generateMagicToken } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { sendMagicLinkEmail } from "~/lib/email.server";
+import { normalizeClientCcEmailsInput, stringifyClientCcEmails } from "~/lib/client-cc";
 import PageHeader from "~/components/layout/PageHeader";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Button } from "~/components/ui/button";
+import { NativeSelect } from "~/components/ui/native-select";
 import { useT } from "~/lib/i18n";
 import { useState } from "react";
 
@@ -25,6 +27,7 @@ const Schema = z.object({
   contract_start:  z.string().optional(),
   contract_end:    z.string().optional(),
   notes:           z.string().optional(),
+  cc_emails:       z.string().optional(),
   send_invite:     z.coerce.boolean().default(true),
 });
 
@@ -45,8 +48,12 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   const { name, email, company_name, website_url, package: pkg,
-          contract_start, contract_end, notes, send_invite } = parsed.data;
+          contract_start, contract_end, notes, cc_emails, send_invite } = parsed.data;
   const noContractEnd = formData.get("no_contract_end") === "1";
+  const normalizedCcEmails = normalizeClientCcEmailsInput(cc_emails);
+  if (normalizedCcEmails.error) {
+    return { errors: { cc_emails: [normalizedCcEmails.error] } };
+  }
 
   // Check existing email
   const existing = await db.getUserByEmail(email);
@@ -61,6 +68,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     user_id: userId,
     company_name,
     website_url: website_url || null,
+    cc_emails: stringifyClientCcEmails(normalizedCcEmails.emails),
     package: pkg,
     contract_start: contract_start || null,
     contract_end: noContractEnd ? null : (contract_end || null),
@@ -69,20 +77,24 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   // Send magic-link invite email
   if (send_invite) {
-    try {
-      const { id, token, expires_at } = generateMagicToken();
-      await db.createMagicLinkToken({ id, user_id: userId, token, expires_at, used: 0 });
-      const origin = env.APP_URL || new URL(request.url).origin;
-      await sendMagicLinkEmail({
-        to: email,
-        toName: name,
-        magicUrl: `${origin}/magic-link?token=${token}`,
-        apiKey: env.SMTP2GO_API_KEY,
-        db,
-        source: "admin_client_invite",
-      });
-    } catch (err) {
-      console.error("[clients-new] invite email failed:", err);
+    if (!env.SEND_EMAIL) {
+      console.error("[clients-new] SEND_EMAIL binding not configured");
+    } else {
+      try {
+        const { id, token, expires_at } = generateMagicToken();
+        await db.createMagicLinkToken({ id, user_id: userId, token, expires_at, used: 0 });
+        const origin = env.APP_URL || new URL(request.url).origin;
+        await sendMagicLinkEmail({
+          to: email,
+          toName: name,
+          magicUrl: `${origin}/magic-link?token=${token}`,
+          sendEmail: env.SEND_EMAIL,
+          db,
+          source: "admin_client_invite",
+        });
+      } catch (err) {
+        console.error("[clients-new] invite email failed:", err);
+      }
     }
   }
 
@@ -139,14 +151,25 @@ export default function AdminClientsNewPage({ actionData }: Route.ComponentProps
               <Input id="website_url" name="website_url" type="url" placeholder="https://example.com" />
               {errors?.website_url && <p className="text-red-500 text-xs">{errors.website_url[0]}</p>}
             </div>
+            <div className="space-y-1.5 col-span-2">
+              <Label htmlFor="cc_emails">CC Email (สูงสุด 5)</Label>
+              <textarea
+                id="cc_emails"
+                name="cc_emails"
+                rows={2}
+                placeholder="cc1@example.com, cc2@example.com"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 resize-none"
+              />
+              <p className="text-xs text-slate-500">คั่นด้วย comma หรือขึ้นบรรทัดใหม่</p>
+              {errors?.cc_emails && <p className="text-red-500 text-xs">{errors.cc_emails[0]}</p>}
+            </div>
             <div className="space-y-1.5">
               <Label htmlFor="package">{t("settings_package_label")}</Label>
-              <select id="package" name="package" defaultValue="standard"
-                className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-900">
+              <NativeSelect id="package" name="package" defaultValue="standard">
                 <option value="basic">{t("admin_pkg_basic")}</option>
                 <option value="standard">{t("admin_pkg_standard")}</option>
                 <option value="premium">{t("admin_pkg_premium")}</option>
-              </select>
+              </NativeSelect>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="contract_start">{t("admin_client_new_contract_start")}</Label>

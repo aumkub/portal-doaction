@@ -40,7 +40,7 @@ export default function AdminNotificationsPage({ loaderData }: any) {
               <button type="submit" className="w-full text-left">
                 <p className="text-sm font-medium text-slate-800">{n.title}</p>
                 {n.body ? <p className="mt-1 text-xs text-slate-500">{n.body}</p> : null}
-                <p className="mt-1 text-[11px] text-slate-400">
+                <p className="mt-1 text-[11px] text-slate-500">
                   {formatRelativeTime(n.created_at, lang)}
                 </p>
               </button>

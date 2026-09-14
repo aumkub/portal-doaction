@@ -8,6 +8,7 @@ import { PlusCircle, Trash2, GripVertical, Loader2 } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
+import { NativeSelect } from "~/components/ui/native-select";
 import { Textarea } from "~/components/ui/textarea";
 import {
   Select,
@@ -112,6 +113,8 @@ export default function ReportEditor({
   const [titleManuallyEdited, setTitleManuallyEdited] = useState(
     !!(report?.title && report.title !== "")
   );
+
+  const [sendEmailOnPublish, setSendEmailOnPublish] = useState(true);
 
   const [uptimePercent, setUptimePercent] = useState<string>(
     report?.uptime_percent != null ? String(report.uptime_percent) : ""
@@ -297,13 +300,12 @@ export default function ReportEditor({
           ) : (
             <div className="space-y-1.5">
               <Label htmlFor="client_id">{t("admin_col_client")}</Label>
-              <select
+              <NativeSelect
                 id="client_id"
                 name="client_id"
                 value={selectedClientId}
                 onChange={(e) => handleClientChange(e.target.value)}
                 required
-                className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
               >
                 <option value="" disabled>
                   {t("admin_editor_select_client")}
@@ -313,7 +315,7 @@ export default function ReportEditor({
                     {c.company_name}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
               {errors?.client_id && (
                 <p className="text-red-500 text-xs">{errors.client_id[0]}</p>
               )}
@@ -338,20 +340,19 @@ export default function ReportEditor({
           {/* Month */}
           <div className="space-y-1.5">
             <Label htmlFor="month">{t("admin_editor_month")}</Label>
-            <select
+            <NativeSelect
               id="month"
               name="month"
               value={month}
               onChange={(e) => handleMonthChange(Number(e.target.value))}
               required
-              className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
             >
               {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
                 <option key={m} value={m}>
                   {getMonthName(m, lang)}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </div>
 
           {/* Title */}
@@ -387,7 +388,7 @@ export default function ReportEditor({
           <div className="space-y-2">
             <Label>{t("admin_editor_uptime_per_client")}</Label>
             {selectedClientIds.length === 0 ? (
-              <p className="text-xs text-slate-400">{t("admin_editor_uptime_select_client_first")}</p>
+              <p className="text-xs text-slate-500">{t("admin_editor_uptime_select_client_first")}</p>
             ) : (
               <div className="space-y-2">
                 {selectedClientIds.map((clientId) => {
@@ -405,7 +406,7 @@ export default function ReportEditor({
                       <div className="space-y-1">
                         <div className="flex items-center justify-between">
                           <span className="text-xs text-slate-500">{t("admin_editor_uptime_pct")}</span>
-                          {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" /> : null}
+                          {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-500" /> : null}
                         </div>
                         <Input
                           type="number"
@@ -433,7 +434,7 @@ export default function ReportEditor({
             <Label htmlFor="uptime_percent" className="flex items-center gap-2">
               {t("admin_editor_uptime_pct")}
               {uptimeFetching && (
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-500" />
               )}
             </Label>
             <Input
@@ -448,7 +449,7 @@ export default function ReportEditor({
               placeholder="99.95"
             />
             {uptimePercent === "" && !uptimeFetching && selectedClientId && (
-              <p className="text-xs text-slate-400">{t("admin_editor_uptime_hint")}</p>
+              <p className="text-xs text-slate-500">{t("admin_editor_uptime_hint")}</p>
             )}
           </div>
         )}
@@ -500,7 +501,7 @@ export default function ReportEditor({
         </div>
 
         {taskDrafts.length === 0 && (
-          <p className="text-slate-400 text-sm py-4 text-center">
+          <p className="text-slate-500 text-sm py-4 text-center">
             {t("admin_editor_tasks_empty")}
           </p>
         )}
@@ -566,31 +567,59 @@ export default function ReportEditor({
       </section>
 
       {/* ── Actions ────────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-3 justify-end">
-        <a
-          href="/admin/reports"
-          className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
-        >
-          {t("cancel")}
-        </a>
-        <Button
-          type="submit"
-          name="intent"
-          value="draft"
-          variant="outline"
-          disabled={isNew && selectedClientIds.length === 0}
-        >
-          {t("admin_editor_save_draft")}
-        </Button>
-        <Button
-          type="submit"
-          name="intent"
-          value="publish"
-          className="bg-violet-600 hover:bg-violet-700 text-white"
-          disabled={isNew && selectedClientIds.length === 0}
-        >
-          {isNew ? t("admin_editor_publish_new") : t("admin_editor_publish")}
-        </Button>
+      {/* Hidden: send email flag (only meaningful on publish) */}
+      {isNew && (
+        <input type="hidden" name="send_email" value={sendEmailOnPublish ? "1" : "0"} />
+      )}
+
+      <div className="space-y-3">
+        {/* Send email toggle — only on new publish */}
+        {isNew && (
+          <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+            <input
+              id="send_email_toggle"
+              type="checkbox"
+              checked={sendEmailOnPublish}
+              onChange={(e) => setSendEmailOnPublish(e.target.checked)}
+              className="mt-0.5 rounded border-slate-300 accent-violet-600 cursor-pointer"
+            />
+            <label htmlFor="send_email_toggle" className="cursor-pointer">
+              <span className="block text-sm font-medium text-slate-800">
+                {t("admin_editor_send_email_on_publish")}
+              </span>
+              <span className="block text-xs text-slate-500 mt-0.5">
+                {t("admin_editor_send_email_hint")}
+              </span>
+            </label>
+          </div>
+        )}
+
+        <div className="flex items-center gap-3 justify-end">
+          <a
+            href="/admin/reports"
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            {t("cancel")}
+          </a>
+          <Button
+            type="submit"
+            name="intent"
+            value="draft"
+            variant="outline"
+            disabled={isNew && selectedClientIds.length === 0}
+          >
+            {t("admin_editor_save_draft")}
+          </Button>
+          <Button
+            type="submit"
+            name="intent"
+            value="publish"
+            className="bg-violet-600 hover:bg-violet-700 text-white"
+            disabled={isNew && selectedClientIds.length === 0}
+          >
+            {isNew ? t("admin_editor_publish_new") : t("admin_editor_publish")}
+          </Button>
+        </div>
       </div>
     </Form>
   );

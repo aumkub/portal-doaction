@@ -17,6 +17,43 @@ interface ImpersonationData {
 }
 
 const SESSION_CACHE_TTL_MS = 2000;
+/** Smallest expiry bump worth spending a KV write on. */
+const SESSION_EXTENSION_MIN_MS = 24 * 60 * 60 * 1000;
+/**
+ * A D1 round trip costs 150-700ms from the edge while a KV read costs single
+ * digits, and every authenticated request needs the session's user. Caching
+ * that record in KV keeps D1 off the hot path; writers call evictUserCache so
+ * a change is visible immediately rather than after the TTL.
+ */
+const USER_CACHE_TTL_SECONDS = 300;
+
+function userCacheKey(userId: string) {
+  return `user:${userId}`;
+}
+
+export async function evictUserCache(kv: KVNamespace, userId: string) {
+  await kv.delete(userCacheKey(userId));
+}
+
+async function readUserCached(
+  kv: KVNamespace,
+  db: ReturnType<typeof createDB>,
+  userId: string
+): Promise<User | null> {
+  try {
+    const cached = await kv.get<User>(userCacheKey(userId), "json");
+    if (cached) return cached;
+  } catch {
+    // fall through to D1
+  }
+  const user = await db.getUserById(userId);
+  if (user) {
+    await kv.put(userCacheKey(userId), JSON.stringify(user), {
+      expirationTtl: USER_CACHE_TTL_SECONDS,
+    });
+  }
+  return user;
+}
 const sessionUserCache = new Map<
   string,
   { cachedAt: number; user: User | null }
@@ -95,7 +132,14 @@ function createKVAdapter(kv: KVNamespace, db: ReturnType<typeof createDB>) {
         import("lucia").DatabaseUser | null
       ]
     > {
-      const raw = await kv.get<KVSessionData>(`session:${sessionId}`, "json");
+      // Guard against empty/malformed session IDs that cause KV 400 errors
+      if (!sessionId || sessionId.length < 8) return [null, null];
+      let raw: KVSessionData | null;
+      try {
+        raw = await kv.get<KVSessionData>(`session:${sessionId}`, "json");
+      } catch {
+        return [null, null];
+      }
       if (!raw) return [null, null];
 
       const expiresAt = new Date(raw.expiresAt);
@@ -104,7 +148,7 @@ function createKVAdapter(kv: KVNamespace, db: ReturnType<typeof createDB>) {
         return [null, null];
       }
 
-      const user = await db.getUserById(raw.userId);
+      const user = await readUserCached(kv, db, raw.userId);
       if (!user) return [null, null];
 
       return [
@@ -149,6 +193,12 @@ function createKVAdapter(kv: KVNamespace, db: ReturnType<typeof createDB>) {
     ): Promise<void> {
       const raw = await kv.get<KVSessionData>(`session:${sessionId}`, "json");
       if (!raw) return;
+      // Lucia asks for this on every request once a session is past its
+      // half-life, but KV allows only one write per second per key, so
+      // writing each time makes concurrent requests queue behind each other.
+      // Persisting only a meaningful bump keeps the session rolling at a
+      // fraction of the writes.
+      if (expiresAt.getTime() - raw.expiresAt < SESSION_EXTENSION_MIN_MS) return;
       const ttlSeconds = Math.max(
         1,
         Math.floor((expiresAt.getTime() - Date.now()) / 1000)
@@ -236,7 +286,16 @@ export async function getAuthenticatedUser(
     return cached.user;
   }
 
-  const { session, user } = await lucia.validateSession(sessionId);
+  let session: import("lucia").Session | null;
+  let user: import("lucia").User | null;
+  try {
+    ({ session, user } = await lucia.validateSession(sessionId));
+  } catch {
+    // KV error (e.g. 400 Bad Request with malformed session) — treat as invalid
+    sessionUserCache.set(sessionId, { cachedAt: Date.now(), user: null });
+    return null;
+  }
+
   if (!session || !user) {
     sessionUserCache.set(sessionId, { cachedAt: Date.now(), user: null });
     return null;
@@ -275,6 +334,18 @@ export async function requireAdmin(
 ): Promise<User> {
   const user = await requireUser(request, d1, kv);
   if (user.role !== "admin") {
+    throw new Response("Forbidden", { status: 403 });
+  }
+  return user;
+}
+
+export async function requireCoAdminOrAdmin(
+  request: Request,
+  d1: D1Database,
+  kv: KVNamespace
+): Promise<User> {
+  const user = await requireUser(request, d1, kv);
+  if (user.role !== "admin" && user.role !== "co-admin") {
     throw new Response("Forbidden", { status: 403 });
   }
   return user;

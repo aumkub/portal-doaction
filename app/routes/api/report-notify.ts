@@ -4,6 +4,8 @@ import { createDB } from "~/lib/db.server";
 import { sendEmail } from "~/lib/email.server";
 import { buildReportCustomerNotification } from "~/lib/report-customer-email.server";
 import { createReportAccessToken } from "~/lib/report-access.server";
+import { parseClientCcEmails } from "~/lib/client-cc";
+import { sendTelegramNotificationForClient } from "~/lib/telegram.server";
 
 /** POST /api/report-notify — send report notification email to client user */
 export async function action({ request, context }: Route.ActionArgs) {
@@ -20,8 +22,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     return Response.json({ error: "missing_report" }, { status: 400 });
   }
 
-  const apiKey = env.SMTP2GO_API_KEY;
-  if (!apiKey) {
+  if (!env.SEND_EMAIL) {
     return Response.json({ error: "email_not_configured" }, { status: 503 });
   }
 
@@ -54,16 +55,19 @@ export async function action({ request, context }: Route.ActionArgs) {
     month: report.month,
     summary: report.summary,
     reportUrl,
+    lang: user.language === "en" ? "en" : "th",
   });
+  const ccRecipients = parseClientCcEmails(client.cc_emails).map((email) => ({ email }));
 
   try {
     await sendEmail({
       to: user.email,
       toName: user.name,
+      cc: ccRecipients,
       subject,
       html,
       text,
-      apiKey,
+      sendEmail: env.SEND_EMAIL,
       db,
       source: "report_notify",
     });
@@ -81,6 +85,20 @@ export async function action({ request, context }: Route.ActionArgs) {
     client_notification_subject: subject,
     client_notification_html: html,
   });
+
+  // Send Telegram notification to co-admin groups for this client
+  const appUrl = String(env.APP_URL || new URL(request.url).origin).replace(/\/$/, "");
+  await sendTelegramNotificationForClient({
+    db,
+    appUrl,
+    clientId: report.client_id,
+    notification: {
+      title: `📊 ส่งรายงานให้ลูกค้าแล้ว: ${client.company_name}`,
+      body: report.title,
+      link: `/admin/reports/${report.id}`,
+    },
+  });
+  await db.updateReport(report.id, { telegram_notified_at: now });
 
   return Response.json({ ok: true, notifiedAt: now });
 }

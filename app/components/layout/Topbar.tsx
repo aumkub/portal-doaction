@@ -1,5 +1,5 @@
-import { Form, useRevalidator } from "react-router";
-import { useEffect } from "react";
+import { Form, useFetcher } from "react-router";
+import { useEffect, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
 import {
   DropdownMenu,
@@ -9,7 +9,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
-import { MobileSidebarTrigger } from "~/components/layout/Sidebar";
+import { MobileSidebarTrigger, type NavBadges } from "~/components/layout/Sidebar";
 import { formatRelativeTime } from "~/lib/utils";
 import { useT, LanguageSwitcher } from "~/lib/i18n";
 import type { User, Notification } from "~/types";
@@ -25,18 +25,33 @@ interface TopbarProps {
   user: User;
   companyName?: string | null;
   notifications?: Notification[];
-  role?: "client" | "admin";
+  role?: "client" | "admin" | "co-admin";
+  navBadges?: NavBadges;
 }
 
-// ─── 30-second polling ───────────────────────────────────────────────────────
-function usePolling(intervalMs: number) {
-  const revalidator = useRevalidator();
+/**
+ * Polls only the notifications endpoint. Using a fetcher rather than
+ * revalidate() keeps the poll from re-running every loader on the page.
+ */
+function usePolledNotifications(
+  initial: Notification[],
+  intervalMs: number
+): Notification[] {
+  const fetcher = useFetcher<{ notifications: Notification[] }>();
+
   useEffect(() => {
     const id = setInterval(() => {
-      if (revalidator.state === "idle") revalidator.revalidate();
+      if (fetcher.state === "idle") fetcher.load("/api/notifications");
     }, intervalMs);
     return () => clearInterval(id);
-  }, [revalidator, intervalMs]);
+  }, [fetcher, intervalMs]);
+
+  return fetcher.data?.notifications ?? initial;
+}
+
+function isUsableAvatarUrl(url: string | null | undefined): url is string {
+  if (!url) return false;
+  return /^(https?:\/\/|\/)/.test(url.trim());
 }
 
 // ─── Bell + Notification Dropdown ────────────────────────────────────────────
@@ -145,17 +160,49 @@ function NotificationDropdown({
   );
 }
 
+function UserAvatar({
+  name,
+  src,
+  initials,
+}: {
+  name: string;
+  src: string | null;
+  initials: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  const showImage = !failed && isUsableAvatarUrl(src);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
+
+  return (
+    <Avatar className="h-7 w-7 bg-slate-900 text-white">
+      {showImage ? (
+        <AvatarImage
+          src={src}
+          alt={name}
+          onError={() => setFailed(true)}
+        />
+      ) : null}
+      <AvatarFallback className="bg-slate-900 text-white text-xs font-semibold">
+        {initials || "?"}
+      </AvatarFallback>
+    </Avatar>
+  );
+}
+
 // ─── Topbar ───────────────────────────────────────────────────────────────────
 export default function Topbar({
   user,
   companyName,
-  notifications = [],
+  notifications: initialNotifications = [],
   role = "client",
+  navBadges,
 }: TopbarProps) {
   const { t } = useT();
 
-  // Poll every 30 s so notification count stays fresh
-  usePolling(30_000);
+  const notifications = usePolledNotifications(initialNotifications, 30_000);
 
   const initials = user.name
     .split(" ")
@@ -164,13 +211,14 @@ export default function Topbar({
     .join("")
     .toUpperCase();
 
-  const settingsHref = role === "admin" ? "/admin/settings" : "/settings";
+  const settingsHref =
+    role === "admin" ? "/admin/settings" : role === "client" ? "/settings" : null;
 
   return (
     <header className="h-16 bg-canvas border-b border-hairline flex items-center justify-between px-4 lg:px-6 shrink-0">
       {/* Left */}
       <div className="flex items-center gap-3">
-        <MobileSidebarTrigger role={role} companyName={companyName} />
+        <MobileSidebarTrigger role={role} companyName={companyName} navBadges={navBadges} />
         {companyName && (
           <span className="text-sm text-muted-foreground hidden sm:block">
             {companyName}
@@ -186,14 +234,7 @@ export default function Topbar({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="ml-1 flex h-10 items-center gap-2 rounded-full border border-hairline bg-canvas px-2.5 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue/30">
-              <Avatar className="h-7 w-7">
-                {user.avatar_url && (
-                  <AvatarImage src={user.avatar_url} alt={user.name} />
-                )}
-                <AvatarFallback className="bg-ink text-white text-xs font-semibold">
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
+              <UserAvatar name={user.name} src={user.avatar_url} initials={initials} />
               <span className="text-sm text-charcoal hidden sm:block">
                 {user.name}
               </span>
@@ -207,12 +248,16 @@ export default function Topbar({
               <p className="text-xs text-muted-foreground truncate">{user.email}</p>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <a href={settingsHref}>
-                <span className=""><FaGear aria-hidden="true" /></span> {t("topbar_account_settings")}
-              </a>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
+            {settingsHref && (
+              <>
+                <DropdownMenuItem asChild>
+                  <a href={settingsHref}>
+                    <span className=""><FaGear aria-hidden="true" /></span> {t("topbar_account_settings")}
+                  </a>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            )}
             <Form method="post" action="/logout">
               <button
                 type="submit"

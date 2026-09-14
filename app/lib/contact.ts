@@ -1,4 +1,4 @@
-/** DoAction support / team contact (shown in client settings). */
+/** do action support / team contact (shown in client settings). */
 export const TEAM_CONTACT = {
   lineUrl: "https://line.me/ti/p/~aumkub",
   phoneTel: "+66818694084",

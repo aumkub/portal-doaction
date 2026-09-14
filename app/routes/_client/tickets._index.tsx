@@ -1,4 +1,4 @@
-import { Link, useSearchParams } from "react-router";
+import { Link, Form, redirect, useSearchParams } from "react-router";
 import { requireUser } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { useT } from "~/lib/i18n";
@@ -22,6 +22,32 @@ export async function loader({ request, context }: any) {
   return { tickets };
 }
 
+export async function action({ request, context }: any) {
+  const user = await requireUser(
+    request,
+    context.cloudflare.env.DB,
+    context.cloudflare.env.SESSIONPORTAL
+  );
+  const db = createDB(context.cloudflare.env.DB);
+  const formData = await request.formData();
+  const intent = formData.get("intent");
+  const ticketId = formData.get("ticketId") as string;
+
+  if (intent === "delete" && ticketId) {
+    const ticket = await db.getTicket(ticketId);
+    if (!ticket) return null;
+
+    // Verify the ticket belongs to this user's client and is open
+    const client = await db.getClientByUserId(user.id);
+    if (!client || ticket.client_id !== client.id) return null;
+    if (ticket.status !== "open") return null;
+
+    await db.softDeleteTicket(ticketId, user.id);
+  }
+
+  return redirect("/tickets");
+}
+
 export default function TicketsIndexPage({ loaderData }: any) {
   const { tickets } = loaderData as { tickets: SupportTicket[] };
   const [searchParams, setSearchParams] = useSearchParams();
@@ -37,19 +63,21 @@ export default function TicketsIndexPage({ loaderData }: any) {
     ["all", t("tickets_filter_all")],
     ["open", t("tickets_filter_open")],
     ["in_progress", t("tickets_filter_in_progress")],
+    ["waiting", t("status_waiting")],
     ["resolved", t("tickets_filter_resolved")],
+    ["closed", t("status_closed_short")],
   ];
 
   return (
     <div className="space-y-6 max-w-4xl">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">{t("tickets_title")}</h1>
-          <p className="mt-1 text-sm text-slate-500">{t("tickets_subtitle")}</p>
+          <h1 className="text-2xl font-semibold text-ink">{t("tickets_title")}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{t("tickets_subtitle")}</p>
         </div>
         <Link
           to="/tickets/new"
-          className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-700"
+          className="rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/85"
         >
           {t("tickets_new_btn")}
         </Link>
@@ -60,13 +88,11 @@ export default function TicketsIndexPage({ loaderData }: any) {
           <button
             key={value}
             type="button"
-            onClick={() =>
-              setSearchParams(value === "all" ? {} : { status: value })
-            }
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+            onClick={() => setSearchParams(value === "all" ? {} : { status: value })}
+            className={`rounded-full px-4 py-1.5 text-xs font-medium transition-colors ${
               status === value
-                ? "bg-slate-900 text-white"
-                : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                ? "bg-primary text-primary-foreground"
+                : "border border-hairline bg-canvas text-charcoal hover:bg-surface"
             }`}
           >
             {label}
@@ -78,7 +104,7 @@ export default function TicketsIndexPage({ loaderData }: any) {
         {filtered.length ? (
           filtered.map((ticket) => <TicketCard key={ticket.id} ticket={ticket} />)
         ) : (
-          <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-400">
+          <div className="rounded-xl border border-hairline bg-canvas p-10 text-center text-sm text-stone">
             {t("tickets_empty")}
           </div>
         )}
