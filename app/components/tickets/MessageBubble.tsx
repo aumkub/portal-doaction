@@ -13,6 +13,8 @@ function isImage({ mimeType, name }: Attachment): boolean {
   return /\.(png|jpe?g|gif|webp|avif)$/i.test(name);
 }
 
+export type { Attachment as BubbleAttachment };
+
 export default function MessageBubble({
   message,
   isClient,
@@ -23,6 +25,7 @@ export default function MessageBubble({
   alignRight,
   pending,
   actions,
+  onAttachmentClick,
 }: {
   message: string;
   isClient: boolean;
@@ -35,6 +38,7 @@ export default function MessageBubble({
   pending?: boolean;
   /** Rendered beside the author line, e.g. a delete control. */
   actions?: ReactNode;
+  onAttachmentClick?: (attachment: Attachment) => void;
 }) {
   const shouldAlignRight = alignRight ?? isClient;
 
@@ -89,35 +93,64 @@ export default function MessageBubble({
         {attachments.length > 0 ? (
           <div className="mt-2 flex flex-wrap gap-2">
             {attachments.map((a) =>
-              // A pending file is not linked to a message yet, so its URL 404s.
               isImage(a) && !pending ? (
-                <a
-                  key={a.id}
-                  href={a.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title={a.name}
-                  className={`block overflow-hidden rounded-lg border transition-colors ${thumbnailClass}`}
-                >
-                  <img
-                    src={a.href}
-                    alt={a.name}
-                    loading="lazy"
-                    decoding="async"
-                    className="h-24 w-24 object-cover"
-                  />
-                </a>
+                onAttachmentClick ? (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => onAttachmentClick(a)}
+                    className={`block overflow-hidden rounded-lg border transition-colors ${thumbnailClass} focus:outline-none focus:ring-2 focus:ring-violet-400`}
+                    title={a.name}
+                  >
+                    <img
+                      src={a.href}
+                      alt={a.name}
+                      loading="lazy"
+                      decoding="async"
+                      className="h-24 w-24 object-cover"
+                    />
+                  </button>
+                ) : (
+                  <a
+                    key={a.id}
+                    href={a.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={a.name}
+                    className={`block overflow-hidden rounded-lg border transition-colors ${thumbnailClass}`}
+                  >
+                    <img
+                      src={a.href}
+                      alt={a.name}
+                      loading="lazy"
+                      decoding="async"
+                      className="h-24 w-24 object-cover"
+                    />
+                  </a>
+                )
               ) : (
-                <a
-                  key={a.id}
-                  href={a.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`inline-flex items-center rounded-md border px-2.5 py-1 text-xs transition-colors ${attachmentClass}`}
-                >
-                  {a.icon ? `${a.icon} ` : "📎 "}
-                  {a.name}
-                </a>
+                onAttachmentClick && !pending ? (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => onAttachmentClick(a)}
+                    className={`inline-flex items-center rounded-md border px-2.5 py-1 text-xs transition-colors ${attachmentClass}`}
+                  >
+                    {a.icon ? `${a.icon} ` : "📎 "}
+                    {a.name}
+                  </button>
+                ) : (
+                  <a
+                    key={a.id}
+                    href={a.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`inline-flex items-center rounded-md border px-2.5 py-1 text-xs transition-colors ${attachmentClass}`}
+                  >
+                    {a.icon ? `${a.icon} ` : "📎 "}
+                    {a.name}
+                  </a>
+                )
               )
             )}
           </div>

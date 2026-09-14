@@ -313,6 +313,10 @@ export default function LoginPage() {
           </div>
         </div>
       </div>
+
+      <p className="text-center text-xs text-slate-500 mt-4">
+        do action client portal
+      </p>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { Form, redirect, useFetcher, useFetchers } from "react-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { z } from "zod";
 import { FaTrashCan } from "react-icons/fa6";
 import { requireCoAdminOrAdmin } from "~/lib/auth.server";
@@ -26,6 +26,8 @@ import type {
 import StatusBadge from "~/components/tickets/StatusBadge";
 import PriorityBadge from "~/components/tickets/PriorityBadge";
 import MessageBubble from "~/components/tickets/MessageBubble";
+import AttachmentLightbox from "~/components/tickets/AttachmentLightbox";
+import type { LightboxItem } from "~/components/tickets/AttachmentLightbox";
 import PageHeader from "~/components/layout/PageHeader";
 import { useT } from "~/lib/i18n";
 import type { TranslationKey } from "~/lib/translations";
@@ -347,6 +349,20 @@ export default function AdminTicketDetailPage({ loaderData }: any) {
     {}
   );
 
+  const allLightboxItems: LightboxItem[] = attachments.map((att) => ({
+    id: att.id,
+    name: att.file_name,
+    href: `/api/attachments/${encodeURIComponent(att.file_key)}`,
+    icon: getAttachmentIcon(att.file_name, att.mime_type),
+  }));
+
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
+  const openLightbox = (attachmentId: string) => {
+    const idx = allLightboxItems.findIndex(i => i.id === attachmentId);
+    if (idx >= 0) setLightboxIndex(idx);
+  };
+
   const renderMessage = (msg: TicketMessage, isInternal: boolean) => {
     const author = usersById[msg.user_id];
     const isStaff = author?.role === "admin" || author?.role === "co-admin";
@@ -367,6 +383,7 @@ export default function AdminTicketDetailPage({ loaderData }: any) {
             icon: getAttachmentIcon(att.file_name, att.mime_type),
             mimeType: att.mime_type,
           }))}
+          onAttachmentClick={(a) => openLightbox(a.id)}
         />
       </div>
     );
@@ -386,6 +403,13 @@ export default function AdminTicketDetailPage({ loaderData }: any) {
 
   return (
     <div className="max-w-4xl space-y-6">
+      {lightboxIndex !== null && allLightboxItems.length > 0 && (
+        <AttachmentLightbox
+          items={allLightboxItems}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
+      )}
       <PageHeader
         title={ticket.title}
         subtitle={client?.company_name ?? undefined}
