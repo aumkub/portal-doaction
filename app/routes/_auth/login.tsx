@@ -125,7 +125,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 const inputCls =
-  "w-full h-11 rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#EED900] focus:ring-2 focus:ring-[#EED900]/30 transition"
+  "w-full h-11 rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#F0D800] focus:ring-2 focus:ring-[#F0D800]/30 transition"
 
 export default function LoginPage() {
   const actionData = useActionData<typeof action>();

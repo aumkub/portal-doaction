@@ -18,6 +18,8 @@ import type { SupportTicket, TicketAttachment, TicketMessage, User } from "~/typ
 import StatusBadge from "~/components/tickets/StatusBadge";
 import PriorityBadge from "~/components/tickets/PriorityBadge";
 import MessageBubble from "~/components/tickets/MessageBubble";
+import AttachmentLightbox from "~/components/tickets/AttachmentLightbox";
+import type { LightboxItem } from "~/components/tickets/AttachmentLightbox";
 
 const ReplySchema = z.object({
   message: z.string().min(1, "กรุณาพิมพ์ข้อความ"),
@@ -190,6 +192,20 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
     {}
   );
 
+  const allLightboxItems: LightboxItem[] = attachments.map((att) => ({
+    id: att.id,
+    name: att.file_name,
+    href: `/api/attachments/${encodeURIComponent(att.file_key)}`,
+    icon: getAttachmentIcon(att.file_name, att.mime_type),
+  }));
+
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
+  const openLightbox = (attachmentId: string) => {
+    const idx = allLightboxItems.findIndex(i => i.id === attachmentId);
+    if (idx >= 0) setLightboxIndex(idx);
+  };
+
   useEffect(() => {
     if (navigation.state !== "idle") return;
     if (!isSubmittingReplyRef.current) return;
@@ -251,6 +267,13 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
+      {lightboxIndex !== null && allLightboxItems.length > 0 && (
+        <AttachmentLightbox
+          items={allLightboxItems}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
+      )}
       <Link to="/tickets" className="text-sm text-slate-500 hover:text-slate-900 mb-4 inline-block">
         {t("back")}
       </Link>
@@ -303,6 +326,7 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
                 href: `/api/attachments/${encodeURIComponent(att.file_key)}`,
                 icon: getAttachmentIcon(att.file_name, att.mime_type),
               }))}
+              onAttachmentClick={(a) => openLightbox(a.id)}
             />
           ))}
       </div>

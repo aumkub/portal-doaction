@@ -24,7 +24,7 @@
 /* ── Theme ────────────────────────────────────────────────────────────────── */
 @theme {
   /* Fonts */
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif,
+  --font-sans: "Google Sans", ui-sans-serif, system-ui, sans-serif,
     "Apple Color Emoji", "Segoe UI Emoji";
 
   /* Border radius */
@@ -34,6 +34,10 @@
   --radius-lg:  var(--radius);
   --radius-xl:  calc(var(--radius) + 4px);
   --radius-2xl: calc(var(--radius) + 8px);
+
+  /* DoAction brand colors */
+  --color-brand-yellow:       #F0D800;
+  --color-brand-yellow-deep:  #C9B500;
 
   /* DoAction brand — violet primary */
   --color-primary:            oklch(0.40 0.20 280);   /* violet-600 */

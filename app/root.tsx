@@ -8,6 +8,7 @@ import {
 	useLoaderData,
 	useNavigation,
 } from "react-router";
+import { useEffect } from "react";
 
 import type { Route } from "./+types/root";
 import "./app.css";
@@ -18,8 +19,12 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	const cookieLang = getLanguageFromCookieHeader(request.headers.get("Cookie"));
 	if (cookieLang) return { lang: cookieLang };
 
-	const user = await getAuthenticatedUser(request, env.DB, env.SESSIONPORTAL);
-	if (user?.language) return { lang: resolveLanguage(user.language) };
+	try {
+		const user = await getAuthenticatedUser(request, env.DB, env.SESSIONPORTAL);
+		if (user?.language) return { lang: resolveLanguage(user.language) };
+	} catch {
+		// D1 / KV infrastructure error — degrade gracefully
+	}
 
 	return { lang: "th" as const };
 }
@@ -34,7 +39,7 @@ export const links: Route.LinksFunction = () => [
 	},
 	{
 		rel: "stylesheet",
-		href: "https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap",
+		href: "https://fonts.googleapis.com/css2?family=Google+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&display=swap",
 	},
 ];
 
@@ -64,7 +69,7 @@ export default function App() {
 		<I18nProvider initialLang={lang}>
 			<div
 				aria-hidden="true"
-				className={`fixed top-0 left-0 z-[100] h-1 w-full bg-[#EED900] transition-all duration-300 ${
+				className={`fixed top-0 left-0 z-[100] h-1 w-full bg-[#F0D800] transition-all duration-300 ${
 					isNavigating ? "opacity-100" : "opacity-0"
 				}`}
 				style={{
@@ -82,6 +87,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
 	let title = "เกิดข้อผิดพลาด";
 	let detail = "เกิดข้อผิดพลาดที่ไม่คาดคิด กรุณาลองใหม่อีกครั้ง";
 	let stack: string | undefined;
+	const isInfraError = !isRouteErrorResponse(error);
 
 	if (isRouteErrorResponse(error)) {
 		status = error.status;
@@ -99,6 +105,14 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
 		stack = error.stack;
 	}
 
+	// For infra errors (D1 / KV failures), redirect home so the user can retry
+	// eslint-disable-next-line react-hooks/rules-of-hooks
+	useEffect(() => {
+		if (isInfraError) {
+			window.location.replace("/");
+		}
+	}, [isInfraError]);
+
 	return (
 		<main className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
 			<div className="bg-white rounded-2xl border border-slate-200 p-10 max-w-md w-full text-center space-y-4">
@@ -112,7 +126,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
 				)}
 				<a
 					href="/"
-					className="inline-block mt-2 px-5 py-2.5 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 transition-colors"
+					className="inline-block mt-2 px-6 py-2.5 rounded-full bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/85 transition-colors"
 				>
 					กลับหน้าหลัก
 				</a>

@@ -1,3 +1,10 @@
+export interface BubbleAttachment {
+  id: string;
+  name: string;
+  href: string;
+  icon?: string;
+}
+
 export default function MessageBubble({
   message,
   isClient,
@@ -5,13 +12,15 @@ export default function MessageBubble({
   authorName,
   attachments = [],
   alignRight,
+  onAttachmentClick,
 }: {
   message: string;
   isClient: boolean;
   isInternal: boolean;
   authorName?: string;
-  attachments?: Array<{ id: string; name: string; href: string; icon?: string }>;
+  attachments?: BubbleAttachment[];
   alignRight?: boolean;
+  onAttachmentClick?: (attachment: BubbleAttachment) => void;
 }) {
   const shouldAlignRight = alignRight ?? isClient;
 
@@ -44,18 +53,33 @@ export default function MessageBubble({
         <p className="whitespace-pre-wrap">{message}</p>
         {attachments.length > 0 ? (
           <div className="mt-2 flex flex-wrap gap-2">
-            {attachments.map((a) => (
-              <a
-                key={a.id}
-                href={a.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={`inline-flex items-center rounded-md border px-2.5 py-1 text-xs transition-colors ${attachmentClass}`}
-              >
-                {a.icon ? `${a.icon} ` : "📎 "}
-                {a.name}
-              </a>
-            ))}
+            {attachments.map((a) => {
+              const isImage = a.icon === "🖼️";
+              return isImage ? (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => onAttachmentClick?.(a)}
+                  className="block rounded-lg overflow-hidden border border-white/20 hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-violet-400"
+                >
+                  <img
+                    src={a.href}
+                    alt={a.name}
+                    className="max-h-40 max-w-[240px] object-cover block"
+                  />
+                </button>
+              ) : (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => onAttachmentClick ? onAttachmentClick(a) : window.open(a.href, "_blank")}
+                  className={`inline-flex items-center rounded-md border px-2.5 py-1 text-xs transition-colors ${attachmentClass}`}
+                >
+                  {a.icon ? `${a.icon} ` : "📎 "}
+                  {a.name}
+                </button>
+              );
+            })}
           </div>
         ) : null}
       </div>

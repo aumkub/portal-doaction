@@ -26,6 +26,8 @@ import type {
 import StatusBadge from "~/components/tickets/StatusBadge";
 import PriorityBadge from "~/components/tickets/PriorityBadge";
 import MessageBubble from "~/components/tickets/MessageBubble";
+import AttachmentLightbox from "~/components/tickets/AttachmentLightbox";
+import type { LightboxItem } from "~/components/tickets/AttachmentLightbox";
 import PageHeader from "~/components/layout/PageHeader";
 import { useT } from "~/lib/i18n";
 import type { TranslationKey } from "~/lib/translations";
@@ -266,6 +268,20 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
     {}
   );
 
+  const allLightboxItems: LightboxItem[] = attachments.map((att) => ({
+    id: att.id,
+    name: att.file_name,
+    href: `/api/attachments/${encodeURIComponent(att.file_key)}`,
+    icon: getAttachmentIcon(att.file_name, att.mime_type),
+  }));
+
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
+  const openLightbox = (attachmentId: string) => {
+    const idx = allLightboxItems.findIndex(i => i.id === attachmentId);
+    if (idx >= 0) setLightboxIndex(idx);
+  };
+
   useEffect(() => {
     if (navigation.state !== "idle") return;
     if (!isSubmittingReplyRef.current) return;
@@ -327,6 +343,13 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
 
   return (
     <div className="max-w-4xl space-y-6">
+      {lightboxIndex !== null && allLightboxItems.length > 0 && (
+        <AttachmentLightbox
+          items={allLightboxItems}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
+      )}
       <PageHeader
         title={ticket.title}
         subtitle={client?.company_name ?? undefined}
@@ -402,6 +425,7 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
                 href: `/api/attachments/${encodeURIComponent(att.file_key)}`,
                 icon: getAttachmentIcon(att.file_name, att.mime_type),
               }))}
+              onAttachmentClick={(a) => openLightbox(a.id)}
             />
           </div>
         ))}
@@ -429,6 +453,7 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
                   href: `/api/attachments/${encodeURIComponent(att.file_key)}`,
                   icon: getAttachmentIcon(att.file_name, att.mime_type),
                 }))}
+                onAttachmentClick={(a) => openLightbox(a.id)}
               />
             </div>
           ))}
