@@ -7,8 +7,9 @@ export type UptimeResult = {
 
 export async function fetchUptimeForWebsite(
   websiteUrl: string,
-  apiKey: string
+  apiKey: string | null
 ): Promise<UptimeResult> {
+  if (!apiKey) return { uptimeRatio: null, isUp: null };
   try {
     const domain = new URL(websiteUrl).hostname.replace(/^www\./, "");
     const body = new URLSearchParams({

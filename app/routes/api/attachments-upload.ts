@@ -3,12 +3,37 @@ import { createDB } from "~/lib/db.server";
 import { requireUser } from "~/lib/auth.server";
 
 const MAX_BYTES = 2 * 1024 * 1024;
-const ALLOWED_PREFIXES = ["image/", "video/"];
-const ALLOWED_EXACT = ["application/pdf"];
+/**
+ * Accepted types, each checked against the file's leading bytes. The browser
+ * supplies `file.type`, so it cannot be trusted on its own: an SVG or HTML
+ * file labelled as an image would otherwise be served back as active content.
+ */
+const SIGNATURES: Record<string, (b: Uint8Array) => boolean> = {
+  "image/png": (b) => b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47,
+  "image/jpeg": (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+  "image/gif": (b) => ascii(b, 0, 4) === "GIF8",
+  "image/webp": (b) => ascii(b, 0, 4) === "RIFF" && ascii(b, 8, 12) === "WEBP",
+  "image/heic": isIsoMedia,
+  "image/heif": isIsoMedia,
+  "video/mp4": isIsoMedia,
+  "video/quicktime": isIsoMedia,
+  "video/webm": (b) => b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3,
+  "application/pdf": (b) => ascii(b, 0, 5) === "%PDF-",
+};
 
-function isAllowedMime(mime: string): boolean {
-  if (ALLOWED_EXACT.includes(mime)) return true;
-  return ALLOWED_PREFIXES.some((p) => mime.startsWith(p));
+function ascii(b: Uint8Array, start: number, end: number): string {
+  return String.fromCharCode(...b.subarray(start, end));
+}
+
+function isIsoMedia(b: Uint8Array): boolean {
+  return ascii(b, 4, 8) === "ftyp";
+}
+
+async function hasValidSignature(file: File): Promise<boolean> {
+  const check = SIGNATURES[file.type];
+  if (!check) return false;
+  const head = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+  return check(head);
 }
 
 export async function action({ request, context }: any) {
@@ -79,7 +104,7 @@ export async function action({ request, context }: any) {
     }
   }
 
-  if (!isAllowedMime(file.type)) {
+  if (!(await hasValidSignature(file))) {
     return Response.json({ error: "unsupported_type" }, { status: 400 });
   }
   if (file.size > MAX_BYTES) {
@@ -89,7 +114,7 @@ export async function action({ request, context }: any) {
   const key = `ticket_${ticketId}_${generateId(24)}`;
   await env.ATTACHMENTS.put(key, await file.arrayBuffer(), {
     httpMetadata: {
-      contentType: file.type || "application/octet-stream",
+      contentType: file.type,
     },
     customMetadata: {
       ticketId,
@@ -103,7 +128,7 @@ export async function action({ request, context }: any) {
     file: {
       fileKey: key,
       fileName: file.name,
-      mimeType: file.type || "application/octet-stream",
+      mimeType: file.type,
       sizeBytes: file.size,
       url: `/api/attachments/${encodeURIComponent(key)}`,
     },

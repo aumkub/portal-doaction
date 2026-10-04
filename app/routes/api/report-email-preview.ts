@@ -1,4 +1,5 @@
 import type { Route } from "./+types/report-email-preview";
+import { getReportLinkSecret } from "~/lib/secrets.server";
 import { requireAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { buildReportCustomerNotification } from "~/lib/report-customer-email.server";
@@ -28,7 +29,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   if (!user?.email) return Response.json({ error: "no_email" }, { status: 400 });
 
   const origin = env.APP_URL || new URL(request.url).origin;
-  const secret = env.SESSION_SECRET || "doaction-report-link-secret";
+  const secret = getReportLinkSecret(env);
   const exp = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 14; // 14 days
   const token = await createReportAccessToken(
     { reportId: report.id, email: user.email.toLowerCase(), exp },

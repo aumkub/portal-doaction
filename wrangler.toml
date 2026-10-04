@@ -17,11 +17,10 @@ binding = "ATTACHMENTS"
 bucket_name = "portal-attachments"
 
 [triggers]
-crons = ["0 * * * *"]
+crons = ["*/15 * * * *"]
 
 [vars]
 APP_URL = "https://portal.doaction.co.th"
-SESSION_SECRET = "y8N4vQ2mK7pLx3Rz9tW6cJ1hF5uD0sBa"
 WEBDAV_HOST = "cloud.aumwp.com"
 WEBDAV_USER = "aum"
 WEBDAV_PATH = "/home/Backup"

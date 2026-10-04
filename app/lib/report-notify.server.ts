@@ -1,4 +1,5 @@
 import type { DB } from "~/lib/db.server";
+import { getReportLinkSecret } from "~/lib/secrets.server";
 import { sendEmail } from "~/lib/email.server";
 import { buildReportCustomerNotification } from "~/lib/report-customer-email.server";
 import { createReportAccessToken } from "~/lib/report-access.server";
@@ -34,7 +35,7 @@ export async function notifyReportToClient(params: {
   if (!user?.email) return { ok: false, error: "no_email", status: 400 };
 
   const origin = String(env.APP_URL || params.origin).replace(/\/$/, "");
-  const secret = env.SESSION_SECRET || "doaction-report-link-secret";
+  const secret = getReportLinkSecret(env);
   const exp = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 14; // 14 days
   const token = await createReportAccessToken(
     { reportId: report.id, email: user.email.toLowerCase(), exp },
