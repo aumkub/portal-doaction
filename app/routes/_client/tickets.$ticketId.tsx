@@ -1,4 +1,5 @@
 import { Form, Link, redirect, useNavigation } from "react-router";
+import { ConfirmButton } from "~/components/ui/confirm-button";
 import { ChatThread } from "~/components/tickets/ChatThread";
 import { sendOrHoldTicketEmail } from "~/lib/email-alerts.server";
 import { useEffect, useRef, useState } from "react";
@@ -96,6 +97,46 @@ export async function action({ request, context, params }: any) {
   const ticket = await getOwnTicket(db, user, params.ticketId);
 
   const formData = await request.formData();
+
+  // The client closes their own ticket, e.g. one opened by mistake. Replying
+  // later reopens it, as for any closed ticket.
+  if (formData.get("intent") === "close") {
+    if (ticket.status === "closed") return redirect(`/tickets/${ticket.id}`);
+    const now = Math.floor(Date.now() / 1000);
+    await db.updateTicket(ticket.id, { status: "closed", resolved_at: ticket.resolved_at ?? now });
+    await db.createTicketMessage({
+      id: generateId(),
+      ticket_id: ticket.id,
+      user_id: user.id,
+      message: "ลูกค้าปิด Ticket นี้เอง",
+      is_internal: 0,
+    });
+    const closedClient = await db.getClientByUserId(user.id);
+    const title = `ลูกค้าปิด Ticket: ${ticket.title}`;
+    const body = closedClient?.company_name ?? user.name;
+    const admins = await db.listAdminUsers();
+    await Promise.all(
+      admins.map((admin) =>
+        db.createNotification({
+          id: generateId(),
+          user_id: admin.id,
+          type: "ticket_closed_by_client",
+          title,
+          body,
+          link: `/admin/tickets/${ticket.id}`,
+          read: 0,
+        })
+      )
+    );
+    // No email: nothing for the team to do. In-app + Telegram is enough.
+    await sendTelegramNotification({
+      db,
+      appUrl: env.APP_URL,
+      notification: { title, body, link: `/admin/tickets/${ticket.id}` },
+    });
+    return redirect(`/tickets/${ticket.id}`);
+  }
+
   const parsed = ReplySchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
     return { errors: parsed.error.flatten().fieldErrors };
@@ -313,14 +354,31 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
       <Link to="/tickets" className="text-sm text-muted-ink hover:text-ink mb-4 inline-block">
         {t("back")}
       </Link>
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
           <p className="text-xs font-medium text-faint-ink">#{ticket.id}</p>
-          <h1 className="text-[26px] md:text-[32px] font-bold leading-tight tracking-[-0.02em] text-ink">{ticket.title}</h1>
+          <h1 className="text-[26px] md:text-[32px] font-bold leading-tight tracking-[-0.02em] text-ink break-words">{ticket.title}</h1>
           <p className="mt-1 text-sm text-muted-ink">
             {t("ticket_created_at")} {formatDate(ticket.created_at, lang)}
           </p>
         </div>
+        {ticket.status !== "closed" && (
+          <Form method="post">
+            <input type="hidden" name="intent" value="close" />
+            <ConfirmButton
+              confirmLabel={lang === "en" ? "Close ticket" : "ปิด Ticket"}
+              cancelLabel={lang === "en" ? "Keep open" : "ยังไม่ปิด"}
+              message={
+                lang === "en"
+                  ? "Close this ticket if it was opened by mistake or is no longer needed. You can reopen it any time by sending a new message."
+                  : "ปิดเรื่องนี้ได้ถ้าเปิดผิด หรือไม่ต้องการให้ดำเนินการแล้ว หากต้องการเปิดอีกครั้ง ส่งข้อความใหม่ได้ทุกเมื่อ"
+              }
+              className="inline-flex h-10 items-center rounded-full border border-line bg-white px-4 text-[13px] font-semibold text-ink-soft hover:bg-paper"
+            >
+              {lang === "en" ? "Close ticket" : "ปิด Ticket"}
+            </ConfirmButton>
+          </Form>
+        )}
       </div>
 
       <div className="space-y-4 rounded-[20px] border border-line bg-white p-4 md:p-5">
