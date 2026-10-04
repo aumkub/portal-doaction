@@ -1,7 +1,8 @@
 import { requireCoAdminOrAdmin } from "~/lib/auth.server";
+import { isContractExpired, needsMonthlyReport } from "~/lib/contract";
 import { createDB } from "~/lib/db.server";
 import { useT } from "~/lib/i18n";
-import { formatRelativeTime, formatBytes } from "~/lib/utils";
+import { formatRelativeTime, getMonthName } from "~/lib/utils";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useFetcher } from "react-router";
 import { getBackupList } from "~/lib/backup.server";
@@ -12,31 +13,31 @@ import {
   type BackupResult,
 } from "~/lib/backup";
 import {
-  FaUsers, FaTicket, FaFileLines,
-  FaArrowRight, FaDatabase, FaFolder, FaBoxArchive, FaArrowsRotate, FaChevronDown,
-  FaChevronLeft, FaChevronRight, FaMagnifyingGlass,
+  FaArrowRight, FaArrowsRotate, FaChevronLeft, FaChevronRight, FaMagnifyingGlass, FaPlus,
 } from "react-icons/fa6";
 
-const CLIENTS_PAGE_SIZE = 6;
 const BACKUP_LOG_PAGE_SIZE = 10;
+const DAY = 86400;
 
-type DashboardTicket = {
+type QueueTicket = {
   id: string;
   title: string;
-  priority: string;
   status: string;
   company_name: string;
-  client_id: string;
+  updated_at: number;
 };
 
-type DashboardClient = {
-  id: string;
-  company_name: string;
-  package: "basic" | "standard" | "premium";
-};
+type ReportState = "none" | "draft" | "published" | "sent";
+type ReportRow = { client_id: string; company_name: string; state: ReportState; report_id: string | null };
 
 export function meta() {
   return [{ title: "Admin Overview — do action portal" }];
+}
+
+/** Current year/month in Bangkok time (UTC+7). */
+function bangkokYearMonth() {
+  const d = new Date(Date.now() + 7 * 3600 * 1000);
+  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1 };
 }
 
 export async function loader({ request, context }: any) {
@@ -46,46 +47,57 @@ export async function loader({ request, context }: any) {
     context.cloudflare.env.SESSIONPORTAL
   );
   const db = createDB(context.cloudflare.env.DB);
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
+  const { year, month } = bangkokYearMonth();
 
-  let assignedClientIds: string[] = [];
+  let scopeIds: string[] | undefined;
   if (user.role === "co-admin") {
     const assignments = await db.listCoAdminClients(user.id);
-    assignedClientIds = assignments.map((a) => a.client_id);
+    scopeIds = assignments.map((a) => a.client_id);
   }
+  const inScope = (id: string) => !scopeIds || scopeIds.includes(id);
 
-  const dueReportsQuery =
-    user.role === "co-admin"
-      ? `SELECT COUNT(*) as count FROM monthly_reports WHERE year = ? AND month = ? AND client_id IN (${assignedClientIds.map(() => "?").join(",")})`
-      : "SELECT COUNT(*) as count FROM monthly_reports WHERE year = ? AND month = ?";
-  const dueReportsParams =
-    user.role === "co-admin" ? [year, month, ...assignedClientIds] : [year, month];
-  const openTicketsQuery =
-    user.role === "co-admin"
-      ? `SELECT t.id, t.title, t.priority, t.status, c.company_name, c.id as client_id
-         FROM support_tickets t JOIN clients c ON c.id = t.client_id
-         WHERE t.status IN ('open', 'in_progress') AND t.client_id IN (${assignedClientIds.map(() => "?").join(",")})
-         ORDER BY t.created_at DESC LIMIT 6`
-      : `SELECT t.id, t.title, t.priority, t.status, c.company_name, c.id as client_id
-         FROM support_tickets t JOIN clients c ON c.id = t.client_id
-         WHERE t.status IN ('open', 'in_progress')
-         ORDER BY t.created_at DESC LIMIT 6`;
-  const openTicketsParams = user.role === "co-admin" ? [...assignedClientIds] : [];
-
-  const [allClients, dueReports, openTicketsResult] = await Promise.all([
+  const [allClients, tickets, recentReports, withoutReport] = await Promise.all([
     db.listClients(),
-    context.cloudflare.env.DB.prepare(dueReportsQuery).bind(...dueReportsParams).first(),
-    context.cloudflare.env.DB.prepare(openTicketsQuery).bind(...openTicketsParams).all(),
+    db.listTicketsWithClient(scopeIds),
+    db.listRecentReportsWithClient(1, scopeIds),
+    db.listClientsWithoutReportForMonth(year, month),
   ]);
-  const clients =
-    user.role === "co-admin"
-      ? allClients.filter((c) => assignedClientIds.includes(c.id))
-      : allClients;
+  // Expired contracts are out of scope for day-to-day and report work.
+  const clients = allClients.filter((c) => inScope(c.id) && !isContractExpired(c.contract_end));
+  // Report progress also leaves out our own company.
+  const activeIds = new Set(clients.filter(needsMonthlyReport).map((c) => c.id));
 
-  const urgentTickets: DashboardTicket[] =
-    (openTicketsResult as { results?: DashboardTicket[] }).results ?? [];
+  const unresolved = tickets.filter((t) =>
+    ["open", "in_progress", "waiting"].includes(t.status)
+  );
+  // Waiting on the team: not parked with the client. Oldest activity first.
+  const queue: QueueTicket[] = unresolved
+    .filter((t) => t.status === "open" || t.status === "in_progress")
+    .sort((a, b) => a.updated_at - b.updated_at)
+    .map((t) => ({
+      id: t.id,
+      title: t.title,
+      status: t.status,
+      company_name: t.company_name,
+      updated_at: t.updated_at,
+    }));
+
+  const reportRows: ReportRow[] = [];
+  for (const r of recentReports) {
+    if (r.year !== year || r.month !== month) continue;
+    if (!activeIds.has(r.client_id)) continue;
+    const state: ReportState =
+      r.status !== "published" ? "draft" : r.client_notified_at ? "sent" : "published";
+    reportRows.push({ client_id: r.client_id, company_name: r.company_name, state, report_id: r.id });
+  }
+  for (const c of withoutReport) {
+    if (!inScope(c.id)) continue;
+    reportRows.push({ client_id: c.id, company_name: c.company_name, state: "none", report_id: null });
+  }
+  const order: Record<ReportState, number> = { none: 0, draft: 1, published: 2, sent: 3 };
+  reportRows.sort(
+    (a, b) => order[a.state] - order[b.state] || a.company_name.localeCompare(b.company_name)
+  );
 
   // Fetch backup list — admin only (co-admins skip this)
   let backup: BackupResult = { ok: false, error: "Not available for co-admins" };
@@ -94,7 +106,6 @@ export async function loader({ request, context }: any) {
     backup = await getBackupList(null, context.cloudflare.env.SESSIONPORTAL, {
       cacheOnly: true,
     });
-
     for (const c of allClients) {
       if (c.backup_path) backupPathLabels[c.backup_path] = c.company_name;
     }
@@ -102,152 +113,226 @@ export async function loader({ request, context }: any) {
 
   return {
     totalClients: clients.length,
-    reportsDueThisMonth: (dueReports as { count?: number } | null)?.count ?? 0,
-    openTickets: urgentTickets.length,
-    urgentTickets,
-    clients: clients as DashboardClient[],
+    unresolvedCount: unresolved.length,
+    queue,
+    reportRows,
     userRole: user.role,
     backup,
     backupPathLabels,
     currentMonth: month,
     currentYear: year,
+    now: Math.floor(Date.now() / 1000),
   };
 }
 
-const packageStyles = {
-  basic:    "bg-slate-100 text-slate-600 ring-1 ring-slate-200",
-  standard: "bg-blue-50 text-blue-600 ring-1 ring-blue-200",
-  premium:  "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
-} as const;
-
-const priorityDot = {
-  urgent:  "bg-red-500",
-  high:    "bg-orange-400",
-  medium:  "bg-amber-400",
-  low:     "bg-slate-300",
-} as const;
-
-const statusStyles: Record<string, string> = {
-  open:        "bg-blue-50 text-blue-700 ring-1 ring-blue-200",
-  in_progress: "bg-violet-50 text-violet-700 ring-1 ring-violet-200",
-  waiting:     "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
-  resolved:    "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
-  closed:      "bg-slate-100 text-slate-600 ring-1 ring-slate-200",
+const reportPill: Record<ReportState, string> = {
+  none: "bg-paper text-muted-ink",
+  draft: "bg-[#FFF6C2] text-[#6B5B00]",
+  published: "bg-emerald-50 text-emerald-700",
+  sent: "bg-ink text-white",
 };
 
 function getInitials(name: string) {
-  return name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase();
+  const cleaned = name.replace(/^(บริษัท|บจก\.?|หจก\.?)\s*/, "");
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+  return Array.from(cleaned).slice(0, 2).join("").toUpperCase();
 }
 
-function avatarColor(name: string) {
-  const colors = [
-    "bg-violet-100 text-violet-700",
-    "bg-blue-100 text-blue-700",
-    "bg-emerald-100 text-emerald-700",
-    "bg-orange-100 text-orange-700",
-    "bg-rose-100 text-rose-700",
-    "bg-indigo-100 text-indigo-700",
-    "bg-teal-100 text-teal-700",
-    "bg-pink-100 text-pink-700",
-  ];
-  let hash = 0;
-  for (const c of name) hash = (hash * 31 + c.charCodeAt(0)) & 0xffff;
-  return colors[hash % colors.length];
+function ageLabel(seconds: number, t: (k: any) => string) {
+  const s = Math.max(0, seconds);
+  if (s >= DAY) return t("rd_admin_age_days").replace("{n}", String(Math.floor(s / DAY)));
+  if (s >= 3600) return t("rd_admin_age_hours").replace("{n}", String(Math.floor(s / 3600)));
+  return t("rd_admin_age_minutes").replace("{n}", String(Math.max(1, Math.floor(s / 60))));
 }
 
 export default function AdminOverviewPage({ loaderData }: any) {
   const data = loaderData;
   const { t, lang } = useT();
   const isCoAdmin = data.userRole === "co-admin";
+  const now: number = data.now;
+  const monthName = getMonthName(data.currentMonth, lang);
+  const rows: ReportRow[] = data.reportRows;
+  const queue: QueueTicket[] = data.queue;
+
+  const count = (s: ReportState) => rows.filter((r) => r.state === s).length;
+  const sent = count("sent");
+  const published = count("published");
+  const drafts = count("draft");
+  const notCreated = count("none");
+  const overdue = queue.filter((q) => now - q.updated_at > DAY).length;
+  const sentPct = rows.length ? Math.round((sent / rows.length) * 100) : 0;
+  const publishedPct = rows.length ? Math.round((published / rows.length) * 100) : 0;
+
+  const today = new Date(now * 1000).toLocaleDateString(lang === "en" ? "en-US" : "th-TH", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "Asia/Bangkok",
+  });
+
+  const kpis = [
+    {
+      label: t("rd_admin_kpi_clients"),
+      value: String(data.totalClients),
+      note: t("rd_admin_kpi_clients_note").replace("{n}", String(notCreated)),
+      tone: notCreated > 0 ? "text-[#B4541A]" : "text-muted-ink",
+      href: "/admin/clients",
+    },
+    {
+      label: t("rd_admin_kpi_unresolved"),
+      value: String(data.unresolvedCount),
+      note: t("rd_admin_kpi_overdue_note").replace("{n}", String(overdue)),
+      tone: overdue > 0 ? "text-[#C2410C]" : "text-muted-ink",
+      href: "/admin/tickets",
+    },
+    {
+      label: t("rd_admin_kpi_reports_sent"),
+      value: `${sent}/${rows.length}`,
+      note: t("rd_admin_kpi_reports_note").replace("{n}", String(published + sent)),
+      tone: rows.length > 0 && sent === rows.length ? "text-emerald-700" : "text-muted-ink",
+      href: "/admin/reports",
+    },
+    {
+      label: t("rd_admin_kpi_drafts"),
+      value: String(drafts),
+      note: t("rd_admin_kpi_drafts_note").replace("{n}", String(notCreated)),
+      tone: "text-muted-ink",
+      href: "/admin/reports",
+    },
+  ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900">
-          {isCoAdmin ? "ภาพรวม Co-Admin" : t("admin_overview_title")}
-        </h1>
-        <p className="mt-1 text-sm text-slate-500">
-          {isCoAdmin ? "ข้อมูลสำหรับลูกค้าที่คุณดูแล" : t("admin_overview_subtitle")}
-        </p>
-      </div>
-
-      {/* Stats strip */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="rounded-xl border border-slate-200 bg-white px-5 py-4 flex items-center gap-4">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-50 text-violet-600 shrink-0">
-            <FaUsers className="text-base" />
-          </span>
-          <div>
-            <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">{t("admin_stat_total_clients")}</p>
-            <p className="text-2xl font-semibold text-slate-900 leading-tight">{data.totalClients}</p>
-          </div>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-sm text-muted-ink">{today}</p>
+          <h1 className="mt-1.5 text-[28px] md:text-[32px] font-bold tracking-[-0.02em] text-ink">
+            {data.unresolvedCount > 0
+              ? t("rd_admin_headline_some").replace("{n}", String(data.unresolvedCount))
+              : t("rd_admin_headline_none")}
+          </h1>
         </div>
-        <div className="rounded-xl border border-blue-100 bg-blue-50 px-5 py-4 flex items-center gap-4">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100 text-blue-600 shrink-0">
-            <FaTicket className="text-base" />
-          </span>
-          <div>
-            <p className="text-[11px] font-medium text-blue-600 uppercase tracking-wide">{t("admin_stat_open_tickets")}</p>
-            <p className="text-2xl font-semibold text-blue-700 leading-tight">{data.openTickets}</p>
-          </div>
-        </div>
-        <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-5 py-4 flex items-center gap-4">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600 shrink-0">
-            <FaFileLines className="text-base" />
-          </span>
-          <div>
-            <p className="text-[11px] font-medium text-emerald-600 uppercase tracking-wide">{t("admin_stat_reports_due")}</p>
-            <p className="text-2xl font-semibold text-emerald-700 leading-tight">{data.reportsDueThisMonth}</p>
-          </div>
+        <div className="flex flex-wrap gap-2">
+          {!isCoAdmin && (
+            <a
+              href="/admin/clients/new"
+              className="inline-flex h-10 items-center gap-1.5 rounded-full border border-line bg-white px-4 text-[13px] font-semibold text-ink hover:bg-paper"
+            >
+              <FaPlus className="text-[10px]" />
+              {t("rd_admin_new_client")}
+            </a>
+          )}
+          <a
+            href="/admin/reports/new"
+            className="inline-flex h-10 items-center rounded-full bg-ink px-4 text-[13px] font-semibold text-white hover:bg-black"
+          >
+            {t("rd_admin_create_report").replace("{month}", monthName)}
+          </a>
         </div>
       </div>
 
-      {/* Main grid */}
-      <div className="grid gap-5 lg:grid-cols-2">
-        <ClientsPanel clients={data.clients} t={t} />
+      {/* KPIs */}
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {kpis.map((k) => (
+          <a
+            key={k.label}
+            href={k.href}
+            className="rounded-[18px] border border-line bg-white p-4 sm:p-[18px] hover:border-ink/20 transition-colors"
+          >
+            <p className="text-[13px] text-muted-ink">{k.label}</p>
+            <p className="mt-2 font-display text-[28px] sm:text-[34px] font-bold leading-none tracking-[-0.03em] tabular-nums text-ink">
+              {k.value}
+            </p>
+            <p className={`mt-2 text-xs ${k.tone}`}>{k.note}</p>
+          </a>
+        ))}
+      </section>
 
-        {/* Open Tickets */}
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-            <h2 className="text-sm font-semibold text-slate-900">{t("admin_section_quick_reply")}</h2>
-            <a href="/admin/tickets" className="inline-flex items-center gap-1 text-xs font-medium text-violet-600 hover:text-violet-700 transition-colors">
-              {t("admin_open_tickets_link")} <FaArrowRight className="text-[9px]" />
+      <section className="grid gap-4 lg:grid-cols-2">
+        {/* Waiting on team */}
+        <div className="min-w-0 overflow-hidden rounded-[20px] border border-line bg-white">
+          <div className="flex items-center justify-between gap-3 border-b border-line-soft px-5 py-[18px]">
+            <h2 className="text-[16px] font-semibold text-ink">{t("rd_admin_queue_title")}</h2>
+            <a href="/admin/tickets" className="inline-flex items-center gap-1 text-xs text-muted-ink hover:text-ink">
+              {t("rd_admin_queue_sort")} <FaArrowRight className="text-[9px]" />
             </a>
           </div>
-          <div className="divide-y divide-slate-50">
-            {data.urgentTickets.length === 0 ? (
-              <p className="px-5 py-8 text-center text-sm text-slate-500">{t("admin_no_urgent")}</p>
-            ) : (
-              data.urgentTickets.map((ticket: DashboardTicket) => (
+          {queue.length === 0 ? (
+            <p className="px-5 py-10 text-center text-sm text-muted-ink">{t("rd_admin_queue_empty")}</p>
+          ) : (
+            queue.slice(0, 8).map((q) => {
+              const age = now - q.updated_at;
+              const late = age > DAY;
+              return (
                 <a
-                  key={ticket.id}
-                  href={`/admin/tickets/${ticket.id}`}
-                  className="flex items-start gap-3 px-5 py-3 hover:bg-slate-50 transition-colors group"
+                  key={q.id}
+                  href={`/admin/tickets/${q.id}`}
+                  className="flex items-center gap-3.5 border-b border-[#F4F2EC] px-5 py-3.5 last:border-b-0 hover:bg-paper/60"
                 >
-                  <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${priorityDot[ticket.priority as keyof typeof priorityDot] ?? "bg-slate-300"}`} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-800 truncate group-hover:text-slate-900 leading-snug">
-                      {ticket.title}
-                    </p>
-                    <p className="text-xs text-slate-500 mt-0.5">{ticket.company_name}</p>
+                  <span
+                    className={`min-w-[54px] shrink-0 rounded-lg py-1 text-center text-xs font-bold tabular-nums ${
+                      late ? "bg-[#FDE7DA] text-[#B4541A]" : "bg-paper text-ink-soft"
+                    }`}
+                  >
+                    {ageLabel(age, t)}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-ink">{q.title}</p>
+                    <p className="mt-0.5 truncate text-xs text-faint-ink">{q.company_name}</p>
                   </div>
-                  <span className={`shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full ${statusStyles[ticket.status] ?? ""}`}>
-                    {ticket.status.replace("_", " ")}
+                  <span className="hidden shrink-0 whitespace-nowrap text-xs text-muted-ink sm:inline">
+                    {t(`status_${q.status}` as any)}
                   </span>
                 </a>
-              ))
-            )}
-          </div>
+              );
+            })
+          )}
         </div>
-      </div>
 
-      {/* Backup — admin only */}
+        {/* Report progress */}
+        <div className="min-w-0 rounded-[20px] border border-line bg-white p-5">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-[16px] font-semibold text-ink">
+              {t("rd_admin_reports_title").replace("{month}", monthName)}
+            </h2>
+            <span className="text-[13px] font-semibold tabular-nums text-ink">
+              {t("rd_admin_reports_sent_of")
+                .replace("{sent}", String(sent))
+                .replace("{total}", String(rows.length))}
+            </span>
+          </div>
+          <div className="mb-[18px] mt-3.5 flex h-2 overflow-hidden rounded-full bg-line-soft">
+            <span className="bg-ink" style={{ width: `${sentPct}%` }} />
+            <span className="bg-emerald-400" style={{ width: `${publishedPct}%` }} />
+          </div>
+          {rows.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-ink">{t("admin_clients_empty")}</p>
+          ) : (
+            <div className="flex max-h-[380px] flex-col overflow-y-auto">
+              {rows.map((r) => (
+                <a
+                  key={r.client_id}
+                  href={r.report_id ? `/admin/reports/${r.report_id}` : `/admin/clients/${r.client_id}`}
+                  className="flex items-center gap-3 border-b border-dashed border-[#EDEBE4] py-2.5 last:border-b-0"
+                >
+                  <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px] bg-paper text-xs font-semibold text-ink">
+                    {getInitials(r.company_name)}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm text-ink">{r.company_name}</span>
+                  <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${reportPill[r.state]}`}>
+                    {t(`rd_admin_report_${r.state}` as any)}
+                  </span>
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* Site health — admin only */}
       {!isCoAdmin && (
         <BackupSection
           backup={data.backup}
@@ -321,7 +406,7 @@ function BackupSection({
     fetcher.submit(null, { method: "post", action: "/api/admin/backup-refresh" });
   }, [initialBackup, fetcher]);
 
-  const [tab, setTab] = useState<"log" | "sites">("log");
+  const [tab, setTab] = useState<"log" | "sites">("sites");
 
   const logCount = useMemo(
     () => (backup.ok ? buildBackupLog(backup.entries, backupPathLabels).length : 0),
@@ -330,59 +415,51 @@ function BackupSection({
   const siteCount = backup.ok ? backup.entries.length : 0;
 
   const tabClass = (active: boolean) =>
-    `inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-      active
-        ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200"
-        : "text-slate-500 hover:text-slate-700"
+    `inline-flex h-8 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-medium transition-colors ${
+      active ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-muted-ink hover:text-ink"
     }`;
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden flex flex-col">
-      <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-slate-100">
-        <div className="flex items-center gap-2 min-w-0">
-          <FaBoxArchive className="text-emerald-500 text-sm shrink-0" />
-          <h2 className="text-sm font-semibold text-slate-900">{t("admin_backup_title")}</h2>
-          {backup.ok && (
-            <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0 ${
-              backup.fromCache
-                ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
-                : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-            }`}>
-              {backup.fromCache ? t("admin_backup_cached") : t("admin_backup_live")}
-              {` · ${formatRelativeTime(backup.fetchedAt, lang)}`}
-            </span>
-          )}
+    <section className="overflow-hidden rounded-[20px] border border-line bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-5">
+        <div className="min-w-0">
+          <h2 className="text-[16px] font-semibold text-ink">{t("rd_admin_health_title")}</h2>
+          <p className="mt-0.5 text-xs text-muted-ink">
+            {t("rd_admin_health_meta")}
+            {backup.ok &&
+              ` · ${backup.fromCache ? t("admin_backup_cached") : t("admin_backup_live")} ${formatRelativeTime(backup.fetchedAt, lang)}`}
+          </p>
         </div>
         <button
           type="button"
           disabled={refreshing}
           onClick={onRefresh}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors shrink-0"
+          className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full border border-line bg-white px-4 text-[13px] font-semibold text-ink hover:bg-paper disabled:opacity-50"
         >
-          <FaArrowsRotate className={`text-[10px] ${refreshing ? "animate-spin" : ""}`} />
+          <FaArrowsRotate className={`text-[11px] ${refreshing ? "animate-spin" : ""}`} />
           {refreshing ? t("admin_backup_refreshing") : t("admin_backup_refresh")}
         </button>
       </div>
 
-      <div className="flex items-center gap-1 px-3 py-2 border-b border-slate-100 bg-slate-50/60">
-        <button type="button" onClick={() => setTab("log")} className={tabClass(tab === "log")}>
-          <FaBoxArchive className="text-[10px]" />
-          {t("admin_backup_log_title")}
-          {logCount > 0 && <span className="text-slate-400">({logCount})</span>}
-        </button>
-        <button type="button" onClick={() => setTab("sites")} className={tabClass(tab === "sites")}>
-          <FaDatabase className="text-[10px]" />
-          {t("admin_backup_sites")}
-          {siteCount > 0 && <span className="text-slate-400">({siteCount})</span>}
-        </button>
+      <div className="px-5 pb-1 pt-4">
+        <div className="inline-flex rounded-full bg-paper p-[3px]">
+          <button type="button" onClick={() => setTab("sites")} className={tabClass(tab === "sites")}>
+            {t("admin_backup_sites")}
+            {siteCount > 0 && <span className="text-faint-ink">{siteCount}</span>}
+          </button>
+          <button type="button" onClick={() => setTab("log")} className={tabClass(tab === "log")}>
+            {t("admin_backup_log_title")}
+            {logCount > 0 && <span className="text-faint-ink">{logCount}</span>}
+          </button>
+        </div>
       </div>
 
       {tab === "log" ? (
         <BackupLogPanel backup={backup} backupPathLabels={backupPathLabels} t={t} lang={lang} />
       ) : (
-        <BackupPanel backup={backup} t={t} lang={lang} />
+        <BackupPanel backup={backup} backupPathLabels={backupPathLabels} t={t} lang={lang} />
       )}
-    </div>
+    </section>
   );
 }
 
@@ -442,20 +519,20 @@ function BackupLogPanel({
 
   return (
     <div className="flex flex-col">
-      <div className="px-5 py-3 border-b border-slate-100">
-        <p className="text-[11px] text-slate-500">{t("admin_backup_log_subtitle")}</p>
+      <div className="px-5 py-3 border-b border-line-soft">
+        <p className="text-[11px] text-muted-ink">{t("admin_backup_log_subtitle")}</p>
       </div>
 
       {backup.ok && allLogItems.length > 0 && (
-        <div className="px-5 py-3 border-b border-slate-100">
+        <div className="px-5 py-3 border-b border-line-soft">
           <div className="relative">
-            <FaMagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs" />
+            <FaMagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint-ink text-xs" />
             <input
               type="search"
               placeholder={t("admin_backup_log_search")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400 transition"
+              className="w-full h-10 rounded-xl border border-line bg-white pl-9 pr-3.5 text-sm text-ink placeholder:text-faint-ink focus:outline-none focus:ring-2 focus:ring-ink/10 focus:border-ink/40 transition"
             />
           </div>
         </div>
@@ -464,57 +541,57 @@ function BackupLogPanel({
       {!backup.ok ? (
         <div className="px-5 py-4">
           {(backup as { error: string }).error === "not_loaded" ? (
-            <p className="text-sm text-slate-500">{t("admin_backup_loading")}</p>
+            <p className="text-sm text-muted-ink">{t("admin_backup_loading")}</p>
           ) : (
-            <p className="text-sm text-red-600">
+            <p className="text-sm text-[#B4541A]">
               {t("admin_backup_error")}: {(backup as { error: string }).error}
             </p>
           )}
         </div>
       ) : allLogItems.length === 0 ? (
-        <p className="px-5 py-8 text-center text-sm text-slate-500">{t("admin_backup_log_empty")}</p>
+        <p className="px-5 py-8 text-center text-sm text-muted-ink">{t("admin_backup_log_empty")}</p>
       ) : filtered.length === 0 ? (
-        <p className="px-5 py-8 text-center text-sm text-slate-500">{t("admin_backup_log_no_results")}</p>
+        <p className="px-5 py-8 text-center text-sm text-muted-ink">{t("admin_backup_log_no_results")}</p>
       ) : (
         <>
           <div className="overflow-x-auto flex-1">
             <table className="w-full text-left">
               <thead>
-                <tr className="border-b border-slate-100 bg-slate-50/80">
-                  <th className="px-5 py-2.5 text-[10px] font-medium text-slate-500 uppercase tracking-wide">
+                <tr className="border-b border-line-soft bg-transparent">
+                  <th className="px-5 py-2.5 text-[11px] font-medium text-muted-ink">
                     {t("admin_backup_log_site")}
                   </th>
-                  <th className="px-3 py-2.5 text-[10px] font-medium text-slate-500 uppercase tracking-wide hidden sm:table-cell">
+                  <th className="px-3 py-2.5 text-[11px] font-medium text-muted-ink hidden sm:table-cell">
                     {t("admin_backup_log_file")}
                   </th>
-                  <th className="px-5 py-2.5 text-[10px] font-medium text-slate-500 uppercase tracking-wide text-right">
+                  <th className="px-5 py-2.5 text-[11px] font-medium text-muted-ink text-right">
                     {t("admin_backup_log_date")}
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-50">
+              <tbody className="divide-y divide-[#F4F2EC]">
                 {pageItems.map((item) => (
-                  <tr key={`${item.siteName}-${item.backup.relativePath ?? item.backup.name}`} className="hover:bg-slate-50/80">
+                  <tr key={`${item.siteName}-${item.backup.relativePath ?? item.backup.name}`} className="hover:bg-paper/60">
                     <td className="px-5 py-2.5">
-                      <p className="text-xs font-medium text-slate-800 truncate max-w-[140px] sm:max-w-none">
+                      <p className="text-xs font-medium text-ink truncate max-w-[140px] sm:max-w-none">
                         {item.clientLabel ?? item.siteName}
                       </p>
                       {item.clientLabel ? (
-                        <p className="text-[12px] text-slate-400 font-mono truncate mt-0.5">
+                        <p className="text-[12px] text-faint-ink font-mono truncate mt-0.5">
                           {item.siteName}
                         </p>
                       ) : null}
-                      <p className="text-[12px] text-slate-500 font-mono truncate mt-0.5 sm:hidden">
+                      <p className="text-[12px] text-muted-ink font-mono truncate mt-0.5 sm:hidden">
                         {item.backup.name}
                       </p>
                     </td>
                     <td className="px-3 py-2.5 hidden sm:table-cell">
-                      <p className="text-[12px] text-slate-600 font-mono truncate max-w-[200px]">
+                      <p className="text-[12px] text-ink-soft font-mono truncate max-w-[200px]">
                         {item.backup.name}
                       </p>
                     </td>
                     <td className="px-5 py-2.5 text-right whitespace-nowrap">
-                      <p className="text-xs text-slate-600">
+                      <p className="text-xs text-ink-soft">
                         {formatBackupDate(item.backup, lang)}
                       </p>
                     </td>
@@ -523,9 +600,9 @@ function BackupLogPanel({
               </tbody>
             </table>
           </div>
-          <div className="border-t border-slate-100 bg-slate-50/50">
+          <div className="border-t border-line-soft bg-transparent">
             {search.trim() && (
-              <p className="px-5 pt-2.5 text-[11px] text-slate-500">
+              <p className="px-5 pt-2.5 text-[11px] text-muted-ink">
                 {t("admin_backup_log_showing")
                   .replace("{shown}", String(filtered.length))
                   .replace("{total}", String(allLogItems.length))}
@@ -537,12 +614,12 @@ function BackupLogPanel({
                   type="button"
                   onClick={() => setPage((p) => Math.max(0, p - 1))}
                   disabled={safePage === 0}
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  className="inline-flex items-center gap-1 h-10 rounded-full border border-line bg-white px-3.5 text-xs font-semibold text-ink hover:bg-paper disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
                   <FaChevronLeft className="text-[9px]" />
                   {t("admin_pagination_prev")}
                 </button>
-                <span className="text-[11px] text-slate-500 tabular-nums">
+                <span className="text-[11px] text-muted-ink tabular-nums">
                   {t("admin_pagination_page")
                     .replace("{current}", String(safePage + 1))
                     .replace("{total}", String(totalPages))}
@@ -551,7 +628,7 @@ function BackupLogPanel({
                   type="button"
                   onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
                   disabled={safePage >= totalPages - 1}
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  className="inline-flex items-center gap-1 h-10 rounded-full border border-line bg-white px-3.5 text-xs font-semibold text-ink hover:bg-paper disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
                   {t("admin_pagination_next")}
                   <FaChevronRight className="text-[9px]" />
@@ -567,200 +644,115 @@ function BackupLogPanel({
 
 function BackupPanel({
   backup,
+  backupPathLabels,
   t,
   lang,
 }: {
   backup: BackupResult;
+  backupPathLabels: Record<string, string>;
   t: (k: any) => string;
   lang: "th" | "en";
 }) {
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<string | null>(null);
   const entries = backup.ok ? backup.entries : [];
+  const now = Math.floor(Date.now() / 1000);
 
-  // Collapse all site rows by default whenever backup data loads or refreshes
-  useEffect(() => {
-    if (!backup.ok || entries.length === 0) return;
-    setCollapsed(new Set(entries.map((e) => e.name)));
-  }, [backup.ok, backup.ok ? backup.fetchedAt : 0]);
-  const allBackups = entries.flatMap((e) => filterBackupSnapshots(e.children ?? []));
-  const latestBackup = allBackups.reduce<BackupEntry | null>((best, b) => {
-    const ts = backupTimestamp(b);
-    const bestTs = best ? backupTimestamp(best) : 0;
-    return ts > bestTs ? b : best;
-  }, null);
-  const totalBackups = allBackups.length;
-  const siteNames = entries.map((e) => e.name);
-  const allCollapsed = siteNames.length > 0 && siteNames.every((n) => collapsed.has(n));
-  const allExpanded = siteNames.every((n) => !collapsed.has(n));
-
-  const expandAll = () => setCollapsed(new Set());
-  const collapseAll = () => setCollapsed(new Set(siteNames));
-
-  return (
-    <div className="flex flex-col">
-      {!backup.ok ? (
-        <div className="px-5 py-4">
-          {(backup as { error: string }).error === "not_loaded" ? (
-            <p className="text-sm text-slate-500">{t("admin_backup_loading")}</p>
-          ) : (
-            <p className="text-sm text-red-600">
-              {t("admin_backup_error")}: {(backup as { error: string }).error}
-            </p>
-          )}
-        </div>
-      ) : entries.length === 0 ? (
-        <p className="px-5 py-8 text-center text-sm text-slate-500">{t("admin_backup_empty")}</p>
-      ) : (
-        <>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-slate-100 border-b border-slate-100">
-            <div className="bg-white px-5 py-3">
-              <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">{t("admin_backup_sites")}</p>
-              <p className="text-xl font-semibold text-slate-800 leading-tight mt-0.5">{entries.length}</p>
-            </div>
-            <div className="bg-white px-5 py-3">
-              <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">{t("admin_backup_items_total")}</p>
-              <p className="text-xl font-semibold text-slate-800 leading-tight mt-0.5">{totalBackups}</p>
-            </div>
-            <div className="bg-white px-5 py-3">
-              <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">{t("admin_backup_last")}</p>
-              <p className="text-sm font-medium text-slate-700 mt-0.5 truncate">
-                {latestBackup
-                  ? formatBackupDate(latestBackup, lang)
-                  : "—"}
-              </p>
-            </div>
-            <div className="bg-white px-5 py-3 hidden sm:block">
-              <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">{t("admin_backup_host")}</p>
-              <p className="text-sm font-medium text-slate-700 mt-0.5 font-mono">cloud.aumwp.com</p>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-end gap-2 px-5 py-2 border-b border-slate-50 bg-slate-50/30">
-            <button
-              type="button"
-              onClick={expandAll}
-              disabled={allExpanded}
-              className="text-[11px] font-medium text-violet-600 hover:text-violet-700 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {t("admin_backup_expand_all")}
-            </button>
-            <span className="text-slate-300">|</span>
-            <button
-              type="button"
-              onClick={collapseAll}
-              disabled={allCollapsed}
-              className="text-[11px] font-medium text-slate-500 hover:text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {t("admin_backup_collapse_all")}
-            </button>
-          </div>
-
-          <ul className="divide-y divide-slate-100">
-            {entries.map((entry) => (
-              <BackupSiteRow
-                key={entry.name}
-                entry={entry}
-                collapsed={collapsed.has(entry.name)}
-                onToggle={() => {
-                  setCollapsed((prev) => {
-                    const next = new Set(prev);
-                    if (next.has(entry.name)) next.delete(entry.name);
-                    else next.add(entry.name);
-                    return next;
-                  });
-                }}
-                t={t}
-                lang={lang}
-              />
-            ))}
-          </ul>
-        </>
-      )}
-    </div>
+  const sites = useMemo(
+    () =>
+      entries.map((entry) => {
+        const snapshots = filterBackupSnapshots(entry.children ?? []);
+        const latest = snapshots.reduce<BackupEntry | null>(
+          (best, b) => (backupTimestamp(b) > (best ? backupTimestamp(best) : 0) ? b : best),
+          null
+        );
+        const ts = latest ? backupTimestamp(latest) : 0;
+        return { entry, snapshots, latest, healthy: ts > 0 && now - ts < 2 * DAY };
+      }),
+    [entries, now]
   );
-}
+  const totalBackups = sites.reduce((n, s) => n + s.snapshots.length, 0);
+  const openSite = sites.find((s) => s.entry.name === selected) ?? null;
 
-function ClientsPanel({
-  clients,
-  t,
-}: {
-  clients: DashboardClient[];
-  t: (k: any) => string;
-}) {
-  const [page, setPage] = useState(0);
-  const totalPages = Math.max(1, Math.ceil(clients.length / CLIENTS_PAGE_SIZE));
-  const safePage = Math.min(page, totalPages - 1);
-  const pageClients = clients.slice(
-    safePage * CLIENTS_PAGE_SIZE,
-    safePage * CLIENTS_PAGE_SIZE + CLIENTS_PAGE_SIZE
-  );
-  const showPagination = clients.length > CLIENTS_PAGE_SIZE;
-
-  useEffect(() => {
-    if (page > totalPages - 1) setPage(Math.max(0, totalPages - 1));
-  }, [clients.length, page, totalPages]);
-
-  return (
-    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-        <h2 className="text-sm font-semibold text-slate-900">
-          {t("admin_section_clients")}
-          {clients.length > 0 && (
-            <span className="ml-2 text-[11px] font-normal text-slate-400">({clients.length})</span>
-          )}
-        </h2>
-        <a href="/admin/clients" className="inline-flex items-center gap-1 text-xs font-medium text-violet-600 hover:text-violet-700 transition-colors">
-          {t("admin_view_all")} <FaArrowRight className="text-[9px]" />
-        </a>
-      </div>
-      <div className="divide-y divide-slate-50">
-        {clients.length === 0 ? (
-          <p className="px-5 py-8 text-center text-sm text-slate-500">{t("admin_clients_empty")}</p>
+  if (!backup.ok) {
+    return (
+      <div className="px-5 py-5">
+        {(backup as { error: string }).error === "not_loaded" ? (
+          <p className="text-sm text-muted-ink">{t("admin_backup_loading")}</p>
         ) : (
-          pageClients.map((client) => (
-            <a
-              key={client.id}
-              href={`/admin/clients/${client.id}`}
-              className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50 transition-colors group"
-            >
-              <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${avatarColor(client.company_name)}`}>
-                {getInitials(client.company_name)}
-              </span>
-              <span className="flex-1 min-w-0 text-sm font-medium text-slate-800 truncate group-hover:text-slate-900">
-                {client.company_name}
-              </span>
-              <span className={`shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full capitalize ${packageStyles[client.package]}`}>
-                {client.package}
-              </span>
-            </a>
-          ))
+          <p className="text-sm text-[#B4541A]">
+            {t("admin_backup_error")}: {(backup as { error: string }).error}
+          </p>
         )}
       </div>
-      {showPagination && (
-        <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-slate-100 bg-slate-50/50">
-          <button
-            type="button"
-            onClick={() => setPage((p) => Math.max(0, p - 1))}
-            disabled={safePage === 0}
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            <FaChevronLeft className="text-[9px]" />
-            {t("admin_pagination_prev")}
-          </button>
-          <span className="text-[11px] text-slate-500 tabular-nums">
-            {t("admin_pagination_page")
-              .replace("{current}", String(safePage + 1))
-              .replace("{total}", String(totalPages))}
-          </span>
-          <button
-            type="button"
-            onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-            disabled={safePage >= totalPages - 1}
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            {t("admin_pagination_next")}
-            <FaChevronRight className="text-[9px]" />
-          </button>
+    );
+  }
+  if (entries.length === 0) {
+    return <p className="px-5 py-8 text-center text-sm text-muted-ink">{t("admin_backup_empty")}</p>;
+  }
+
+  return (
+    <div className="px-5 pb-5 pt-3">
+      <p className="mb-3 text-xs text-muted-ink">
+        {t("admin_backup_items_total")}: <span className="font-semibold tabular-nums text-ink">{totalBackups}</span>
+        {" · "}
+        {t("admin_backup_host")}: <span className="font-mono">cloud.aumwp.com</span>
+      </p>
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-[repeat(auto-fill,minmax(200px,1fr))]">
+        {sites.map(({ entry, snapshots, latest, healthy }) => {
+          const active = selected === entry.name;
+          return (
+            <button
+              key={entry.name}
+              type="button"
+              onClick={() => setSelected(active ? null : entry.name)}
+              disabled={snapshots.length === 0}
+              aria-expanded={active}
+              title={healthy ? undefined : latest ? t("rd_admin_health_stale") : t("rd_admin_health_no_backup")}
+              className={`min-h-[40px] rounded-[14px] border p-3.5 text-left transition-colors ${
+                healthy ? "border-[#EDEBE4] bg-white" : "border-[#F6D3B0] bg-[#FFF7EE]"
+              } ${active ? "ring-2 ring-ink/15" : "hover:border-ink/20"} disabled:cursor-default`}
+            >
+              <div className="flex items-center gap-2">
+                <span className={`h-2 w-2 shrink-0 rounded-full ${healthy ? "bg-[#22A55B]" : "bg-[#F08A24]"}`} />
+                <span className="truncate text-[13px] font-semibold text-ink">
+                  {backupPathLabels[entry.name] ?? entry.name}
+                </span>
+              </div>
+              {backupPathLabels[entry.name] && (
+                <p className="mt-0.5 truncate pl-4 font-mono text-[11px] text-faint-ink">{entry.name}</p>
+              )}
+              <div className="mt-2.5 flex justify-between gap-2 text-xs text-muted-ink">
+                <span className="font-semibold tabular-nums text-ink">
+                  {t("admin_backup_items_count").replace("{count}", String(snapshots.length))}
+                </span>
+                <span className="truncate">
+                  {latest ? formatBackupDate(latest, lang) : t("rd_admin_health_no_backup")}
+                </span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {openSite && (
+        <div className="mt-3 overflow-hidden rounded-[14px] border border-line">
+          <div className="border-b border-line-soft bg-paper/60 px-4 py-2.5 text-[13px] font-semibold text-ink">
+            {backupPathLabels[openSite.entry.name] ?? openSite.entry.name}
+          </div>
+          <ul>
+            {openSite.snapshots.map((b) => (
+              <li
+                key={b.relativePath ?? b.name}
+                className="flex items-center gap-3 border-b border-[#F4F2EC] px-4 py-2.5 last:border-b-0"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-mono text-xs text-ink-soft">{b.name}</p>
+                  <p className="mt-0.5 text-[11px] text-faint-ink">{t("admin_backup_snapshot")}</p>
+                </div>
+                <span className="shrink-0 text-xs text-muted-ink">{formatBackupDate(b, lang)}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>
@@ -784,74 +776,4 @@ function formatBackupDate(entry: BackupEntry, lang: "th" | "en"): string {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-function BackupSiteRow({
-  entry,
-  collapsed,
-  onToggle,
-  t,
-  lang,
-}: {
-  entry: BackupEntry;
-  collapsed: boolean;
-  onToggle: () => void;
-  t: (k: any) => string;
-  lang: "th" | "en";
-}) {
-  const backups = filterBackupSnapshots(entry.children ?? []);
-  const hasBackups = backups.length > 0;
-  const open = hasBackups && !collapsed;
-
-  return (
-    <li className="group">
-      <button
-        type="button"
-        onClick={hasBackups ? onToggle : undefined}
-        disabled={!hasBackups}
-        aria-expanded={open}
-        className={`w-full flex items-center gap-3 px-5 py-3 text-left transition-colors ${
-          hasBackups ? "hover:bg-slate-50 cursor-pointer" : "cursor-default bg-slate-50/50"
-        } ${open ? "bg-slate-50/80" : "bg-white"}`}
-      >
-        <span
-          className={`shrink-0 flex h-5 w-5 items-center justify-center rounded text-slate-400 transition-transform duration-200 ${
-            open ? "rotate-0" : "-rotate-90"
-          } ${!hasBackups ? "opacity-0" : ""}`}
-        >
-          <FaChevronDown className="text-[10px]" />
-        </span>
-        <FaFolder className={`text-base shrink-0 ${open ? "text-amber-500" : "text-amber-400"}`} />
-        <span className="flex-1 min-w-0 text-sm font-semibold text-slate-800 truncate">{entry.name}</span>
-        <span className="shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 ring-1 ring-violet-100">
-          {t("admin_backup_items_count").replace("{count}", String(backups.length))}
-        </span>
-      </button>
-
-      <div
-        className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${
-          open ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
-        }`}
-      >
-        <div className="overflow-hidden">
-          {hasBackups && (
-            <ul className="divide-y divide-slate-50 border-t border-slate-100 bg-slate-50/30">
-              {backups.map((backup) => (
-                <li key={backup.relativePath ?? backup.name} className="flex items-center gap-3 pl-12 pr-5 py-2.5 hover:bg-white/80">
-                  <FaBoxArchive className="text-emerald-500 text-sm shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-slate-700 font-mono truncate">{backup.name}</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">{t("admin_backup_snapshot")}</p>
-                  </div>
-                  <span className="shrink-0 text-xs text-slate-500 hidden sm:block">
-                    {formatBackupDate(backup, lang)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </div>
-    </li>
-  );
 }

@@ -162,12 +162,17 @@ export default function AdminReportDetailPage({
           { label: periodTitle },
         ]}
       />
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${report.status === "published" ? (report.client_notified_at != null ? "bg-ink text-white" : "bg-emerald-50 text-emerald-700") : "bg-[#FFF6C2] text-[#6B5B00]"}`}>
+          {report.status === "published"
+            ? report.client_notified_at != null ? t("admin_report_email_badge_sent") : t("admin_report_status_published")
+            : t("admin_report_status_draft")}
+        </span>
         <a
           href={`/reports/${report.id}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+          className="inline-flex h-10 items-center rounded-full border border-line bg-white px-5 text-[13px] font-semibold text-ink hover:bg-paper"
         >
           {t("admin_reports_preview")}
         </a>

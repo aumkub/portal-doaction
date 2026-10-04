@@ -9,7 +9,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
-import { MobileSidebarTrigger, type NavBadges } from "~/components/layout/Sidebar";
+import { ClientTopNav, MobileSidebarTrigger, type NavBadges } from "~/components/layout/Sidebar";
 import { formatRelativeTime } from "~/lib/utils";
 import { useT, LanguageSwitcher } from "~/lib/i18n";
 import type { User, Notification } from "~/types";
@@ -70,7 +70,7 @@ function NotificationDropdown({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
-          className="relative h-9 w-9 rounded-full border border-hairline bg-canvas text-steel transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
+          className="relative h-10 w-10 rounded-full border border-line bg-white hover:bg-paper text-steel transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
           aria-label={t("topbar_notifications")}
         >
           <FaBell className="mx-auto h-4 w-4" aria-hidden="true" />
@@ -83,16 +83,16 @@ function NotificationDropdown({
         </button>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="end" className="w-80">
-        <div className="flex items-center justify-between px-3 py-2 border-b border-hairline-soft">
-          <span className="text-sm font-semibold text-ink">
+      <DropdownMenuContent align="end" className="w-[min(22rem,calc(100vw-2rem))] p-0 overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-line-soft">
+          <span className="text-[15px] font-semibold text-ink">
             {t("topbar_notifications")}
           </span>
           {unread.length > 0 && (
             <Form method="post" action="/api/notifications/read">
               <button
                 type="submit"
-                className="text-xs text-brand-blue hover:text-blue-pressed transition-colors"
+                className="text-xs font-medium text-muted-ink hover:text-ink transition-colors"
               >
                 {t("topbar_mark_all_read")}
               </button>
@@ -101,9 +101,9 @@ function NotificationDropdown({
         </div>
 
         {notifications.length === 0 ? (
-          <div className="px-3 py-8 text-center">
-            <FaBell className="mx-auto mb-1 text-2xl text-stone" aria-hidden="true" />
-            <p className="text-sm text-stone">{t("topbar_no_notifications")}</p>
+          <div className="px-4 py-10 text-center">
+            <FaBell className="mx-auto mb-2 text-base text-faint-ink" aria-hidden="true" />
+            <p className="text-sm text-muted-ink">{t("topbar_no_notifications")}</p>
           </div>
         ) : (
           <div className="max-h-80 overflow-y-auto">
@@ -116,8 +116,8 @@ function NotificationDropdown({
                 <input type="hidden" name="id" value={n.id} />
                 <button
                   type="submit"
-                  className={`w-full text-left px-3 py-3 transition-colors border-b border-hairline-soft last:border-0 ${
-                    !n.read ? "bg-surface" : ""
+                  className={`w-full text-left px-5 py-3.5 transition-colors hover:bg-paper border-b border-line-soft last:border-0 ${
+                    !n.read ? "bg-paper/60" : ""
                   }`}
                 >
                   <div className="flex items-start gap-2">
@@ -129,20 +129,20 @@ function NotificationDropdown({
                       )}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-ink leading-tight">
+                      <p className="text-[13px] font-medium text-ink leading-tight">
                         {n.title}
                       </p>
                       {n.body && (
-                        <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed truncate">
+                        <p className="text-xs text-muted-ink mt-0.5 leading-relaxed truncate">
                           {n.body}
                         </p>
                       )}
-                      <p className="text-[11px] text-stone mt-1">
+                      <p className="text-[11px] text-faint-ink mt-1 tabular-nums">
                         {formatRelativeTime(n.created_at, lang)}
                       </p>
                     </div>
                     {!n.read && (
-                      <span className="w-2 h-2 bg-brand-yellow rounded-full mt-1.5 shrink-0" />
+                      <span className="w-1.5 h-1.5 bg-brand-yellow rounded-full mt-1.5 shrink-0" />
                     )}
                   </div>
                 </button>
@@ -150,8 +150,8 @@ function NotificationDropdown({
             ))}
           </div>
         )}
-        <div className="border-t border-hairline-soft px-3 py-2">
-          <a href={allHref} className="text-xs text-brand-blue hover:text-blue-pressed">
+        <div className="border-t border-line-soft px-5 py-3">
+          <a href={allHref} className="text-[13px] font-semibold text-ink hover:underline underline-offset-4">
             {t("view_all")}
           </a>
         </div>
@@ -177,7 +177,7 @@ function UserAvatar({
   }, [src]);
 
   return (
-    <Avatar className="h-7 w-7 bg-slate-900 text-white">
+    <Avatar className="h-8 w-8 bg-ink text-white">
       {showImage ? (
         <AvatarImage
           src={src}
@@ -215,14 +215,19 @@ export default function Topbar({
     role === "admin" ? "/admin/settings" : role === "client" ? "/settings" : null;
 
   return (
-    <header className="h-16 bg-canvas border-b border-hairline flex items-center justify-between px-4 lg:px-6 shrink-0">
+    <header className="h-16 bg-white border-b border-line shrink-0 sticky top-0 z-20">
+      <div className={`h-full flex items-center justify-between gap-6 px-4 lg:px-8 ${role === "client" ? "mx-auto max-w-[1248px]" : ""}`}>
       {/* Left */}
-      <div className="flex items-center gap-3">
-        <MobileSidebarTrigger role={role} companyName={companyName} navBadges={navBadges} />
-        {companyName && (
-          <span className="text-sm text-muted-foreground hidden sm:block">
-            {companyName}
-          </span>
+      <div className="flex items-center gap-6 min-w-0">
+        {role === "client" ? (
+          <>
+            <a href="/dashboard" className="shrink-0">
+              <img src="/logo-dark-tight.svg" alt="do action" className="h-12 w-auto" />
+            </a>
+            <ClientTopNav navBadges={navBadges} />
+          </>
+        ) : (
+          <MobileSidebarTrigger role={role} companyName={companyName} navBadges={navBadges} />
         )}
       </div>
 
@@ -233,7 +238,7 @@ export default function Topbar({
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="ml-1 flex h-10 items-center gap-2 rounded-full border border-hairline bg-canvas px-2.5 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue/30">
+            <button className="ml-1 flex h-10 items-center gap-2 rounded-full border border-transparent hover:border-line hover:bg-paper pl-1 pr-2 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue/30">
               <UserAvatar name={user.name} src={user.avatar_url} initials={initials} />
               <span className="text-sm text-charcoal hidden sm:block">
                 {user.name}
@@ -242,10 +247,10 @@ export default function Topbar({
             </button>
           </DropdownMenuTrigger>
 
-          <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuContent align="end" className="w-60">
             <DropdownMenuLabel className="font-normal">
               <p className="font-medium text-ink text-sm">{user.name}</p>
-              <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+              <p className="text-xs text-muted-ink truncate">{user.email}</p>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             {settingsHref && (
@@ -261,13 +266,14 @@ export default function Topbar({
             <Form method="post" action="/logout">
               <button
                 type="submit"
-                className="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-red-500 hover:bg-surface rounded-md transition-colors text-left"
+                className="w-full flex items-center gap-2 px-2.5 py-2 text-[13px] text-[#B4541A] hover:bg-[#FDE7DA] rounded-lg transition-colors text-left"
               >
                 <span><FaArrowRightFromBracket aria-hidden="true" /></span> {t("topbar_logout")}
               </button>
             </Form>
           </DropdownMenuContent>
         </DropdownMenu>
+      </div>
       </div>
     </header>
   );

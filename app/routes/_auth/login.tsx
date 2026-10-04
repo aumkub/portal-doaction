@@ -125,7 +125,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 const inputCls =
-  "w-full h-11 rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#F0D800] focus:ring-2 focus:ring-[#F0D800]/30 transition"
+  "w-full h-11 rounded-xl border border-line bg-white pl-10 pr-3.5 text-sm text-ink placeholder:text-faint-ink focus:outline-none focus:border-ink/40 focus:ring-2 focus:ring-ink/10 transition"
 
 export default function LoginPage() {
   const actionData = useActionData<typeof action>();
@@ -143,30 +143,27 @@ export default function LoginPage() {
   if (actionData?.sent) {
     return (
       <div className="w-full max-w-md">
-        <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-violet-50 mx-auto mb-5">
-            <FaEnvelope className="text-2xl text-violet-500" />
+        <div className="bg-white rounded-[24px] border border-line p-8 md:p-10 text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-yellow mx-auto mb-5">
+            <FaEnvelope className="text-base text-ink" />
           </div>
-          <h2 className="text-lg font-semibold text-slate-900 mb-2">ตรวจสอบอีเมลของคุณ</h2>
-          <p className="text-sm text-slate-500 leading-relaxed">
+          <h2 className="text-[24px] font-bold tracking-[-0.02em] text-ink mb-2">ตรวจสอบอีเมลของคุณ</h2>
+          <p className="text-sm text-muted-ink leading-relaxed">
             เราได้ส่งลิ้งก์เข้าสู่ระบบไปยังอีเมลของคุณแล้ว
             <br />
             ลิ้งก์จะหมดอายุใน{" "}
-            <span className="font-semibold text-slate-700">15 นาที</span>
+            <span className="font-semibold text-ink">15 นาที</span>
           </p>
           <Form method="post" className="mt-6">
             <input type="hidden" name="mode" value="magic" />
             <button
               type="submit"
-              className="inline-flex items-center gap-1.5 text-sm text-violet-600 hover:text-violet-700 font-medium transition-colors"
+              className="inline-flex items-center gap-1.5 h-10 rounded-full border border-line bg-white px-5 text-[13px] text-ink hover:bg-paper font-semibold transition-colors"
             >
               ส่งลิ้งก์อีกครั้ง
             </button>
           </Form>
         </div>
-        <p className="text-center text-xs text-slate-500 mt-4">
-          do action client portal
-        </p>
       </div>
     );
   }
@@ -174,25 +171,16 @@ export default function LoginPage() {
   /* ── Main login form ──────────────────────────────────────────── */
   return (
     <div className="w-full max-w-md">
-      <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
-        {/* Top accent */}
-        <div className="h-1 w-full bg-linear-to-r bg-[#FFD130]" />
-
-        <div className="px-8 pt-8 pb-8">
-          {/* Logo */}
-          <div className="relative mb-8 text-center isolate">
-            <div className="relative inline-flex">
-              <img src="/logo-dark.svg" alt="do action" className="h-16 mx-auto" />
-            </div>
-            <p className="text-[10px] font-bold tracking-[0.2em] text-slate-400 uppercase">
-              Client Portal
-            </p>
-          </div>
+      <div className="bg-white rounded-[24px] border border-line overflow-hidden">
+        <div className="px-6 py-8 md:px-10 md:py-10">
+          <span className="mb-5 inline-flex items-center gap-1.5 rounded-full bg-brand-yellow px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink">
+            Client Portal
+          </span>
 
           {/* Heading */}
-          <div className="mb-6">
-            <h1 className="text-xl font-semibold text-slate-900">ยินดีต้อนรับ</h1>
-            <p className="text-sm text-slate-500 mt-1">
+          <div className="mb-7">
+            <h1 className="text-[32px] md:text-[36px] font-bold leading-tight tracking-[-0.02em] text-ink">ยินดีต้อนรับ</h1>
+            <p className="text-sm text-muted-ink mt-2">
               กรอกอีเมลเพื่อรับลิ้งก์เข้าสู่ระบบ
             </p>
           </div>
@@ -202,9 +190,9 @@ export default function LoginPage() {
             <input type="hidden" name="mode" value="magic" />
 
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-slate-600">อีเมล</label>
+              <label className="text-xs font-medium text-muted-ink">อีเมล</label>
               <div className="relative">
-                <FaEnvelope className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs" />
+                <FaEnvelope className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-faint-ink text-xs" />
                 <input
                   name="email"
                   type="email"
@@ -215,14 +203,14 @@ export default function LoginPage() {
                 />
               </div>
               {actionData?.errors?.email && (
-                <p className="text-xs text-red-500">{actionData.errors.email[0]}</p>
+                <p className="text-xs text-[#B4541A]">{actionData.errors.email[0]}</p>
               )}
             </div>
 
             <button
               type="submit"
               disabled={isSubmittingMagic}
-              className="w-full h-11 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+              className="w-full h-11 rounded-full bg-ink text-white text-[14px] font-semibold hover:bg-black disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
             >
               {isSubmittingMagic ? (
                 "กำลังส่ง…"
@@ -236,11 +224,11 @@ export default function LoginPage() {
           </Form>
 
           {/* Admin divider */}
-          <div className="mt-6 pt-5 border-t border-slate-200">
+          <div className="mt-6 pt-5 border-t border-line-soft">
             <button
               type="button"
               onClick={() => setShowAdminForm((v) => !v)}
-              className="w-full flex items-center justify-center gap-2 text-xs text-slate-500 hover:text-slate-800 transition-colors py-1 select-none"
+              className="w-full flex items-center justify-center gap-2 text-xs text-muted-ink hover:text-ink transition-colors py-1 select-none"
             >
               <FaLock className="text-[10px] opacity-60" />
               <span>ผู้ดูแลระบบ / Co-Admin</span>
@@ -250,10 +238,10 @@ export default function LoginPage() {
             </button>
 
             {showAdminForm && (
-              <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+              <div className="mt-4 rounded-[16px] border border-line bg-paper p-4 space-y-3">
                 <div className="flex items-center gap-2 mb-1">
-                  <FaLock className="text-slate-400 text-[11px]" />
-                  <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+                  <FaLock className="text-faint-ink text-[11px]" />
+                  <span className="text-xs font-semibold text-ink-soft uppercase tracking-wide">
                     เข้าสู่ระบบด้วยรหัสผ่าน
                   </span>
                 </div>
@@ -262,7 +250,7 @@ export default function LoginPage() {
                   <input type="hidden" name="mode" value="password" />
 
                   <div className="relative">
-                    <FaEnvelope className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs" />
+                    <FaEnvelope className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-faint-ink text-xs" />
                     <input
                       name="email"
                       type="email"
@@ -273,7 +261,7 @@ export default function LoginPage() {
                   </div>
 
                   <div className="relative">
-                    <FaLock className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs" />
+                    <FaLock className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-faint-ink text-xs" />
                     <input
                       name="password"
                       type="password"
@@ -284,13 +272,13 @@ export default function LoginPage() {
                   </div>
 
                   {actionData?.errors?.email && (
-                    <p className="text-xs text-red-500">{actionData.errors.email[0]}</p>
+                    <p className="text-xs text-[#B4541A]">{actionData.errors.email[0]}</p>
                   )}
 
                   <button
                     type="submit"
                     disabled={isSubmittingAdmin}
-                    className="w-full h-10 rounded-xl bg-slate-800 text-white text-sm font-medium hover:bg-slate-700 disabled:opacity-50 transition-colors"
+                    className="w-full h-10 rounded-full bg-ink text-white text-[13px] font-semibold hover:bg-black disabled:opacity-50 transition-colors"
                   >
                     {isSubmittingAdmin ? "กำลังเข้าสู่ระบบ…" : "เข้าสู่ระบบ"}
                   </button>
@@ -302,7 +290,7 @@ export default function LoginPage() {
                     <button
                       type="submit"
                       disabled={isSubmittingBypass}
-                      className="w-full h-9 rounded-xl border border-amber-200 bg-amber-50 text-xs font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-50 transition-colors"
+                      className="w-full h-10 rounded-full border border-line bg-white text-[13px] font-semibold text-ink hover:bg-paper disabled:opacity-50 transition-colors"
                     >
                       {isSubmittingBypass ? "กำลัง bypass..." : `⚡ Local bypass → ${LOCAL_ADMIN_EMAIL}`}
                     </button>

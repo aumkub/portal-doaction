@@ -6,13 +6,13 @@ import { cn } from "~/lib/utils"
 
 const buttonVariants = cva(
   // Base: pill shape, 14px/500, consistent focus ring, transitions
-  "inline-flex shrink-0 items-center justify-center gap-2 rounded-full text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "inline-flex shrink-0 items-center justify-center gap-2 rounded-full text-[13px] font-semibold whitespace-nowrap transition-all outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
         // Black pill — dominant CTA
         default:
-          "bg-primary text-primary-foreground hover:bg-primary/85",
+          "bg-ink text-white hover:bg-black",
         // Brand-yellow pill — brand emphasis moments
         yellow:
           "bg-brand-yellow text-primary hover:bg-brand-yellow-deep",
@@ -21,10 +21,10 @@ const buttonVariants = cva(
           "bg-brand-blue text-white hover:bg-blue-pressed",
         // Outline pill — secondary actions
         outline:
-          "border border-hairline-strong bg-transparent text-ink hover:bg-surface",
+          "border border-line bg-white text-ink hover:bg-paper",
         // Same as outline (kept for shadcn compat)
         secondary:
-          "border border-hairline-strong bg-transparent text-ink hover:bg-surface",
+          "border border-line bg-white text-ink hover:bg-paper",
         // White pill — for use on dark backgrounds
         "on-dark":
           "bg-on-dark text-primary hover:bg-on-dark/90",
@@ -39,14 +39,14 @@ const buttonVariants = cva(
           "bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/30",
       },
       size: {
-        default: "h-11 px-6 py-3 has-[>svg]:px-4",
-        sm:      "h-9  px-4 py-2 has-[>svg]:px-3",
-        lg:      "h-12 px-8     has-[>svg]:px-6",
+        default: "h-10 px-5 py-2 has-[>svg]:px-4",
+        sm:      "h-9  px-4 py-1.5 has-[>svg]:px-3",
+        lg:      "h-11 px-6     has-[>svg]:px-5",
         xs:      "h-7  px-3     text-xs has-[>svg]:px-2",
-        icon:    "size-11",
-        "icon-sm": "size-9",
+        icon:    "size-10",
+        "icon-sm": "size-8",
         "icon-xs": "size-7 [&_svg:not([class*='size-'])]:size-3",
-        "icon-lg": "size-12",
+        "icon-lg": "size-10",
       },
     },
     defaultVariants: {

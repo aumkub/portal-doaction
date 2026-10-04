@@ -39,7 +39,7 @@ export const links: Route.LinksFunction = () => [
 	},
 	{
 		rel: "stylesheet",
-		href: "https://fonts.googleapis.com/css2?family=Google+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&display=swap",
+		href: "https://fonts.googleapis.com/css2?family=Anuphan:wght@400;500;600;700&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&display=swap",
 	},
 ];
 
@@ -114,19 +114,19 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
 	}, [isInfraError]);
 
 	return (
-		<main className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-			<div className="bg-white rounded-2xl border border-slate-200 p-10 max-w-md w-full text-center space-y-4">
-				<p className="text-5xl font-bold text-slate-200">{status}</p>
-				<h1 className="text-xl font-semibold text-slate-900">{title}</h1>
-				<p className="text-sm text-slate-500">{detail}</p>
+		<main className="min-h-screen bg-paper flex items-center justify-center p-4">
+			<div className="bg-white rounded-[24px] border border-line p-8 md:p-10 max-w-md w-full text-center space-y-3">
+				<p className="inline-flex rounded-2xl bg-brand-yellow px-4 py-1 font-display text-5xl font-bold tracking-[-0.03em] tabular-nums text-ink">{status}</p>
+				<h1 className="text-[24px] font-bold tracking-[-0.02em] text-ink">{title}</h1>
+				<p className="text-sm text-muted-ink">{detail}</p>
 				{stack && (
-					<pre className="mt-4 text-left text-xs bg-slate-50 rounded-lg p-4 overflow-x-auto text-slate-600 border border-slate-100">
+					<pre className="mt-4 text-left text-xs bg-paper rounded-xl p-4 overflow-x-auto text-ink-soft border border-line">
 						{stack}
 					</pre>
 				)}
 				<a
 					href="/"
-					className="inline-block mt-2 px-6 py-2.5 rounded-full bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/85 transition-colors"
+					className="inline-flex items-center h-10 mt-3 px-5 rounded-full bg-ink text-white text-[13px] font-semibold hover:bg-black transition-colors"
 				>
 					กลับหน้าหลัก
 				</a>

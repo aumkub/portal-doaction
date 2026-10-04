@@ -42,11 +42,11 @@ export async function action({ request, context }: any) {
 function CopyBlock({ text }: { text: string }) {
   return (
     <div className="relative">
-      <pre className="rounded-lg bg-slate-900 text-slate-100 text-xs p-4 pr-12 overflow-x-auto whitespace-pre">{text}</pre>
+      <pre className="rounded-[14px] bg-ink text-white/90 text-xs p-4 pr-12 overflow-x-auto whitespace-pre">{text}</pre>
       <button
         type="button"
         onClick={() => navigator.clipboard?.writeText(text)}
-        className="absolute top-2 right-2 rounded-md p-2 text-slate-300 hover:bg-slate-700"
+        className="absolute top-2 right-2 rounded-md p-2 text-slate-300 hover:bg-white/10"
         aria-label="Copy"
       >
         <FaCopy />
@@ -66,20 +66,20 @@ export default function McpSettingsPage() {
   return (
     <div className="space-y-6 max-w-3xl">
       <div className="flex items-center gap-3">
-        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-100 text-violet-600">
+        <span className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-ink text-brand-yellow">
           <FaPlug className="text-lg" />
         </span>
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">MCP Server</h1>
-          <p className="text-sm text-slate-500 mt-0.5">
+          <h1 className="text-[28px] md:text-[32px] font-bold tracking-[-0.02em] text-ink">MCP Server</h1>
+          <p className="text-sm text-muted-ink mt-0.5">
             เชื่อม Claude (Desktop / Code / claude.ai) เข้ากับ portal เพื่ออ่านและจัดการ ticket, รายงาน และลูกค้า
           </p>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
-        <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-          <FaKey className="text-slate-400" /> Access tokens
+      <div className="bg-white rounded-[20px] border border-line p-6 space-y-4">
+        <h2 className="text-[16px] font-semibold text-ink flex items-center gap-2">
+          <FaKey className="text-faint-ink" /> Access tokens
         </h2>
 
         <Form method="post" className="flex flex-col sm:flex-row gap-2">
@@ -91,7 +91,7 @@ export default function McpSettingsPage() {
         </Form>
 
         {newToken && (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-2">
+          <div className="rounded-[14px] border border-amber-200 bg-amber-50 p-4 space-y-2">
             <p className="text-sm font-medium text-amber-900">
               คัดลอก token นี้เก็บไว้ — จะแสดงแค่ครั้งเดียว
             </p>
@@ -100,14 +100,14 @@ export default function McpSettingsPage() {
         )}
 
         {tokens.length === 0 ? (
-          <p className="text-sm text-slate-500">ยังไม่มี token</p>
+          <p className="text-sm text-muted-ink">ยังไม่มี token</p>
         ) : (
-          <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200">
+          <ul className="divide-y divide-line-soft rounded-[14px] border border-line">
             {tokens.map((tk) => (
               <li key={tk.id} className="flex items-center justify-between gap-3 px-4 py-3">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-slate-900 truncate">{tk.label}</p>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-sm font-medium text-ink truncate">{tk.label}</p>
+                  <p className="text-xs text-muted-ink">
                     {tk.hint}… · {formatDate(tk.created_at, lang)}
                   </p>
                 </div>
@@ -124,16 +124,16 @@ export default function McpSettingsPage() {
         )}
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
-        <h2 className="text-lg font-semibold text-slate-900">วิธีเชื่อมต่อ</h2>
-        <p className="text-sm text-slate-600">Endpoint: <code className="text-violet-700">{endpoint}</code></p>
+      <div className="bg-white rounded-[20px] border border-line p-6 space-y-4">
+        <h2 className="text-[16px] font-semibold text-ink">วิธีเชื่อมต่อ</h2>
+        <p className="text-sm text-ink-soft">Endpoint: <code className="rounded bg-paper px-1.5 py-0.5 font-mono text-[13px] text-ink">{endpoint}</code></p>
 
-        <p className="text-sm font-medium text-slate-800">Claude Code</p>
+        <p className="text-sm font-medium text-ink">Claude Code</p>
         <CopyBlock
           text={`claude mcp add --transport http doaction-portal ${endpoint} --header "Authorization: Bearer ${shownToken}"`}
         />
 
-        <p className="text-sm font-medium text-slate-800">Claude Desktop (claude_desktop_config.json)</p>
+        <p className="text-sm font-medium text-ink">Claude Desktop (claude_desktop_config.json)</p>
         <CopyBlock
           text={JSON.stringify(
             {

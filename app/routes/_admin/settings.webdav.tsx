@@ -139,7 +139,7 @@ export async function action({ request, context }: any) {
   return { errors: { general: ["Invalid action"] } };
 }
 
-const inputCls = "w-full h-11 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition";
+const inputCls = "w-full h-10 rounded-xl border border-line bg-white px-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-ink/10 focus:border-ink/40 transition";
 
 export default function WebDAVSettingsPage() {
   const loaderData = useLoaderData();
@@ -166,27 +166,27 @@ export default function WebDAVSettingsPage() {
       {/* Header */}
       <div>
         <div className="flex items-center gap-3 mb-2">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-100 text-sky-600">
+          <span className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-ink text-brand-yellow">
             <FaCloud className="text-lg" />
           </span>
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">{t("admin_webdav_title")}</h1>
-            <p className="text-sm text-slate-500 mt-0.5">{t("admin_webdav_desc")}</p>
+            <h1 className="text-[28px] md:text-[32px] font-bold tracking-[-0.02em] text-ink">{t("admin_webdav_title")}</h1>
+            <p className="text-sm text-muted-ink mt-0.5">{t("admin_webdav_desc")}</p>
           </div>
         </div>
       </div>
 
       {/* Status Card */}
-      <div className={`rounded-xl border p-5 ${
+      <div className={`rounded-[20px] border p-5 ${
         webdavEnabled
           ? "bg-emerald-50 border-emerald-200"
-          : "bg-slate-50 border-slate-200"
+          : "bg-paper border-line"
       }`}>
         <div className="flex items-center gap-3">
-          <span className={`flex h-10 w-10 items-center justify-center rounded-lg ${
+          <span className={`flex h-10 w-10 items-center justify-center rounded-[14px] ${
             webdavEnabled
               ? "bg-emerald-100 text-emerald-600"
-              : "bg-slate-200 text-slate-500"
+              : "bg-line text-muted-ink"
           }`}>
             {webdavEnabled ? <FaCircleCheck /> : <FaCloud />}
           </span>
@@ -194,7 +194,7 @@ export default function WebDAVSettingsPage() {
             <p className={`font-semibold ${
               webdavEnabled
                 ? "text-emerald-900"
-                : "text-slate-700"
+                : "text-ink-soft"
             }`}>
               {webdavEnabled
                 ? "WebDAV Backup is Enabled"
@@ -210,29 +210,29 @@ export default function WebDAVSettingsPage() {
       </div>
 
       {/* Settings Form */}
-      <Form method="post" className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <Form method="post" className="bg-white rounded-[20px] border border-line overflow-hidden">
         <input type="hidden" name="intent" value="webdav" />
 
-        <div className="px-6 py-5 border-b border-slate-100">
-          <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-            <FaServer className="text-slate-400" />
+        <div className="px-6 py-5 border-b border-line-soft">
+          <h2 className="text-[16px] font-semibold text-ink flex items-center gap-2">
+            <FaServer className="text-faint-ink" />
             WebDAV Configuration
           </h2>
-          <p className="text-sm text-slate-500 mt-1">
+          <p className="text-sm text-muted-ink mt-1">
             Configure your WebDAV server settings (Nextcloud, ownCloud, etc.)
           </p>
         </div>
 
         <div className="p-6 space-y-6">
           {/* Enable Toggle */}
-          <div className="flex items-center justify-between p-4 rounded-lg border border-slate-200 bg-slate-50">
+          <div className="flex items-center justify-between p-4 rounded-[14px] border border-line bg-paper">
             <div className="flex items-center gap-3">
-              <span className={`text-2xl ${webdavEnabled ? "text-emerald-500" : "text-slate-400"}`}>
+              <span className={`text-2xl ${webdavEnabled ? "text-emerald-500" : "text-faint-ink"}`}>
                 {webdavEnabled ? <FaToggleOn /> : <FaToggleOff />}
               </span>
               <div>
-                <p className="font-medium text-slate-900">{t("admin_webdav_enabled")}</p>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="font-medium text-ink">{t("admin_webdav_enabled")}</p>
+                <p className="text-xs text-muted-ink mt-0.5">
                   Enable automatic WebDAV backups
                 </p>
               </div>
@@ -245,15 +245,15 @@ export default function WebDAVSettingsPage() {
                 defaultChecked={webdavEnabled}
                 className="sr-only peer"
               />
-              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-violet-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-violet-600"></div>
+              <div className="w-11 h-6 bg-line peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-ink/10 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-ink"></div>
             </label>
           </div>
 
           {/* Label */}
           <div className="space-y-2">
             <Label htmlFor="webdav_label" className="flex items-center gap-2">
-              <FaServer className="text-slate-400 text-sm" />
-              {t("admin_webdav_label")} <span className="text-slate-400 font-normal">(optional)</span>
+              <FaServer className="text-faint-ink text-sm" />
+              {t("admin_webdav_label")} <span className="text-faint-ink font-normal">(optional)</span>
             </Label>
             <Input
               id="webdav_label"
@@ -262,7 +262,7 @@ export default function WebDAVSettingsPage() {
               defaultValue={webdavLabel}
               placeholder="Production Backup"
             />
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-muted-ink">
               A friendly name to identify this WebDAV connection
             </p>
             {errors?.label && (
@@ -275,7 +275,7 @@ export default function WebDAVSettingsPage() {
           {/* URL */}
           <div className="space-y-2">
             <Label htmlFor="webdav_url" className="flex items-center gap-2">
-              <FaCloud className="text-slate-400 text-sm" />
+              <FaCloud className="text-faint-ink text-sm" />
               {t("admin_webdav_url")} <span className="text-rose-500">*</span>
             </Label>
             <Input
@@ -286,8 +286,8 @@ export default function WebDAVSettingsPage() {
               placeholder="https://cloud.example.com/remote.php/webdav/"
               className="font-mono"
             />
-            <p className="text-xs text-slate-500">
-              WebDAV endpoint URL. For Nextcloud: <code className="bg-slate-100 px-1 py-0.5 rounded">https://cloud.example.com/remote.php/webdav/</code>
+            <p className="text-xs text-muted-ink">
+              WebDAV endpoint URL. For Nextcloud: <code className="bg-paper px-1 py-0.5 rounded">https://cloud.example.com/remote.php/webdav/</code>
             </p>
             {errors?.url && (
               <p className="text-xs text-rose-600 flex items-center gap-1">
@@ -300,7 +300,7 @@ export default function WebDAVSettingsPage() {
           <div className="grid sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="webdav_username" className="flex items-center gap-2">
-                <FaServer className="text-slate-400 text-sm" />
+                <FaServer className="text-faint-ink text-sm" />
                 {t("admin_webdav_username")} <span className="text-rose-500">*</span>
               </Label>
               <Input
@@ -319,7 +319,7 @@ export default function WebDAVSettingsPage() {
 
             <div className="space-y-2">
               <Label htmlFor="webdav_password" className="flex items-center gap-2">
-                <FaLock className="text-slate-400 text-sm" />
+                <FaLock className="text-faint-ink text-sm" />
                 {t("admin_webdav_password")}
               </Label>
               <Input
@@ -328,7 +328,7 @@ export default function WebDAVSettingsPage() {
                 type="password"
                 placeholder={webdavHasPassword ? "••••••••" : ""}
               />
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted-ink">
                 {t("admin_webdav_password_hint")}
               </p>
               {errors?.password && (
@@ -342,8 +342,8 @@ export default function WebDAVSettingsPage() {
           {/* Base Path */}
           <div className="space-y-2">
             <Label htmlFor="webdav_path" className="flex items-center gap-2">
-              <FaFolderOpen className="text-slate-400 text-sm" />
-              {t("admin_webdav_path")} <span className="text-slate-400 font-normal">(optional)</span>
+              <FaFolderOpen className="text-faint-ink text-sm" />
+              {t("admin_webdav_path")} <span className="text-faint-ink font-normal">(optional)</span>
             </Label>
             <Input
               id="webdav_path"
@@ -353,7 +353,7 @@ export default function WebDAVSettingsPage() {
               placeholder="/backups"
               className="font-mono"
             />
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-muted-ink">
               Base path on WebDAV server where backups will be stored
             </p>
             {errors?.path && (
@@ -365,21 +365,21 @@ export default function WebDAVSettingsPage() {
 
           {/* Messages */}
           {saved && (
-            <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+            <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-[14px]">
               <FaCircleCheck className="text-emerald-600" />
               <p className="text-sm font-medium text-emerald-800">{t("admin_webdav_saved")}</p>
             </div>
           )}
 
           {connectionSuccess && (
-            <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+            <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-[14px]">
               <FaCircleCheck className="text-emerald-600" />
               <p className="text-sm font-medium text-emerald-800">{t("admin_webdav_test_success")}</p>
             </div>
           )}
 
           {errors?.general && (
-            <div className="flex items-start gap-2 p-3 bg-rose-50 border border-rose-200 rounded-lg">
+            <div className="flex items-start gap-2 p-3 bg-rose-50 border border-rose-200 rounded-[14px]">
               <span className="text-rose-600 mt-0.5">⚠️</span>
               <p className="text-sm text-rose-800">{errors.general[0]}</p>
             </div>
@@ -387,13 +387,13 @@ export default function WebDAVSettingsPage() {
         </div>
 
         {/* Actions */}
-        <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+        <div className="px-6 py-4 bg-paper border-t border-line flex items-center justify-between">
           <Form method="post">
             <input type="hidden" name="intent" value="webdav_test" />
             <Button
               type="submit"
               variant="outline"
-              className="border-slate-300 hover:bg-slate-100"
+              className="border-line hover:bg-paper"
               disabled={isTesting}
             >
               {isTesting ? (
@@ -409,27 +409,27 @@ export default function WebDAVSettingsPage() {
               )}
             </Button>
           </Form>
-          <Button type="submit" className="bg-violet-600 hover:bg-violet-700">
+          <Button type="submit" className="bg-ink hover:bg-black">
             {t("save")}
           </Button>
         </div>
       </Form>
 
       {/* Help Section */}
-      <div className="bg-white rounded-xl border border-slate-200 p-5">
-        <h3 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
-          <FaCircleQuestion className="text-slate-400" />
+      <div className="bg-white rounded-[20px] border border-line p-5">
+        <h3 className="text-sm font-semibold text-ink mb-3 flex items-center gap-2">
+          <FaCircleQuestion className="text-faint-ink" />
           Help & Documentation
         </h3>
-        <div className="space-y-2 text-sm text-slate-600">
+        <div className="space-y-2 text-sm text-ink-soft">
           <p>
             <strong>Nextcloud:</strong> Enable WebDAV in Settings → Administration → Sharing
           </p>
           <p>
-            <strong>ownCloud:</strong> WebDAV is enabled by default at <code className="bg-slate-100 px-1 py-0.5 rounded">/remote.php/webdav/</code>
+            <strong>ownCloud:</strong> WebDAV is enabled by default at <code className="bg-paper px-1 py-0.5 rounded">/remote.php/webdav/</code>
           </p>
           <p>
-            <strong>Path:</strong> Use <code className="bg-slate-100 px-1 py-0.5 rounded">/backups</code> to organize all client backups in one folder
+            <strong>Path:</strong> Use <code className="bg-paper px-1 py-0.5 rounded">/backups</code> to organize all client backups in one folder
           </p>
         </div>
       </div>

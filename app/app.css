@@ -24,11 +24,22 @@
 /* ── Theme ────────────────────────────────────────────────────────────────── */
 @theme {
   /* Fonts */
-  --font-sans: "Google Sans", ui-sans-serif, system-ui, sans-serif,
+  --font-sans: "Anuphan", ui-sans-serif, system-ui, sans-serif,
     "Apple Color Emoji", "Segoe UI Emoji";
+  /* Display face for big numbers and Latin headlines */
+  --font-display: "Bricolage Grotesque", "Anuphan", ui-sans-serif, system-ui, sans-serif;
+
+  /* Redesign palette: warm paper ground, ink, yellow accent */
+  --color-paper:       #F6F5F1;
+  --color-paper-deep:  #EFEDE6;
+  --color-line:        #E6E3DA;
+  --color-line-soft:   #F0EEE7;
+  --color-ink-soft:    #3A3935;
+  --color-muted-ink:   #6F6D66;
+  --color-faint-ink:   #8A887F;
 
   /* Border radius */
-  --radius: 0.625rem;
+  --radius: 0.875rem;
   --radius-sm:  calc(var(--radius) - 4px);
   --radius-md:  calc(var(--radius) - 2px);
   --radius-lg:  var(--radius);
@@ -41,26 +52,26 @@
   --color-brand-blue:         #2563eb;
   --color-blue-pressed:       #1d4ed8;
   --color-surface-pricing-featured: oklch(0.95 0.03 250);
-  --color-ink:                oklch(0.18 0.04 266);
+  --color-ink:                #111111;
   --color-canvas:             oklch(1 0 0);
   --color-charcoal:           oklch(0.32 0.03 260);
   --color-steel:              oklch(0.48 0.03 257);
   --color-stone:              oklch(0.62 0.02 257);
   --color-surface:            oklch(0.97 0.01 248);
-  --color-hairline:           oklch(0.90 0.01 256);
+  --color-hairline:           oklch(0.92 0.006 256);
   --color-hairline-soft:      oklch(0.94 0.01 256);
   --color-hairline-strong:    oklch(0.83 0.02 256);
 
   /* DoAction brand — violet primary */
-  --color-primary:            oklch(0.40 0.20 280);   /* violet-600 */
+  --color-primary:            #111111;
   --color-primary-foreground: oklch(1    0    0);
 
   /* Sidebar */
-  --color-sidebar:                  oklch(0.13 0.02 240);  /* slate-900 */
-  --color-sidebar-foreground:       oklch(0.95 0    0);
-  --color-sidebar-accent:           oklch(0.40 0.20 280 / 0.20);
-  --color-sidebar-accent-foreground:oklch(0.82 0.10 280);
-  --color-sidebar-border:           oklch(1    0    0  / 0.18);
+  --color-sidebar:                  oklch(0.985 0.002 260);
+  --color-sidebar-foreground:       oklch(0.21 0.02 265);
+  --color-sidebar-accent:           oklch(0.94 0.004 260);
+  --color-sidebar-accent-foreground:oklch(0.16 0.02 265);
+  --color-sidebar-border:           oklch(0.92 0.005 260);
 
   /* shadcn semantic tokens */
   --color-background:           oklch(1    0    0);
@@ -76,12 +87,12 @@
   --color-accent:               oklch(0.95 0.01 248);
   --color-accent-foreground:    oklch(0.18 0.04 266);
   --color-destructive:          oklch(0.55 0.25 27);
-  --color-border:               oklch(0.83 0.02 256);
-  --color-input:                oklch(0.83 0.02 256);
-  --color-ring:                 oklch(0.40 0.20 280);
+  --color-border:               #E6E3DA;
+  --color-input:                oklch(0.88 0.01 256);
+  --color-ring:                 oklch(0.55 0.02 265);
 
   /* Tailwind slate overrides for better contrast */
-  --color-slate-200: oklch(0.86 0.013 255);
+  --color-slate-200: oklch(0.91 0.008 255);
   --color-slate-300: oklch(0.78 0.016 255);
   --color-slate-400: oklch(0.54 0.022 257);
   --color-slate-500: oklch(0.43 0.025 257);
@@ -102,7 +113,7 @@
   --card-foreground: oklch(0.13 0.04 265);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.13 0.04 265);
-  --primary: oklch(0.40 0.20 280);
+  --primary: #111111;
   --primary-foreground: oklch(1 0 0);
   --secondary: oklch(0.97 0.01 248);
   --secondary-foreground: oklch(0.21 0.04 266);
@@ -111,9 +122,9 @@
   --accent: oklch(0.95 0.01 248);
   --accent-foreground: oklch(0.18 0.04 266);
   --destructive: oklch(0.55 0.25 27);
-  --border: oklch(0.83 0.02 256);
-  --input: oklch(0.83 0.02 256);
-  --ring: oklch(0.40 0.20 280);
+  --border: #E6E3DA;
+  --input: oklch(0.88 0.01 256);
+  --ring: oklch(0.55 0.02 265);
   --sidebar: oklch(0.13 0.02 240);
   --sidebar-foreground: oklch(0.95 0 0);
   --sidebar-primary: oklch(0.40 0.20 280);
@@ -148,6 +159,13 @@
 /* ── Base ─────────────────────────────────────────────────────────────────── */
 html, body {
   @apply bg-background text-foreground;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3 {
+  letter-spacing: -0.015em;
 }
 
 * {
@@ -155,14 +173,14 @@ html, body {
 }
 
 ::selection {
-  background-color: #2563eb;
-  color: #ffffff;
+  background-color: #F0D800;
+  color: #000000;
 }
 
 input::selection,
 textarea::selection {
-  background-color: #2563eb;
-  color: #ffffff;
+  background-color: #F0D800;
+  color: #000000;
 }
 
 select,
@@ -175,3 +193,16 @@ select option {
 .animate-fade-in  { animation: var(--animate-fade-in); }
 .animate-slide-up { animation: var(--animate-slide-up); }
 .animate-slide-down { animation: var(--animate-slide-down); }
+
+/* ── Buttons never wrap their label ───────────────────────────────────────
+   Thai labels break between any two words, so a narrow table cell or
+   action row folded buttons onto two lines. Base layer, so a component can
+   still opt back in with `whitespace-normal`. */
+@layer base {
+  button,
+  [role="button"],
+  a[class*="rounded-full"],
+  a[class*="rounded-md"] {
+    white-space: nowrap;
+  }
+}

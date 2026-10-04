@@ -8,7 +8,7 @@ type NativeSelectProps = React.ComponentProps<"select"> & {
 function SelectChevron() {
   return (
     <svg
-      className="pointer-events-none absolute right-3 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400"
+      className="pointer-events-none absolute right-3 top-1/2 h-3 w-3 -translate-y-1/2 text-faint-ink"
       viewBox="0 0 12 12"
       fill="none"
       aria-hidden
@@ -37,10 +37,10 @@ export function NativeSelect({
       <select
         disabled={disabled}
         className={cn(
-          "select-native w-full rounded-lg border border-slate-200 bg-white px-3 text-slate-900",
-          "focus:outline-none focus:ring-2 focus:ring-slate-900 transition",
-          "disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500",
-          size === "sm" ? "h-9 text-xs" : "h-10 text-sm",
+          "select-native w-full rounded-xl border border-line bg-white pl-3.5 pr-8 text-ink",
+          "focus:outline-none focus:ring-2 focus:ring-ink/10 focus:border-ink/40 transition",
+          "disabled:cursor-not-allowed disabled:bg-paper disabled:text-muted-ink",
+          size === "sm" ? "h-8 text-xs" : "h-10 text-sm",
           className
         )}
         {...props}

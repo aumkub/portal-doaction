@@ -60,25 +60,25 @@ const statusConfig: Record<
   TicketStatus,
   { label: string; color: string; dotClass: string }
 > = {
-  open: { label: "เปิด", color: "text-amber-600 bg-amber-50", dotClass: "text-amber-500" },
+  open: { label: "เปิด", color: "text-amber-700 bg-amber-50 ring-amber-600/20", dotClass: "text-amber-500" },
   in_progress: {
     label: "กำลังดำเนิน",
-    color: "text-blue-600 bg-blue-50",
-    dotClass: "text-blue-500",
+    color: "text-sky-700 bg-sky-50 ring-sky-600/20",
+    dotClass: "text-sky-500",
   },
   waiting: {
     label: "รอข้อมูล",
-    color: "text-slate-600 bg-slate-100",
+    color: "text-slate-600 bg-slate-50 ring-slate-200",
     dotClass: "text-slate-500",
   },
   resolved: {
     label: "เสร็จสิ้น",
-    color: "text-emerald-600 bg-emerald-50",
+    color: "text-emerald-700 bg-emerald-50 ring-emerald-600/20",
     dotClass: "text-emerald-500",
   },
   closed: {
     label: "ปิดแล้ว",
-    color: "text-slate-500 bg-slate-100",
+    color: "text-slate-500 bg-slate-50 ring-slate-200",
     dotClass: "text-slate-500",
   },
 };
@@ -103,7 +103,7 @@ export default function TicketsPage({ loaderData, actionData }: Route.ComponentP
     <div className="space-y-6 max-w-4xl">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">
+          <h1 className="text-[22px] font-semibold tracking-tight text-slate-900">
             Support Tickets
           </h1>
           <p className="text-slate-500 text-sm mt-1">
@@ -112,7 +112,7 @@ export default function TicketsPage({ loaderData, actionData }: Route.ComponentP
         </div>
         <button
           onClick={() => setSearchParams({ new: "1" })}
-          className="flex items-center gap-2 bg-[#F0D800] text-slate-900 rounded-lg px-4 py-2 text-sm font-medium hover:bg-yellow-400 transition-colors"
+          className="flex h-9 items-center gap-2 rounded-md bg-brand-yellow px-3.5 text-[13px] font-semibold text-slate-900 shadow-[0_1px_2px_rgba(15,23,42,0.08)] hover:brightness-95 transition"
         >
           + สร้าง Ticket ใหม่
         </button>
@@ -120,7 +120,7 @@ export default function TicketsPage({ loaderData, actionData }: Route.ComponentP
 
       {/* New ticket form */}
       {showNew && (
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <div className="bg-white rounded-xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] p-5">
           <h2 className="text-sm font-semibold text-slate-900 mb-4">
             สร้าง Ticket ใหม่
           </h2>
@@ -132,7 +132,7 @@ export default function TicketsPage({ loaderData, actionData }: Route.ComponentP
               <input
                 name="title"
                 required
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+                className="w-full h-9 rounded-md border border-slate-200 bg-white px-3 text-sm shadow-[0_1px_2px_rgba(15,23,42,0.04)] focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400"
                 placeholder="เช่น แก้ไขรูปภาพหน้าแรก"
               />
             </div>
@@ -144,7 +144,7 @@ export default function TicketsPage({ loaderData, actionData }: Route.ComponentP
                 name="description"
                 required
                 rows={4}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 resize-none"
+                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-[0_1px_2px_rgba(15,23,42,0.04)] focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 resize-none"
                 placeholder="อธิบายรายละเอียดงานที่ต้องการ..."
               />
             </div>
@@ -163,13 +163,13 @@ export default function TicketsPage({ loaderData, actionData }: Route.ComponentP
               <button
                 type="button"
                 onClick={() => setSearchParams({})}
-                className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
+                className="h-9 rounded-md border border-slate-200 bg-white px-3.5 text-[13px] font-medium text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:bg-slate-50 transition-colors"
               >
                 ยกเลิก
               </button>
               <button
                 type="submit"
-                className="rounded-lg bg-slate-900 text-white px-4 py-2 text-sm font-medium hover:bg-slate-800 transition-colors"
+                className="h-9 rounded-md bg-slate-900 px-3.5 text-[13px] font-medium text-white hover:bg-slate-800 transition-colors"
               >
                 ส่ง Ticket
               </button>
@@ -179,16 +179,16 @@ export default function TicketsPage({ loaderData, actionData }: Route.ComponentP
       )}
 
       {/* Filter */}
-      <div className="flex gap-2">
+      <div className="inline-flex rounded-lg bg-slate-100 p-0.5">
         {(["all", "open", "in_progress", "resolved"] as const).map((s) => (
           <button
             key={s}
             type="button"
             onClick={() => setFilter(s)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            className={`h-8 px-3 rounded-md text-[13px] font-medium transition-colors ${
               filter === s
-                ? "bg-slate-900 text-white"
-                : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+                ? "bg-white text-slate-900 shadow-[0_1px_2px_rgba(15,23,42,0.08)]"
+                : "text-slate-500 hover:text-slate-900"
             }`}
           >
             {s === "all"
@@ -201,7 +201,7 @@ export default function TicketsPage({ loaderData, actionData }: Route.ComponentP
       {/* Ticket list */}
       <div className="space-y-3">
         {filtered.length === 0 ? (
-          <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
+          <div className="bg-white rounded-xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] p-12 text-center">
             <p className="text-slate-500 text-sm">ไม่มี Ticket</p>
           </div>
         ) : (
@@ -210,11 +210,11 @@ export default function TicketsPage({ loaderData, actionData }: Route.ComponentP
             return (
               <div
                 key={ticket.id}
-                className="bg-white rounded-xl border border-slate-200 p-5 hover:border-slate-300 transition-colors cursor-pointer"
+                className="bg-white rounded-xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] px-5 py-4 hover:border-slate-300 transition-colors cursor-pointer"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-700 truncate">
+                    <p className="text-sm font-medium text-slate-900 truncate">
                       {ticket.title}
                     </p>
                     <p className="text-xs text-slate-500 mt-1">
@@ -223,7 +223,7 @@ export default function TicketsPage({ loaderData, actionData }: Route.ComponentP
                     </p>
                   </div>
                   <span
-                    className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full whitespace-nowrap ${st.color}`}
+                    className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset whitespace-nowrap ${st.color}`}
                   >
                     <FaCircle className={`text-[9px] ${st.dotClass}`} aria-hidden="true" /> {st.label}
                   </span>

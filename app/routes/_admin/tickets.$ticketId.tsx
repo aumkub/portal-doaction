@@ -1,42 +1,45 @@
-import { Form, redirect, useFetcher, useFetchers } from "react-router";
-import { useEffect } from "react";
+import { Form, redirect, useNavigation } from "react-router";
+import { ChatThread } from "~/components/tickets/ChatThread";
+import { parseClientCcEmails } from "~/lib/client-cc";
+import { sendOrHoldTicketEmail } from "~/lib/email-alerts.server";
+import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
-import { FaTrashCan } from "react-icons/fa6";
-import { requireCoAdminOrAdmin } from "~/lib/auth.server";
+import { requireAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
-import { formatDate, generateId } from "~/lib/utils";
-import { sendTelegramNotificationForClient } from "~/lib/telegram.server";
+import { formatDate, formatRelativeTime, generateId } from "~/lib/utils";
+import { sendTelegramNotification } from "~/lib/telegram.server";
 import {
   sendTicketClosedEmailToClient,
   sendTicketEmailToClient,
 } from "~/lib/ticket-email.server";
 import {
-  TicketReplyComposer,
-  pendingReplyAttachments,
-  replyFetcherKey,
-} from "~/components/tickets/TicketReplyComposer";
+  isAllowedAttachment,
+  isAttachmentTooLarge,
+  prepareAttachmentForUpload,
+  cleanupOrphanAttachment,
+  uploadAttachment,
+} from "~/lib/file-upload.client";
 import type {
   SupportTicket,
   TicketAttachment,
   TicketMessage,
-  MessageAuthor,
   User,
   Client,
 } from "~/types";
 import StatusBadge from "~/components/tickets/StatusBadge";
 import PriorityBadge from "~/components/tickets/PriorityBadge";
 import MessageBubble from "~/components/tickets/MessageBubble";
-import PageHeader from "~/components/layout/PageHeader";
+import AttachmentLightbox from "~/components/tickets/AttachmentLightbox";
+import type { LightboxItem } from "~/components/tickets/AttachmentLightbox";
+import { StatusStepper } from "~/components/tickets/StatusStepper";
 import { useT } from "~/lib/i18n";
 import type { TranslationKey } from "~/lib/translations";
 
 const ReplySchema = z.object({
   message: z.string().default(""),
   is_internal: z.string().optional(),
-  note_visibility: z.enum(["external", "internal"]).optional(),
-  intent: z.enum(["reply", "status", "delete_message"]).default("reply"),
+  intent: z.enum(["reply", "status"]).default("reply"),
   status: z.string().optional(),
-  message_id: z.string().optional(),
 });
 
 export function meta({ data }: any) {
@@ -46,22 +49,21 @@ export function meta({ data }: any) {
 
 export async function loader({ request, context, params }: any) {
   const env = context.cloudflare.env;
-  const admin = await requireCoAdminOrAdmin(request, env.DB, env.SESSIONPORTAL);
+  const admin = await requireAdmin(request, env.DB, env.SESSIONPORTAL);
   const db = createDB(env.DB);
 
   const ticket = await db.getTicket(params.ticketId);
   if (!ticket) throw new Response("Ticket not found", { status: 404 });
-  await assertCanAccessTicket(db, admin, ticket.client_id);
 
-  const [messages, attachments, authors, client] = await Promise.all([
+  const [messages, attachments, admins, client] = await Promise.all([
     db.listMessagesByTicket(ticket.id),
     db.listAttachmentsByTicket(ticket.id),
-    db.listMessageAuthors(ticket.id),
+    db.listAdminUsers(),
     db.getClientById(ticket.client_id),
   ]);
 
-  const usersById: Record<string, MessageAuthor> = {};
-  for (const a of authors) usersById[a.id] = a;
+  const usersById: Record<string, User> = {};
+  for (const a of admins) usersById[a.id] = a;
 
   return { ticket, messages, attachments, usersById, client, admin };
 }
@@ -73,18 +75,6 @@ const STATUSES = [
   "resolved",
   "closed",
 ] as const;
-
-async function assertCanAccessTicket(
-  db: ReturnType<typeof createDB>,
-  user: User,
-  clientId: string
-) {
-  if (user.role !== "co-admin") return;
-  const assignments = await db.listCoAdminClients(user.id);
-  if (!assignments.some((a) => a.client_id === clientId)) {
-    throw new Response("Forbidden", { status: 403 });
-  }
-}
 
 function statusToKey(status: (typeof STATUSES)[number]): TranslationKey {
   if (status === "closed") return "status_closed_short";
@@ -110,12 +100,11 @@ function getAttachmentIcon(fileName: string, mimeType?: string): string {
 
 export async function action({ request, context, params }: any) {
   const env = context.cloudflare.env;
-  const admin = await requireCoAdminOrAdmin(request, env.DB, env.SESSIONPORTAL);
+  const admin = await requireAdmin(request, env.DB, env.SESSIONPORTAL);
   const db = createDB(env.DB);
 
   const ticket = await db.getTicket(params.ticketId);
   if (!ticket) throw new Response("Ticket not found", { status: 404 });
-  await assertCanAccessTicket(db, admin, ticket.client_id);
 
   const formData = await request.formData();
   const raw = Object.fromEntries(formData);
@@ -124,25 +113,7 @@ export async function action({ request, context, params }: any) {
     return { errors: parsed.error.flatten().fieldErrors };
   }
 
-  const { intent, message, is_internal, note_visibility, status, message_id } = parsed.data;
-
-  if (intent === "delete_message") {
-    const target = message_id ? await db.getTicketMessage(message_id) : null;
-    // Scoped to this ticket so the ticket-level access check above covers it.
-    if (!target || target.ticket_id !== ticket.id) {
-      return { error: "ไม่พบข้อความ" };
-    }
-    if (admin.role !== "admin" && target.user_id !== admin.id) {
-      throw new Response("Forbidden", { status: 403 });
-    }
-    const fileKeys = await db.deleteTicketMessage(target.id);
-    if (fileKeys.length > 0) {
-      context.cloudflare.ctx.waitUntil(
-        Promise.allSettled(fileKeys.map((key) => env.ATTACHMENTS.delete(key)))
-      );
-    }
-    return { ok: true };
-  }
+  const { intent, message, is_internal, status } = parsed.data;
 
   // Validate message only for reply intent
   if (intent === "reply" && !message.trim()) {
@@ -170,34 +141,31 @@ export async function action({ request, context, params }: any) {
         read: 0,
       } as const;
       await db.createNotification(notification);
-      // Telegram and email are external HTTP calls; awaiting them held the
-      // response until both providers answered.
-      context.cloudflare.ctx.waitUntil(
-        Promise.allSettled([
-          sendTelegramNotificationForClient({
-            db,
-            appUrl: env.APP_URL,
-            notification,
-            clientId: client.id,
-          }),
-          status === "closed" && clientUser?.email && env.SMTP2GO_API_KEY
-            ? sendTicketClosedEmailToClient({
-                to: clientUser.email,
-                toName: clientUser.name,
-                ticketTitle: ticket.title,
-                ticketUrl: `${env.APP_URL}/tickets/${ticket.id}`,
-                apiKey: env.SMTP2GO_API_KEY,
-                db,
-              })
-            : Promise.resolve(),
-        ])
-      );
+      await sendTelegramNotification({
+        db,
+        appUrl: env.APP_URL,
+        notification,
+      });
+
+      if (status === "closed" && clientUser?.email && env.SEND_EMAIL) {
+        const ticketUrl = `${env.APP_URL}/tickets/${ticket.id}`;
+        await sendTicketClosedEmailToClient({
+          to: clientUser.email,
+          toName: clientUser.name,
+          cc: parseClientCcEmails(client.cc_emails).map((email) => ({ email })),
+          ticketTitle: ticket.title,
+          ticketUrl,
+          sendEmail: env.SEND_EMAIL,
+          db,
+          lang: clientUser.language === "en" ? "en" : "th",
+        });
+      }
     }
     return redirect(`/admin/tickets/${ticket.id}`);
   }
 
   // Reply
-  const isInternal = note_visibility === "internal" || is_internal === "1" ? 1 : 0;
+  const isInternal = is_internal === "1" ? 1 : 0;
   const messageId = generateId();
   await db.createTicketMessage({
     id: messageId,
@@ -216,34 +184,32 @@ export async function action({ request, context, params }: any) {
         mimeType: string;
         sizeBytes: number;
       }>;
-      await Promise.all(
-        items
-          .filter((item) => item?.fileKey)
-          .map((item) =>
-            db.createTicketAttachment({
-              id: generateId(),
-              ticket_id: ticket.id,
-              message_id: messageId,
-              uploader_user_id: admin.id,
-              file_key: item.fileKey,
-              file_name: item.fileName || "attachment",
-              mime_type: item.mimeType || "application/octet-stream",
-              size_bytes: Number(item.sizeBytes) || 0,
-            })
-          )
-      );
+      for (const item of items) {
+        if (!item?.fileKey) continue;
+        await db.createTicketAttachment({
+          id: generateId(),
+          ticket_id: ticket.id,
+          message_id: messageId,
+          uploader_user_id: admin.id,
+          file_key: item.fileKey,
+          file_name: item.fileName || "attachment",
+          mime_type: item.mimeType || "application/octet-stream",
+          size_bytes: Number(item.sizeBytes) || 0,
+        });
+      }
     } catch {
       // ignore malformed attachment payload
     }
   }
 
   if (!isInternal) {
-    const [client] = await Promise.all([
-      db.getClientById(ticket.client_id),
-      ticket.status === "open"
-        ? db.updateTicket(ticket.id, { status: "in_progress" })
-        : Promise.resolve(),
-    ]);
+    // Update status to in_progress when admin replies
+    if (ticket.status === "open") {
+      await db.updateTicket(ticket.id, { status: "in_progress" });
+    }
+
+    // Notify client
+    const client = await db.getClientById(ticket.client_id);
     if (client) {
       const clientUser = await db.getUserById(client.user_id);
       const notification = {
@@ -256,89 +222,60 @@ export async function action({ request, context, params }: any) {
         read: 0,
       } as const;
       await db.createNotification(notification);
-      context.cloudflare.ctx.waitUntil(
-        Promise.allSettled([
-          sendTelegramNotificationForClient({
-            db,
-            appUrl: env.APP_URL,
-            notification,
-            clientId: client.id,
-          }),
-          clientUser?.email && env.SMTP2GO_API_KEY
-            ? sendTicketEmailToClient({
-                to: clientUser.email,
-                toName: clientUser.name,
-                ticketTitle: ticket.title,
-                message,
-                ticketUrl: `${env.APP_URL}/tickets/${ticket.id}`,
-                apiKey: env.SMTP2GO_API_KEY,
-                db,
-              })
-            : Promise.resolve(),
-        ])
-      );
+      await sendTelegramNotification({
+        db,
+        appUrl: env.APP_URL,
+        notification,
+      });
+      if (clientUser?.email && env.SEND_EMAIL) {
+        const ticketUrl = `${env.APP_URL}/tickets/${ticket.id}`;
+        const cc = parseClientCcEmails(client.cc_emails).map((email) => ({ email }));
+        const lang = clientUser.language === "en" ? "en" : "th";
+        // Several quick replies become one email (the rest roll up via cron).
+        await sendOrHoldTicketEmail(
+          env,
+          ticket.id,
+          { to: clientUser.email, toName: clientUser.name, cc, ticketTitle: ticket.title, ticketUrl, lang, audience: "client", lastMessage: message },
+          () =>
+            sendTicketEmailToClient({
+              to: clientUser.email,
+              toName: clientUser.name,
+              cc,
+              ticketTitle: ticket.title,
+              message,
+              ticketUrl,
+              sendEmail: env.SEND_EMAIL,
+              db,
+              lang,
+            })
+        );
+      }
     }
   }
 
-  // Submitted through a fetcher, which revalidates the loaders on its own.
-  return { ok: true };
+  return redirect(`/admin/tickets/${ticket.id}`);
 }
 
-function DeleteMessageButton({ messageId }: { messageId: string }) {
-  const fetcher = useFetcher<{ ok?: boolean; error?: string }>();
-
-  useEffect(() => {
-    if (fetcher.state === "idle" && fetcher.data?.error) alert(fetcher.data.error);
-  }, [fetcher.state, fetcher.data]);
-
-  return (
-    <fetcher.Form
-      method="post"
-      onSubmit={(e) => {
-        if (!confirm("ลบข้อความนี้ใช่หรือไม่? ไฟล์แนบของข้อความจะถูกลบด้วย")) e.preventDefault();
-      }}
-    >
-      <input type="hidden" name="intent" value="delete_message" />
-      <input type="hidden" name="message_id" value={messageId} />
-      <button
-        type="submit"
-        disabled={fetcher.state !== "idle"}
-        aria-label="ลบข้อความ"
-        title="ลบข้อความ"
-        className="rounded p-1 opacity-60 transition-opacity hover:opacity-100 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-60"
-      >
-        <FaTrashCan className="h-3 w-3" aria-hidden="true" />
-      </button>
-    </fetcher.Form>
-  );
-}
-
-export default function AdminTicketDetailPage({ loaderData }: any) {
+export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
   const { ticket, messages, attachments, usersById, client, admin } = loaderData as {
     ticket: SupportTicket;
     messages: TicketMessage[];
     attachments: TicketAttachment[];
-    usersById: Record<string, MessageAuthor>;
+    usersById: Record<string, User>;
     client: Client | null;
     admin: User;
   };
+  const errors = actionData?.errors;
   const { t, lang } = useT();
-
-  const replyFetcher = useFetcher({ key: replyFetcherKey(ticket.id) });
-  const pendingReply = replyFetcher.state !== "idle" ? replyFetcher.formData : undefined;
-  const pendingInternal = pendingReply?.get("note_visibility") === "internal";
-
-  // Hide a message as soon as its delete is submitted; it reappears on its own
-  // if the server rejects it, because the loader still returns it.
-  const deletingIds = new Set(
-    useFetchers()
-      .filter((f) => f.formData?.get("intent") === "delete_message")
-      .map((f) => String(f.formData?.get("message_id")))
-  );
-  const visibleMessages = messages.filter((m) => !deletingIds.has(m.id));
-  const externalMessages = visibleMessages.filter((m) => m.is_internal === 0);
-  const internalMessages = visibleMessages.filter((m) => m.is_internal === 1);
-
+  const navigation = useNavigation();
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const isSubmittingReplyRef = useRef(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadError, setUploadError] = useState<string>("");
+  const [uploadedFiles, setUploadedFiles] = useState<
+    Array<{ fileKey: string; fileName: string; mimeType: string; sizeBytes: number; url: string }>
+  >([]);
   const attachmentsByMessage = attachments.reduce<Record<string, TicketAttachment[]>>(
     (acc, a) => {
       (acc[a.message_id] ||= []).push(a);
@@ -347,150 +284,365 @@ export default function AdminTicketDetailPage({ loaderData }: any) {
     {}
   );
 
-  const renderMessage = (msg: TicketMessage, isInternal: boolean) => {
-    const author = usersById[msg.user_id];
-    const isStaff = author?.role === "admin" || author?.role === "co-admin";
-    const canDelete = admin.role === "admin" || msg.user_id === admin.id;
-    return (
-      <div key={msg.id} id={`msg-${msg.id}`}>
-        <MessageBubble
-          message={msg.message}
-          isClient={isInternal ? false : isStaff}
-          isInternal={isInternal}
-          authorName={author?.name}
-          authorBadge={author?.role === "co-admin" ? "Co-Admin" : undefined}
-          actions={canDelete ? <DeleteMessageButton messageId={msg.id} /> : undefined}
-          attachments={(attachmentsByMessage[msg.id] ?? []).map((att) => ({
-            id: att.id,
-            name: att.file_name,
-            href: `/api/attachments/${encodeURIComponent(att.file_key)}`,
-            icon: getAttachmentIcon(att.file_name, att.mime_type),
-            mimeType: att.mime_type,
-          }))}
-        />
-      </div>
-    );
+  const allLightboxItems: LightboxItem[] = attachments.map((att) => ({
+    id: att.id,
+    name: att.file_name,
+    href: `/api/attachments/${encodeURIComponent(att.file_key)}`,
+    icon: getAttachmentIcon(att.file_name, att.mime_type),
+  }));
+
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [composeMode, setComposeMode] = useState<"reply" | "internal">("reply");
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const insertQuickReply = (text: string) => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.value = el.value.trim() ? `${el.value.replace(/\s+$/, "")}\n${text}` : text;
+    el.focus();
   };
 
-  const pendingBubble = pendingReply ? (
-    <MessageBubble
-      pending
-      message={String(pendingReply.get("message") ?? "")}
-      isClient={!pendingInternal}
-      isInternal={pendingInternal}
-      authorName={admin.name}
-      authorBadge={admin.role === "co-admin" ? "Co-Admin" : undefined}
-      attachments={pendingReplyAttachments(pendingReply)}
-    />
-  ) : null;
+  const toBubbleAttachments = (messageId: string) =>
+    (attachmentsByMessage[messageId] ?? []).map((att) => ({
+      id: att.id,
+      name: att.file_name,
+      href: `/api/attachments/${encodeURIComponent(att.file_key)}`,
+      icon: getAttachmentIcon(att.file_name, att.mime_type),
+    }));
+
+  const initials = (name?: string | null) =>
+    (name ?? "?").trim().split(/\s+/).slice(0, 2).map((w) => w[0] ?? "").join("").toUpperCase() || "?";
+
+  const openLightbox = (attachmentId: string) => {
+    const idx = allLightboxItems.findIndex(i => i.id === attachmentId);
+    if (idx >= 0) setLightboxIndex(idx);
+  };
+
+  useEffect(() => {
+    if (navigation.state !== "idle") return;
+    if (!isSubmittingReplyRef.current) return;
+    if (errors?.message) {
+      isSubmittingReplyRef.current = false;
+      return;
+    }
+
+    formRef.current?.reset();
+    setUploadedFiles([]);
+    setUploadError("");
+    isSubmittingReplyRef.current = false;
+  }, [navigation.state, errors?.message]);
+
+  useEffect(() => {
+    const cleanupPendingUploads = () => {
+      if (isSubmittingReplyRef.current || uploadedFiles.length === 0) return;
+      for (const f of uploadedFiles) {
+        void cleanupOrphanAttachment({ ticketId: ticket.id, fileKey: f.fileKey });
+      }
+    };
+
+    const onBeforeUnload = () => cleanupPendingUploads();
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      cleanupPendingUploads();
+    };
+  }, [ticket.id, uploadedFiles]);
+
+  async function onAttachmentSelect(fileList: FileList | null) {
+    if (!fileList || fileList.length === 0) return;
+    setUploadError("");
+    setUploading(true);
+    setUploadProgress(0);
+    try {
+      for (const rawFile of Array.from(fileList)) {
+        if (!isAllowedAttachment(rawFile)) {
+          throw new Error("PDF, image, and video only");
+        }
+        const prepared = await prepareAttachmentForUpload(rawFile);
+        if (isAttachmentTooLarge(prepared)) {
+          throw new Error("Max file size is 2MB");
+        }
+        const uploaded = await uploadAttachment({
+          ticketId: ticket.id,
+          file: prepared,
+          onProgress: (percent) => setUploadProgress(percent),
+        });
+        setUploadedFiles((prev) => [...prev, uploaded]);
+      }
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+      setUploadProgress(0);
+    }
+  }
 
   return (
-    <div className="max-w-4xl space-y-6">
-      <PageHeader
-        title={ticket.title}
-        subtitle={client?.company_name ?? undefined}
-        breadcrumbs={[
-          { label: t("admin_breadcrumb_admin") },
-          { label: t("admin_breadcrumb_tickets"), href: "/admin/tickets" },
-          { label: `#${ticket.id.slice(0, 8)}` },
-        ]}
-      />
-
-      {/* Meta row */}
-      <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-4">
-        <div>
-          <p className="text-xs text-slate-500 mb-1">{t("admin_ticket_meta_status")}</p>
-          <StatusBadge status={ticket.status} />
+    <div className="mx-auto max-w-[1200px] space-y-5">
+      {lightboxIndex !== null && allLightboxItems.length > 0 && (
+        <AttachmentLightbox
+          items={allLightboxItems}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
+      )}
+      <div className="space-y-2.5">
+        <a href="/admin/tickets" className="text-[13px] text-muted-ink hover:text-ink">
+          {t("rd_ticket_back")}
+        </a>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-[13px] text-muted-ink">
+              #{ticket.id.slice(0, 8)}
+              {client?.company_name ? ` · ${client.company_name}` : ""}
+            </p>
+            <h1 className="mt-1 text-[24px] md:text-[28px] font-bold tracking-[-0.02em] text-ink break-words">
+              {ticket.title}
+            </h1>
+          </div>
+          <Form method="post" className="flex flex-wrap gap-2" aria-label={t("admin_ticket_change_status")}>
+            <input type="hidden" name="intent" value="status" />
+            {STATUSES.map((s) => (
+              <button
+                key={s}
+                type="submit"
+                name="status"
+                value={s}
+                disabled={ticket.status === s}
+                className={`h-10 rounded-full px-4 text-[13px] font-semibold transition-colors ${
+                  ticket.status === s
+                    ? "bg-ink text-white cursor-default"
+                    : "border border-line bg-white text-ink-soft hover:bg-paper"
+                }`}
+              >
+                {t(statusToKey(s))}
+              </button>
+            ))}
+          </Form>
         </div>
-        <div>
-          <p className="text-xs text-slate-500 mb-1">{t("admin_ticket_meta_priority")}</p>
-          <PriorityBadge priority={ticket.priority} />
-        </div>
-        <div>
-          <p className="text-xs text-slate-500 mb-1">{t("admin_ticket_meta_client")}</p>
-          <p className="text-sm font-medium text-slate-700">{client?.company_name ?? "—"}</p>
-        </div>
-        <div>
-          <p className="text-xs text-slate-500 mb-1">{t("admin_ticket_meta_opened")}</p>
-          <p className="text-sm text-slate-700">{formatDate(ticket.created_at, lang)}</p>
-        </div>
+        <StatusStepper status={ticket.status} lang={lang} />
       </div>
 
-      {/* Status change */}
-      <div className="rounded-xl border border-slate-200 bg-white p-4">
-        <p className="text-xs font-medium text-slate-600 mb-3">
-          {t("admin_ticket_change_status")}
-        </p>
-        <Form method="post" className="flex flex-wrap gap-2">
-          <input type="hidden" name="intent" value="status" />
-          {STATUSES.map((s) => (
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
+      {/* Chat layout: the thread scrolls inside the card and the composer stays
+          in view, instead of the whole page growing with every message. */}
+      <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-[20px] border border-line bg-white lg:sticky lg:top-4 lg:h-[calc(100dvh-8rem)] lg:min-h-[520px]">
+        {/* Conversation (team = ink, client = paper, internal = yellow dashed) */}
+        <ChatThread
+          className="max-h-[65dvh] min-h-[240px] lg:max-h-none lg:min-h-0 lg:flex-1"
+          showEarlierLabel={(n) => (lang === "en" ? `Show ${n} earlier messages` : `แสดงข้อความก่อนหน้า (${n})`)}
+          empty={<p className="py-2 text-center text-xs text-faint-ink">{t("rd_ticket_no_messages")}</p>}
+          first={
+          <div className="flex gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] bg-[#F0EEE7] text-[13px] font-bold text-ink">
+              {initials(client?.company_name)}
+            </span>
+            <div className="min-w-0 flex-1">
+              <MessageBubble
+                message={ticket.description}
+                isClient={true}
+                isInternal={false}
+                alignRight={false}
+                authorName={`${client?.company_name ?? t("rd_ticket_client_label")} · ${formatDate(ticket.created_at, lang)}`}
+              />
+            </div>
+          </div>
+          }
+          items={messages.map((msg) => {
+            const author = usersById[msg.user_id];
+            const isTeam = !!author;
+            const isNote = msg.is_internal === 1;
+            const who = isTeam ? author.name : client?.company_name ?? t("rd_ticket_client_label");
+            return { key: msg.id, node: (
+              <div
+                id={`msg-${msg.id}`}
+                className={`flex gap-3 ${isTeam ? "flex-row-reverse" : ""}`}
+              >
+                <span
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] text-[13px] font-bold ${
+                    isTeam ? "bg-ink text-brand-yellow" : "bg-[#F0EEE7] text-ink"
+                  }`}
+                >
+                  {initials(who)}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <MessageBubble
+                    message={msg.message}
+                    isClient={!isTeam}
+                    isInternal={isNote}
+                    alignRight={isTeam}
+                    internalLabel={t("rd_ticket_internal_label")}
+                    authorName={`${who} · ${formatRelativeTime(msg.created_at, lang)}`}
+                    attachments={toBubbleAttachments(msg.id)}
+                    onAttachmentClick={(a) => openLightbox(a.id)}
+                  />
+                </div>
+              </div>
+            ) };
+          })}
+        />
+
+      {/* Reply form — pinned under the thread */}
+      <div key={messages.length} className="shrink-0 border-t border-line-soft bg-white px-4 pb-4 pt-3 md:px-5 lg:max-h-[50%] lg:overflow-y-auto">
+        <Form method="post" ref={formRef} className="space-y-3">
+          <input type="hidden" name="intent" value="reply" />
+          <input type="hidden" name="is_internal" value={composeMode === "internal" ? "1" : ""} />
+          <div className="inline-flex rounded-full bg-paper p-[3px]" role="tablist">
+            {(["reply", "internal"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                role="tab"
+                aria-selected={composeMode === m}
+                onClick={() => setComposeMode(m)}
+                className={`h-[34px] rounded-full px-3.5 text-xs font-semibold transition-colors ${
+                  composeMode === m
+                    ? m === "internal"
+                      ? "bg-[#FFF8CC] text-[#3A3000] shadow-[0_1px_2px_rgba(0,0,0,0.08)]"
+                      : "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]"
+                    : "text-muted-ink hover:text-ink"
+                }`}
+              >
+                {t(m === "reply" ? "rd_ticket_mode_reply" : "rd_ticket_mode_internal")}
+              </button>
+            ))}
+          </div>
+          <input type="hidden" name="attachments_json" value={JSON.stringify(uploadedFiles)} />
+          <label htmlFor="admin-ticket-reply" className="sr-only">
+            {t("admin_ticket_reply_label")}
+          </label>
+          <textarea
+            id="admin-ticket-reply"
+            ref={textareaRef}
+            name="message"
+            rows={3}
+            required
+            className={`w-full resize-y rounded-[14px] border px-3.5 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ink/10 focus:border-ink/40 ${
+              composeMode === "internal" ? "border-dashed border-[#E3CF5C] bg-[#FFFCE8]" : "border-line bg-white"
+            }`}
+            placeholder={t(composeMode === "internal" ? "rd_ticket_ph_internal" : "rd_ticket_ph_reply")}
+          />
+          {errors?.message && (
+            <p className="text-xs text-rose-600">{errors.message[0]}</p>
+          )}
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-muted-ink">
+              {t("rd_ticket_attach")}
+            </label>
+            <input
+              type="file"
+              accept="application/pdf,image/*,video/*"
+              multiple
+              onChange={(e) => void onAttachmentSelect(e.target.files)}
+              className="block w-full text-xs text-muted-ink file:mr-3 file:rounded-md file:border file:border-line file:bg-white file:px-2.5 file:py-2 mt-2"
+            />
+            {uploading ? (
+              <div className="space-y-2 mt-2">
+                <p className="text-xs text-muted-ink">Uploading... {uploadProgress}%</p>
+                <div className="h-1.5 w-full rounded bg-line overflow-hidden">
+                  <div
+                    className="h-full bg-ink transition-all"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+              </div>
+            ) : null}
+            {uploadError ? <p className="text-xs text-rose-600">{uploadError}</p> : null}
+            {uploadedFiles.length > 0 ? (
+              <ul className="text-xs text-muted-ink space-y-2 mt-2 max-w-[500px] bg-paper rounded-lg p-2">
+                {uploadedFiles.map((f) => (
+                  <li
+                    key={f.fileKey}
+                    className="flex items-center justify-between gap-2 bg-paper rounded px-2 py-1"
+                  >
+                    <span>
+                      {getAttachmentIcon(f.fileName, f.mimeType)} {f.fileName}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUploadedFiles((prev) =>
+                          prev.filter((item) => item.fileKey !== f.fileKey)
+                        );
+                        void cleanupOrphanAttachment({ ticketId: ticket.id, fileKey: f.fileKey });
+                      }}
+                      className="rounded-md border border-line bg-white px-2 py-0.5 text-[11px] text-muted-ink hover:bg-paper"
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap gap-1.5">
+              {(["rd_ticket_quick_1", "rd_ticket_quick_2", "rd_ticket_quick_3"] as const).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => insertQuickReply(t(k))}
+                  className="h-[34px] rounded-full border border-line bg-white px-3 text-xs text-ink-soft hover:bg-paper"
+                >
+                  {t(k)}
+                </button>
+              ))}
+            </div>
             <button
-              key={s}
               type="submit"
-              name="status"
-              value={s}
-              disabled={ticket.status === s}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
-                ticket.status === s
-                  ? "bg-slate-900 text-white border-slate-900 cursor-default"
-                  : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-              }`}
+              className="inline-flex h-10 items-center rounded-full bg-ink px-5 text-[13px] font-semibold text-white hover:bg-black transition-colors"
             >
-              {t(statusToKey(s))}
+              {t(composeMode === "internal" ? "rd_ticket_mode_internal" : "admin_ticket_send")}
             </button>
-          ))}
+          </div>
         </Form>
       </div>
+      </section>
 
-      {/* External conversation */}
-      <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5 mb-1">
-          <span>💬</span> บทสนทนา — ลูกค้าเห็น
-        </p>
-        <MessageBubble message={ticket.description} isClient={false} isInternal={false} />
-        {externalMessages.map((msg) => renderMessage(msg, false))}
-        {!pendingInternal ? pendingBubble : null}
-        {externalMessages.length === 0 && !(pendingReply && !pendingInternal) && (
-          <p className="text-xs text-slate-400 text-center py-2">ยังไม่มีข้อความ</p>
-        )}
-      </div>
-
-      {/* Internal notes */}
-      {(internalMessages.length > 0 || (pendingReply && pendingInternal)) && (
-        <div className="space-y-3 rounded-2xl border border-amber-200 bg-amber-50/40 p-4">
-          <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide flex items-center gap-1.5 mb-1">
-            <span>🔒</span> บันทึกภายใน — ทีมเท่านั้น
-          </p>
-          {internalMessages.map((msg) => renderMessage(msg, true))}
-          {pendingInternal ? pendingBubble : null}
+      <aside className="flex w-full shrink-0 flex-col gap-3 lg:sticky lg:top-4 lg:w-[300px]">
+        <div className="flex flex-col gap-3.5 rounded-[20px] border border-line bg-white p-[18px]">
+          <div className="flex items-center justify-between gap-3 text-[13px]">
+            <span className="text-muted-ink">{t("admin_ticket_meta_status")}</span>
+            <StatusBadge status={ticket.status} />
+          </div>
+          <div className="flex items-center justify-between gap-3 text-[13px]">
+            <span className="text-muted-ink">{t("admin_ticket_meta_priority")}</span>
+            <PriorityBadge priority={ticket.priority} />
+          </div>
+          <div className="flex justify-between gap-3 text-[13px]">
+            <span className="text-muted-ink">{t("admin_ticket_meta_client")}</span>
+            <span className="text-right font-semibold">{client?.company_name ?? "—"}</span>
+          </div>
+          <div className="flex justify-between gap-3 text-[13px]">
+            <span className="text-muted-ink">{t("admin_ticket_meta_opened")}</span>
+            <span className="text-right font-semibold">{formatDate(ticket.created_at, lang)}</span>
+          </div>
+          <div className="flex justify-between gap-3 text-[13px]">
+            <span className="text-muted-ink">{t("admin_tickets_col_updated")}</span>
+            <span className="text-right font-semibold">{formatRelativeTime(ticket.updated_at, lang)}</span>
+          </div>
         </div>
-      )}
-
-      {/* Reply form */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-4">
-        <TicketReplyComposer
-          ticketId={ticket.id}
-          hiddenFields={{ intent: "reply" }}
-          label={t("admin_ticket_reply_label")}
-          placeholder={t("admin_ticket_ph_reply")}
-          attachHint="แนบไฟล์ (PDF/รูป/วิดีโอ ไม่เกิน 2MB) — วางรูปด้วย Cmd/Ctrl+V หรือลากไฟล์มาวางได้"
-          dropLabel={t("ticket_drop_files")}
-          sendLabel={t("admin_ticket_send")}
-          sendingLabel="กำลังส่ง…"
-          extraControls={
-            <label className="flex items-center gap-2 text-xs text-slate-600">
-              <span className="shrink-0">{t("admin_ticket_note_visibility")}</span>
-              <select
-                name="note_visibility"
-                defaultValue="external"
-                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500"
-              >
-                <option value="external">{t("admin_ticket_external_note")}</option>
-                <option value="internal">{t("admin_ticket_internal_note")}</option>
-              </select>
-            </label>
-          }
-        />
+        {client ? (
+          <div className="rounded-[20px] border border-line bg-white p-[18px]">
+            <p className="mb-2.5 text-[13px] font-semibold">{t("rd_ticket_this_client")}</p>
+            <p className="text-[13px] leading-[1.7] text-muted-ink break-words">
+              {client.website_url ? (
+                <>
+                  {client.website_url.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                  <br />
+                </>
+              ) : null}
+              {t("admin_col_package")}: <span className="capitalize">{client.package}</span>
+            </p>
+            <a
+              href={`/admin/clients/${client.id}`}
+              className="mt-2.5 inline-block text-[13px] font-semibold text-ink hover:underline"
+            >
+              {t("rd_ticket_view_client")}
+            </a>
+          </div>
+        ) : null}
+      </aside>
       </div>
     </div>
   );

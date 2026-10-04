@@ -28,7 +28,7 @@ export default function ClientContactPage() {
         ]}
       />
 
-      <section className="bg-white rounded-xl border border-slate-200 p-6">
+      <section className="rounded-[20px] border border-line bg-white p-4 md:p-6">
         <TeamContactPanel showIntro={false} />
       </section>
     </div>

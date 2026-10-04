@@ -4,7 +4,7 @@
  */
 import { useState, useCallback, useMemo } from "react";
 import { Form } from "react-router";
-import { PlusCircle, Trash2, GripVertical, Loader2 } from "lucide-react";
+import { PlusCircle, Trash2, Loader2 } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
@@ -245,7 +245,10 @@ export default function ReportEditor({
         type="hidden"
         name="tasks_json"
         value={JSON.stringify(
-          taskDrafts.map(({ id: _id, ...t }) => t)
+          categoryOptions
+            .flatMap((o) => taskDrafts.filter((d) => d.category === o.value))
+            .concat(taskDrafts.filter((d) => !categoryOptions.some((o) => o.value === d.category)))
+            .map(({ id: _id, ...t }) => t)
         )}
       />
       {isNew && (
@@ -264,8 +267,8 @@ export default function ReportEditor({
       )}
 
       {/* ── Basic Info ─────────────────────────────────────────────────────── */}
-      <section className="bg-white rounded-xl border border-slate-200 p-6 space-y-5">
-        <h2 className="text-sm font-semibold text-slate-900">
+      <section className="rounded-[20px] border border-line bg-white p-5 sm:p-6 space-y-5">
+        <h2 className="text-[16px] font-semibold text-ink">
           {t("admin_editor_section_basic")}
         </h2>
 
@@ -274,19 +277,19 @@ export default function ReportEditor({
           {isNew ? (
             <div className="space-y-2 sm:col-span-2">
               <Label>{t("admin_editor_select_clients")}</Label>
-              <div className="max-h-44 overflow-y-auto rounded-lg border border-slate-200 bg-white p-3 grid sm:grid-cols-2 gap-2">
+              <div className="max-h-44 overflow-y-auto rounded-[14px] border border-line bg-white p-2 grid sm:grid-cols-2 gap-1">
                 {clients.map((c) => {
                   const checked = selectedClientIds.includes(c.id);
                   return (
                     <label
                       key={c.id}
-                      className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-slate-50 text-sm text-slate-700 cursor-pointer"
+                      className="flex items-center gap-2 rounded-xl px-3 py-2 hover:bg-paper text-sm text-ink-soft cursor-pointer min-h-10"
                     >
                       <input
                         type="checkbox"
                         checked={checked}
                         onChange={(e) => handleToggleClient(c.id, e.target.checked)}
-                        className="rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+                        className="h-4 w-4 rounded border-line accent-[#111]"
                       />
                       <span>{c.company_name}</span>
                     </label>
@@ -294,7 +297,7 @@ export default function ReportEditor({
                 })}
               </div>
               {errors?.client_ids_json && (
-                <p className="text-red-500 text-xs">{errors.client_ids_json[0]}</p>
+                <p className="text-[#B4541A] text-xs">{errors.client_ids_json[0]}</p>
               )}
             </div>
           ) : (
@@ -317,7 +320,7 @@ export default function ReportEditor({
                 ))}
               </NativeSelect>
               {errors?.client_id && (
-                <p className="text-red-500 text-xs">{errors.client_id[0]}</p>
+                <p className="text-[#B4541A] text-xs">{errors.client_id[0]}</p>
               )}
             </div>
           )}
@@ -388,7 +391,7 @@ export default function ReportEditor({
           <div className="space-y-2">
             <Label>{t("admin_editor_uptime_per_client")}</Label>
             {selectedClientIds.length === 0 ? (
-              <p className="text-xs text-slate-500">{t("admin_editor_uptime_select_client_first")}</p>
+              <p className="text-xs text-muted-ink">{t("admin_editor_uptime_select_client_first")}</p>
             ) : (
               <div className="space-y-2">
                 {selectedClientIds.map((clientId) => {
@@ -396,17 +399,17 @@ export default function ReportEditor({
                   if (!client) return null;
                   const isLoading = uptimeFetchingByClient[clientId];
                   return (
-                    <div key={clientId} className="grid grid-cols-1 sm:grid-cols-[1fr_180px] gap-2 items-center rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <div key={clientId} className="grid grid-cols-1 sm:grid-cols-[1fr_180px] gap-2 items-center rounded-[14px] border border-line bg-paper p-3">
                       <div className="text-sm">
-                        <p className="font-medium text-slate-800">{client.company_name}</p>
-                        <p className="text-xs text-slate-500">
+                        <p className="font-medium text-ink">{client.company_name}</p>
+                        <p className="text-xs text-muted-ink">
                           {client.website_url?.replace(/^https?:\/\//, "") ?? t("admin_editor_no_domain")}
                         </p>
                       </div>
                       <div className="space-y-1">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs text-slate-500">{t("admin_editor_uptime_pct")}</span>
-                          {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-500" /> : null}
+                          <span className="text-xs text-muted-ink">{t("admin_editor_uptime_pct")}</span>
+                          {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-ink" /> : null}
                         </div>
                         <Input
                           type="number"
@@ -434,7 +437,7 @@ export default function ReportEditor({
             <Label htmlFor="uptime_percent" className="flex items-center gap-2">
               {t("admin_editor_uptime_pct")}
               {uptimeFetching && (
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-500" />
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-ink" />
               )}
             </Label>
             <Input
@@ -449,34 +452,27 @@ export default function ReportEditor({
               placeholder="99.95"
             />
             {uptimePercent === "" && !uptimeFetching && selectedClientId && (
-              <p className="text-xs text-slate-500">{t("admin_editor_uptime_hint")}</p>
+              <p className="text-xs text-muted-ink">{t("admin_editor_uptime_hint")}</p>
             )}
           </div>
         )}
       </section>
 
-      {/* ── Tasks ──────────────────────────────────────────────────────────── */}
-      <section className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-slate-900">
-            {t("admin_editor_tasks_title")} ({taskDrafts.length})
-          </h2>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={addTask}
-            className="gap-1.5"
-          >
+      {/* ── Tasks (grouped by category) ─────────────────────────────────── */}
+      <section className="rounded-[20px] border border-line bg-white p-5 sm:p-6 space-y-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-[16px] font-semibold text-ink">{t("admin_editor_tasks_title")}</h2>
+            <p className="text-[13px] text-muted-ink">{taskDrafts.length} {t("items")}</p>
+          </div>
+          <Button type="button" variant="outline" onClick={addTask} className="gap-1.5">
             <PlusCircle className="w-4 h-4" /> {t("admin_editor_add_task")}
           </Button>
         </div>
 
         {/* Preset tasks */}
-        <div className="space-y-2">
-          <p className="text-xs font-medium text-slate-500">
-            {t("admin_editor_presets_hint")}
-          </p>
+        <div className="rounded-[16px] bg-paper p-4 space-y-2.5">
+          <p className="text-xs font-medium text-muted-ink">{t("admin_editor_presets_hint")}</p>
           <div className="flex flex-wrap gap-2">
             {presetTasks.map((preset) => {
               const alreadyAdded = taskDrafts.some((t) => t.title === preset.title);
@@ -486,10 +482,10 @@ export default function ReportEditor({
                   type="button"
                   onClick={() => addPresetTask(preset)}
                   disabled={alreadyAdded}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                  className={`inline-flex h-8 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-medium transition-colors ${
                     alreadyAdded
-                      ? "bg-violet-50 border-violet-200 text-violet-400 cursor-default"
-                      : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300"
+                      ? "bg-ink text-white cursor-default"
+                      : "border border-line bg-white text-ink-soft hover:border-ink/30"
                   }`}
                 >
                   {alreadyAdded ? "✓ " : "+ "}
@@ -501,68 +497,92 @@ export default function ReportEditor({
         </div>
 
         {taskDrafts.length === 0 && (
-          <p className="text-slate-500 text-sm py-4 text-center">
-            {t("admin_editor_tasks_empty")}
-          </p>
+          <div className="flex flex-col items-center gap-3 py-8 text-center">
+            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-paper text-muted-ink"><PlusCircle className="w-5 h-5" /></span>
+            <p className="text-sm text-muted-ink">{t("admin_editor_tasks_empty")}</p>
+          </div>
         )}
 
-        <div className="space-y-3">
-          {taskDrafts.map((task, index) => (
-            <div
-              key={task.id}
-              className="grid grid-cols-[auto_1fr_1fr_1fr_auto] gap-2 items-start p-3 border border-slate-100 rounded-lg bg-slate-50 group"
-            >
-              {/* Drag handle (visual only) */}
-              <GripVertical className="w-4 h-4 text-slate-300 mt-2.5 cursor-grab" />
-
-              {/* Category */}
-              <Select
-                value={task.category}
-                onValueChange={(v) =>
-                  updateTask(task.id, "category", v as TaskCategory)
-                }
-              >
-                <SelectTrigger className="h-9 text-xs bg-white">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {categoryOptions.map((o) => (
-                    <SelectItem key={o.value} value={o.value} className="text-xs">
-                      {o.label}
-                    </SelectItem>
+        <div className="space-y-5">
+          {categoryOptions
+            .map((o) => ({ ...o, tasks: taskDrafts.filter((d) => d.category === o.value) }))
+            .filter((g) => g.tasks.length > 0)
+            .map((group) => (
+              <div key={group.value} className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-[13px] font-semibold text-ink">
+                    {group.label}
+                    <span className="ml-2 rounded-full bg-paper px-2 py-0.5 text-xs font-semibold text-muted-ink tabular-nums">{group.tasks.length}</span>
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setTaskDrafts((prev) => [
+                        ...prev,
+                        { id: makeDraftId(), category: group.value as TaskCategory, title: "", description: "" },
+                      ])
+                    }
+                    className="inline-flex h-8 items-center gap-1 rounded-full px-3 text-[13px] font-medium text-muted-ink hover:bg-paper hover:text-ink"
+                  >
+                    <PlusCircle className="w-3.5 h-3.5" /> {t("admin_editor_add_task")}
+                  </button>
+                </div>
+                <div className="overflow-hidden rounded-[16px] border border-line">
+                  {group.tasks.map((task) => (
+                    <div
+                      key={task.id}
+                      className="grid grid-cols-1 gap-2 border-b border-[#F4F2EC] p-3 last:border-0 sm:grid-cols-[1fr_1fr_150px_auto] sm:items-center"
+                    >
+                      <input
+                        value={task.title}
+                        onChange={(e) => updateTask(task.id, "title", e.target.value)}
+                        placeholder={t("admin_editor_task_placeholder")}
+                        className="h-10 w-full rounded-xl border border-line bg-white px-3.5 text-sm font-medium text-ink focus:outline-none focus:ring-2 focus:ring-ink/10 focus:border-ink/40"
+                      />
+                      <input
+                        value={task.description}
+                        onChange={(e) => updateTask(task.id, "description", e.target.value)}
+                        placeholder={t("admin_editor_task_desc_ph")}
+                        className="h-10 w-full rounded-xl border border-line bg-white px-3.5 text-sm text-ink-soft focus:outline-none focus:ring-2 focus:ring-ink/10 focus:border-ink/40"
+                      />
+                      <div className="flex items-center gap-2">
+                        <Select
+                          value={task.category}
+                          onValueChange={(v) => updateTask(task.id, "category", v as TaskCategory)}
+                        >
+                          <SelectTrigger className="h-10 flex-1 rounded-xl border-line bg-white text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {categoryOptions.map((o) => (
+                              <SelectItem key={o.value} value={o.value} className="text-xs">
+                                {o.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <button
+                          type="button"
+                          onClick={() => removeTask(task.id)}
+                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-faint-ink hover:bg-[#FDE7DA] hover:text-[#B4541A] transition-colors sm:hidden"
+                          aria-label={t("admin_editor_remove_task")}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeTask(task.id)}
+                        className="hidden h-10 w-10 items-center justify-center rounded-full text-faint-ink hover:bg-[#FDE7DA] hover:text-[#B4541A] transition-colors sm:flex"
+                        aria-label={t("admin_editor_remove_task")}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   ))}
-                </SelectContent>
-              </Select>
-
-              {/* Title */}
-              <input
-                value={task.title}
-                onChange={(e) => updateTask(task.id, "title", e.target.value)}
-                placeholder={`${t("admin_editor_task_placeholder")} ${index + 1}`}
-                className="h-9 rounded-lg border border-slate-200 px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 w-full"
-              />
-
-              {/* Description */}
-              <input
-                value={task.description}
-                onChange={(e) =>
-                  updateTask(task.id, "description", e.target.value)
-                }
-                placeholder={t("admin_editor_task_desc_ph")}
-                className="h-9 rounded-lg border border-slate-200 px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 w-full"
-              />
-
-              {/* Remove */}
-              <button
-                type="button"
-                onClick={() => removeTask(task.id)}
-                className="p-1.5 text-slate-300 hover:text-red-500 transition-colors mt-1"
-                aria-label={t("admin_editor_remove_task")}
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          ))}
+                </div>
+              </div>
+            ))}
         </div>
       </section>
 
@@ -575,29 +595,29 @@ export default function ReportEditor({
       <div className="space-y-3">
         {/* Send email toggle — only on new publish */}
         {isNew && (
-          <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+          <div className="flex items-start gap-3 rounded-[20px] border border-line bg-white px-5 py-4">
             <input
               id="send_email_toggle"
               type="checkbox"
               checked={sendEmailOnPublish}
               onChange={(e) => setSendEmailOnPublish(e.target.checked)}
-              className="mt-0.5 rounded border-slate-300 accent-violet-600 cursor-pointer"
+              className="mt-0.5 h-4 w-4 rounded border-line accent-[#111] cursor-pointer"
             />
             <label htmlFor="send_email_toggle" className="cursor-pointer">
-              <span className="block text-sm font-medium text-slate-800">
+              <span className="block text-sm font-medium text-ink">
                 {t("admin_editor_send_email_on_publish")}
               </span>
-              <span className="block text-xs text-slate-500 mt-0.5">
+              <span className="block text-xs text-muted-ink mt-0.5">
                 {t("admin_editor_send_email_hint")}
               </span>
             </label>
           </div>
         )}
 
-        <div className="flex items-center gap-3 justify-end">
+        <div className="sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center justify-end gap-2 rounded-[20px] border border-line bg-white/95 px-4 py-3 backdrop-blur">
           <a
             href="/admin/reports"
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
+            className="mr-auto inline-flex h-10 items-center rounded-full px-4 text-[13px] font-semibold text-muted-ink hover:bg-paper hover:text-ink transition-colors"
           >
             {t("cancel")}
           </a>
@@ -614,7 +634,6 @@ export default function ReportEditor({
             type="submit"
             name="intent"
             value="publish"
-            className="bg-violet-600 hover:bg-violet-700 text-white"
             disabled={isNew && selectedClientIds.length === 0}
           >
             {isNew ? t("admin_editor_publish_new") : t("admin_editor_publish")}

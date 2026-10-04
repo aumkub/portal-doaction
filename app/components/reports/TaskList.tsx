@@ -2,17 +2,17 @@ import { FaCircleCheck, FaWrench, FaCode, FaLock, FaChartLine, FaBolt, FaTag } f
 import type { ReportTask, TaskCategory } from "~/types";
 
 const categoryConfig: Record<TaskCategory, { label: string; icon: React.ReactNode; badgeCls: string; iconCls: string }> = {
-  maintenance: { label: "บำรุงรักษา", icon: <FaWrench />,     badgeCls: "bg-slate-100 text-slate-600 ring-1 ring-slate-200",   iconCls: "text-slate-500" },
-  development: { label: "พัฒนา",      icon: <FaCode />,       badgeCls: "bg-blue-50 text-blue-700 ring-1 ring-blue-200",       iconCls: "text-blue-500" },
-  security:    { label: "ความปลอดภัย",icon: <FaLock />,       badgeCls: "bg-red-50 text-red-700 ring-1 ring-red-200",          iconCls: "text-red-500" },
-  seo:         { label: "SEO",         icon: <FaChartLine />,  badgeCls: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",iconCls: "text-emerald-500" },
-  performance: { label: "ประสิทธิภาพ",icon: <FaBolt />,       badgeCls: "bg-amber-50 text-amber-700 ring-1 ring-amber-200",    iconCls: "text-amber-500" },
-  other:       { label: "อื่นๆ",       icon: <FaTag />,        badgeCls: "bg-slate-100 text-slate-500 ring-1 ring-slate-200",   iconCls: "text-slate-400" },
+  maintenance: { label: "บำรุงรักษา", icon: <FaWrench />,     badgeCls: "bg-paper text-ink",   iconCls: "text-muted-ink" },
+  development: { label: "พัฒนา",      icon: <FaCode />,       badgeCls: "bg-paper text-ink",       iconCls: "text-muted-ink" },
+  security:    { label: "ความปลอดภัย",icon: <FaLock />,       badgeCls: "bg-paper text-ink",          iconCls: "text-muted-ink" },
+  seo:         { label: "SEO",         icon: <FaChartLine />,  badgeCls: "bg-paper text-ink",iconCls: "text-muted-ink" },
+  performance: { label: "ประสิทธิภาพ",icon: <FaBolt />,       badgeCls: "bg-paper text-ink",    iconCls: "text-muted-ink" },
+  other:       { label: "อื่นๆ",       icon: <FaTag />,        badgeCls: "bg-paper text-ink",   iconCls: "text-muted-ink" },
 };
 
 export default function TaskList({ tasks }: { tasks: ReportTask[] }) {
   if (tasks.length === 0) {
-    return <p className="text-slate-500 text-sm py-4 text-center">ไม่มีรายการงาน</p>;
+    return <p className="text-muted-ink text-sm py-4 text-center">ไม่มีรายการงาน</p>;
   }
 
   const grouped = tasks.reduce<Record<string, ReportTask[]>>((acc, task) => {
@@ -38,7 +38,7 @@ export default function TaskList({ tasks }: { tasks: ReportTask[] }) {
               <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${conf.badgeCls}`}>
                 {conf.label}
               </span>
-              <span className="text-xs text-slate-500 ml-auto">{catTasks.length} รายการ</span>
+              <span className="text-xs text-muted-ink ml-auto">{catTasks.length} รายการ</span>
             </div>
 
             {/* Tasks */}
@@ -46,13 +46,13 @@ export default function TaskList({ tasks }: { tasks: ReportTask[] }) {
               {catTasks.map((task) => (
                 <li
                   key={task.id}
-                  className="flex items-start gap-3 px-4 py-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors"
+                  className="flex items-start gap-3 px-4 py-3 rounded-[14px] bg-paper hover:bg-[#EFEDE6] transition-colors"
                 >
-                  <FaCircleCheck className="text-emerald-500 text-sm mt-0.5 shrink-0" />
+                  <FaCircleCheck className="text-ink text-sm mt-0.5 shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-700">{task.title}</p>
+                    <p className="text-sm font-medium text-ink-soft">{task.title}</p>
                     {task.description && (
-                      <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{task.description}</p>
+                      <p className="text-xs text-muted-ink mt-0.5 leading-relaxed">{task.description}</p>
                     )}
                   </div>
                 </li>

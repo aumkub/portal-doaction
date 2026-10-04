@@ -6,37 +6,37 @@ import { cn } from "~/lib/utils"
 
 const badgeVariants = cva(
   // Base: pill, caption-bold (13px/600), consistent padding
-  "inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border border-transparent px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap transition-[color,box-shadow] focus-visible:ring-[3px] focus-visible:ring-ring/40 [&>svg]:pointer-events-none [&>svg]:size-3",
+  "inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border border-transparent px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ring-transparent whitespace-nowrap transition-[color,box-shadow] focus-visible:ring-[3px] focus-visible:ring-ring/40 [&>svg]:pointer-events-none [&>svg]:size-3",
   {
     variants: {
       variant: {
         // Dark navy — primary status
         default:
-          "bg-primary text-primary-foreground",
+          "bg-ink text-white ring-ink",
         // Soft yellow tag chip — feature highlights
         yellow:
-          "bg-yellow-light text-yellow-dark",
+          "bg-[#FFF6C2] text-[#6B5B00] ring-transparent",
         // Promo / brand yellow — announcements
         promo:
-          "bg-brand-yellow text-primary",
+          "bg-brand-yellow text-ink ring-transparent",
         // Lavender — AI / featured / blue tags
         purple:
-          "bg-surface-pricing-featured text-brand-blue",
+          "bg-sky-50 text-sky-700 ring-transparent",
         // Coral tag
         coral:
-          "bg-coral-light text-coral-dark",
+          "bg-[#FDE7DA] text-[#B4541A] ring-transparent",
         // Success / confirmation
         success:
-          "bg-success-accent text-white",
+          "bg-emerald-50 text-emerald-700 ring-transparent",
         // Error / destructive
         destructive:
-          "bg-brand-red text-brand-red-dark border border-brand-red-dark/20",
+          "bg-[#FDE7DA] text-[#B4541A] ring-transparent",
         // Neutral outline
         outline:
-          "border-hairline text-ink",
+          "bg-white text-ink-soft ring-line",
         // Quiet surface
         secondary:
-          "bg-surface text-muted-foreground",
+          "bg-paper text-muted-ink ring-transparent",
       },
     },
     defaultVariants: {

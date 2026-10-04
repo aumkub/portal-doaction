@@ -28,10 +28,10 @@ export function TicketReplyDropZone({
     >
       {isDragging && (
         <div
-          className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl border-2 border-dashed border-violet-400 bg-violet-50/90"
+          className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl border-2 border-dashed border-ink/40 bg-white/90"
           aria-hidden
         >
-          <p className="text-sm font-medium text-violet-700">{dropLabel}</p>
+          <p className="text-sm font-medium text-ink-soft">{dropLabel}</p>
         </div>
       )}
       {children}

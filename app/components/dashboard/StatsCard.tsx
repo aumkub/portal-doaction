@@ -35,7 +35,7 @@ export default function StatsCard({
   const c = colorMap[color];
 
   return (
-    <div className="bg-canvas rounded-xl border border-hairline p-5 hover:shadow-sm transition-shadow">
+    <div className="bg-white rounded-[18px] border border-line p-5">
       <div className="flex items-start justify-between mb-4">
         <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center", c.bg)}>
           <span className={cn("w-5 h-5", c.icon)}>{icon}</span>
@@ -50,7 +50,7 @@ export default function StatsCard({
           </span>
         )}
       </div>
-      <p className="text-2xl font-semibold text-ink leading-none">
+      <p className="font-display text-[32px] font-bold tracking-[-0.03em] text-ink leading-none tabular-nums">
         {value}
         {suffix && (
           <span className="text-sm font-normal text-steel ml-1">{suffix}</span>

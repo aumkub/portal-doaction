@@ -8,6 +8,7 @@ import type { TranslationKey } from "~/lib/translations";
 import type { IconType } from "react-icons";
 import {
   FaArrowRightFromBracket,
+  FaMagnifyingGlass,
   FaChartColumn,
   FaEnvelope,
   FaFileLines,
@@ -15,6 +16,7 @@ import {
   FaHeadset,
   FaHouse,
   FaPaperclip,
+  FaPlus,
   FaTicket,
   FaUserSecret,
   FaUsers,
@@ -57,11 +59,21 @@ interface SidebarProps {
   navBadges?: NavBadges;
 }
 
+/** Shared look for every sidebar link: quiet by default, a brand bar when active. */
+function navItemClass(isActive: boolean) {
+  return cn(
+    "flex items-center gap-2.5 h-10 px-3 rounded-[10px] text-sm font-medium transition-colors",
+    isActive
+      ? "bg-[#26261F] text-brand-yellow"
+      : "text-[#C9C7C0] hover:text-white hover:bg-white/5"
+  );
+}
+
 function NavBadge({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
     <span
-      className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[11px] font-semibold leading-none text-white"
+      className="ml-auto inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-brand-yellow px-1.5 text-[11px] font-bold leading-none text-ink tabular-nums"
       aria-label={`${count} ticket ที่ยังไม่ได้แก้`}
     >
       {count > 99 ? "99+" : count}
@@ -80,7 +92,7 @@ function NavItems({
 }) {
   const { t } = useT();
   return (
-    <nav className="flex-1 py-4 px-3 space-y-0.5">
+    <nav className="flex-1 space-y-1">
       {nav.map((item) => (
         <NavLink
           key={item.href}
@@ -90,14 +102,11 @@ function NavItems({
           onClick={onNavigate}
           className={({ isActive }) =>
             cn(
-              "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-              isActive
-                ? "bg-brand-yellow text-[#000000]"
-                : "text-slate-400 hover:text-white hover:bg-white/5"
+navItemClass(isActive)
             )
           }
         >
-          <item.icon className="text-base leading-none" aria-hidden="true" />
+          <item.icon className="text-[15px] leading-none shrink-0 opacity-80" aria-hidden="true" />
           {t(item.labelKey)}
           <NavBadge count={navBadges?.[item.href] ?? 0} />
         </NavLink>
@@ -109,7 +118,7 @@ function NavItems({
 function NavItemsWithRole({ nav, userRole, onNavigate }: { nav: NavItem[]; userRole?: string; onNavigate?: () => void }) {
   const { t } = useT();
   return (
-    <nav className="flex-1 py-4 px-3 space-y-0.5">
+    <nav className="flex-1 space-y-1">
       {nav
         .filter((item) => !item.roles || item.roles.includes(userRole as any))
         .map((item) => (
@@ -121,14 +130,11 @@ function NavItemsWithRole({ nav, userRole, onNavigate }: { nav: NavItem[]; userR
             onClick={onNavigate}
             className={({ isActive }) =>
               cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-brand-yellow text-black"
-                  : "text-slate-400 hover:text-white hover:bg-white/5"
+navItemClass(isActive)
               )
             }
           >
-            <item.icon className="text-base leading-none" aria-hidden="true" />
+            <item.icon className="text-[15px] leading-none shrink-0 opacity-80" aria-hidden="true" />
             {t(item.labelKey)}
           </NavLink>
         ))}
@@ -136,25 +142,26 @@ function NavItemsWithRole({ nav, userRole, onNavigate }: { nav: NavItem[]; userR
   );
 }
 
-function LogoBlock({ companyName }: { companyName?: string | null }) {
+function LogoBlock() {
   return (
-    <div className="py-3 pb-2 pt-1 flex flex-col justify-center px-5 border-b !border-white/10 shrink-0">
-
-      <div>
-        <div className="flex items-center gap-3">
-          <img
-            src="/logo-white.svg"
-            alt="do action"
-            className="object-cover w-[150px] mx-auto block"
-          />
-          {/* <span className="font-bold text-2xl text-slate-900 tracking-tight">do action</span> */}
-        </div>
-        <p className="block text-center text-[10px] text-white mt-0 tracking-widest font-bold">CLIENT PORTAL</p>
-      </div>
-      {companyName && (
-        <p className="text-white text-xs mt-1.5 truncate text-center">{companyName}</p>
-      )}
+    <div className="flex items-center gap-2.5 px-2 pt-1 pb-5 shrink-0">
+      <img src="/logo-white-tight.svg" alt="do action" className="h-12 w-auto" />
+      <span className="ml-auto text-[10px] font-semibold tracking-[0.08em] text-faint-ink">ADMIN</span>
     </div>
+  );
+}
+
+/** Jump-to-clients shortcut styled as the mockup's search field. */
+function SearchShortcut({ onNavigate }: { onNavigate?: () => void }) {
+  return (
+    <NavLink
+      to="/admin/clients"
+      onClick={onNavigate}
+      className="mb-3 flex h-10 items-center gap-2 rounded-[10px] border border-[#2E2E2B] bg-[#1B1B19] px-3 text-[13px] text-[#A9A8A2] hover:text-white"
+    >
+      <FaMagnifyingGlass className="text-[13px]" aria-hidden="true" />
+      ค้นหาลูกค้า…
+    </NavLink>
   );
 }
 
@@ -162,20 +169,17 @@ function LogoBlock({ companyName }: { companyName?: string | null }) {
 function ClientContactNavLink({ onNavigate }: { onNavigate?: () => void }) {
   const { t } = useT();
   return (
-    <div className="px-3 pt-2 pb-1 border-t !border-white/10 shrink-0">
+    <div className="pt-2 shrink-0">
       <NavLink
         to="/contact"
         onClick={onNavigate}
         className={({ isActive }) =>
           cn(
-            "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-            isActive
-              ? "bg-brand-yellow text-black"
-              : "text-slate-400 hover:text-white hover:bg-white/5"
+navItemClass(isActive)
           )
         }
       >
-        <FaHeadset className="text-base leading-none" aria-hidden="true" />
+        <FaHeadset className="text-[15px] leading-none shrink-0 opacity-80" aria-hidden="true" />
         {t("nav_contact_team")}
       </NavLink>
     </div>
@@ -185,13 +189,13 @@ function ClientContactNavLink({ onNavigate }: { onNavigate?: () => void }) {
 function LogoutButton() {
   const { t } = useT();
   return (
-    <div className="p-3 border-t !border-white/10 shrink-0">
+    <div className="pt-2 mt-2 border-t border-[#2A2A28] shrink-0">
       <Form method="post" action="/logout">
         <button
           type="submit"
-          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
+          className="flex items-center gap-2.5 w-full h-10 px-3 rounded-[10px] text-sm font-medium text-[#A9A8A2] hover:text-white hover:bg-white/5 transition-colors"
         >
-          <FaArrowRightFromBracket className="text-base leading-none" aria-hidden="true" />
+          <FaArrowRightFromBracket className="text-[15px] leading-none opacity-80" aria-hidden="true" />
           {t("nav_logout")}
         </button>
       </Form>
@@ -208,17 +212,9 @@ function SidebarContent({
   const { t } = useT();
   const nav = role === "co-admin" ? coAdminNav : role === "admin" ? adminNav : clientNav;
   return (
-    <div className="flex h-full flex-col bg-sidebar">
-      <LogoBlock companyName={companyName} />
-      {role === "admin" || role === "co-admin" ? (
-        <div className="px-5 pt-3">
-          <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-            role === "co-admin" ? "bg-success-accent/20 text-success-accent" : "bg-brand-yellow/20 text-brand-yellow"
-          }`}>
-            {role === "co-admin" ? "CO-ADMIN" : t("nav_badge_admin")}
-          </span>
-        </div>
-      ) : null}
+    <div className="flex h-full flex-col bg-ink px-3.5 py-5 text-white">
+      <LogoBlock />
+      {role === "admin" || role === "co-admin" ? <SearchShortcut onNavigate={onNavigate} /> : null}
       <ScrollArea className="flex-1">
         <NavItems nav={nav} onNavigate={onNavigate} navBadges={navBadges} />
       </ScrollArea>
@@ -231,7 +227,7 @@ function SidebarContent({
 /** Desktop sidebar (always visible, 240 px wide). */
 export function DesktopSidebar({ role, companyName, navBadges }: SidebarProps) {
   return (
-    <aside className="w-60 shrink-0 hidden lg:flex flex-col h-full">
+    <aside className="w-[248px] shrink-0 hidden lg:flex flex-col h-full">
       <SidebarContent role={role} companyName={companyName} navBadges={navBadges} />
     </aside>
   );
@@ -263,7 +259,7 @@ export function MobileSidebarTrigger({ role, companyName, navBadges }: SidebarPr
           </svg>
         </button>
       </SheetTrigger>
-      <SheetContent side="left" className="w-60 p-0 border-0">
+      <SheetContent side="left" className="w-[260px] p-0 border-0 bg-ink">
         <SidebarContent
           role={role}
           companyName={companyName}
@@ -278,4 +274,74 @@ export function MobileSidebarTrigger({ role, companyName, navBadges }: SidebarPr
 /** Default export combines both into a fragment — use inside a flex layout. */
 export default function Sidebar(props: SidebarProps) {
   return <DesktopSidebar {...props} />;
+}
+
+/** Client header nav: pill tabs, shown from tablet width up. */
+export function ClientTopNav({ navBadges }: { navBadges?: NavBadges }) {
+  const { t } = useT();
+  return (
+    <nav className="hidden md:flex items-center gap-1">
+      {clientNav
+        .filter((item) => item.href !== "/settings")
+        .map((item) => (
+          <NavLink
+            key={item.href}
+            to={item.href}
+            end={item.end}
+            prefetch="intent"
+            className={({ isActive }) =>
+              cn(
+                "flex h-9 items-center gap-1.5 rounded-full px-3.5 text-sm font-medium transition-colors",
+                isActive ? "bg-ink text-white" : "text-muted-ink hover:text-ink hover:bg-paper"
+              )
+            }
+          >
+            {t(item.labelKey)}
+            {(navBadges?.[item.href] ?? 0) > 0 && (
+              <span className="rounded-full bg-brand-yellow px-[7px] py-px text-[11px] font-bold text-ink">
+                {navBadges![item.href]}
+              </span>
+            )}
+          </NavLink>
+        ))}
+    </nav>
+  );
+}
+
+/** Client bottom tab bar on phones, with a raised "new ticket" action. */
+export function ClientBottomNav() {
+  const { t } = useT();
+  const tab = (item: NavItem) => (
+    <NavLink
+      key={item.href}
+      to={item.href}
+      end={item.end}
+      prefetch="intent"
+      className={({ isActive }) =>
+        cn(
+          "flex h-[52px] flex-col items-center justify-center gap-1 text-[11px]",
+          isActive ? "font-semibold text-ink" : "text-faint-ink"
+        )
+      }
+    >
+      <item.icon className="text-lg" aria-hidden="true" />
+      {/* Long labels ("รายงานประจำเดือน") keep to one line in a narrow tab */}
+      <span className="max-w-full truncate px-1 whitespace-nowrap">{t(item.labelKey)}</span>
+    </NavLink>
+  );
+  return (
+    <nav className="md:hidden fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 items-end border-t border-line bg-white px-2 pt-1.5 pb-[max(env(safe-area-inset-bottom),12px)]">
+      {tab(clientNav[0])}
+      {tab(clientNav[1])}
+      <NavLink
+        to="/tickets/new"
+        aria-label={t("nav_tickets")}
+        className="mx-auto -mb-1 flex h-14 w-14 items-center justify-center rounded-full bg-ink text-brand-yellow shadow-[0_6px_16px_rgba(0,0,0,0.2)]"
+      >
+        <FaPlus className="text-xl" aria-hidden="true" />
+      </NavLink>
+      {tab(clientNav[2])}
+      {tab(clientNav[4])}
+    </nav>
+  );
 }

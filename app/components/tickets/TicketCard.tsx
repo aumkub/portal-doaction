@@ -1,4 +1,5 @@
 import { Form } from "react-router";
+import { ConfirmButton } from "~/components/ui/confirm-button";
 import type { SupportTicket } from "~/types";
 import { formatDate } from "~/lib/utils";
 import StatusBadge from "~/components/tickets/StatusBadge";
@@ -9,7 +10,7 @@ export default function TicketCard({ ticket }: { ticket: SupportTicket }) {
   const canDelete = ticket.status === "open";
 
   return (
-    <div className="rounded-xl border border-hairline bg-canvas transition-colors hover:border-hairline-strong hover:shadow-sm">
+    <div className="rounded-[20px] border border-line bg-white transition-colors hover:border-line">
       {/* Clickable main area → ticket detail */}
       <a
         href={`/tickets/${ticket.id}`}
@@ -34,30 +35,25 @@ export default function TicketCard({ ticket }: { ticket: SupportTicket }) {
       <div className="flex items-center justify-between gap-2 border-t border-hairline px-4 py-2.5">
         <a
           href={`/tickets/${ticket.id}`}
-          className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline underline-offset-2"
+          className="inline-flex items-center gap-1 text-xs font-medium text-ink hover:underline underline-offset-4"
         >
           ดูรายละเอียด
           <FaArrowRight className="text-[9px]" />
         </a>
 
         {canDelete && (
-          <Form
-            method="post"
-            onSubmit={(e) => {
-              if (!confirm("ลบ Ticket นี้ใช่หรือไม่? Ticket จะถูกย้ายไปยังถังขยะ")) {
-                e.preventDefault();
-              }
-            }}
-          >
+          <Form method="post">
             <input type="hidden" name="intent" value="delete" />
             <input type="hidden" name="ticketId" value={ticket.id} />
-            <button
-              type="submit"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-medium text-red-600 hover:bg-red-100 transition-colors"
+            <ConfirmButton
+              message="Ticket จะถูกย้ายไปยังถังขยะ"
+              confirmLabel="ลบ Ticket"
+              destructive
+              className="inline-flex items-center gap-1.5 rounded-md border border-rose-200 bg-white px-2.5 py-1 text-[11px] font-medium text-rose-600 hover:bg-rose-50 transition-colors"
             >
               <FaTrash className="text-[9px]" />
               ลบ
-            </button>
+            </ConfirmButton>
           </Form>
         )}
       </div>

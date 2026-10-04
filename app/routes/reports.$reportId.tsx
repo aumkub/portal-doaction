@@ -1,13 +1,13 @@
 import { Form } from "react-router";
+import { getReportLinkSecret } from "~/lib/secrets.server";
 import type { Route } from "./+types/reports.$reportId";
 import { createDB } from "~/lib/db.server";
 import { getThaiMonth } from "~/lib/utils";
 import { verifyReportAccessToken } from "~/lib/report-access.server";
 import { getAuthenticatedUser } from "~/lib/auth.server";
 import { Input } from "~/components/ui/input";
-import ReportStats from "~/components/reports/ReportStats";
-import TaskList from "~/components/reports/TaskList";
-import type { MonthlyReport, ReportTask } from "~/types";
+import type { MonthlyReport, ReportTask, TaskCategory } from "~/types";
+import { FaCircleCheck, FaWrench, FaCode, FaLock, FaChartLine, FaBolt, FaTag, FaArrowLeft, FaPrint } from "react-icons/fa6";
 
 export function meta({ data }: Route.MetaArgs) {
   const report = (data as { report: MonthlyReport } | null)?.report;
@@ -41,7 +41,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   let loginEmail = "";
   const token = new URL(request.url).searchParams.get("t");
   if (token) {
-    const secret = env.SESSION_SECRET || "doaction-report-link-secret";
+    const secret = getReportLinkSecret(env);
     const payload = await verifyReportAccessToken(token, secret);
     if (payload && payload.reportId === params.reportId) {
       loginEmail = payload.email;
@@ -61,6 +61,18 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   };
 }
 
+const CATEGORIES: Record<TaskCategory, { label: string; icon: React.ReactNode }> = {
+  maintenance: { label: "บำรุงรักษา", icon: <FaWrench /> },
+  development: { label: "พัฒนา", icon: <FaCode /> },
+  security: { label: "ความปลอดภัย", icon: <FaLock /> },
+  seo: { label: "SEO", icon: <FaChartLine /> },
+  performance: { label: "ประสิทธิภาพ", icon: <FaBolt /> },
+  other: { label: "อื่นๆ", icon: <FaTag /> },
+};
+
+const backLinkCls =
+  "inline-flex items-center gap-2 h-10 rounded-full border border-line bg-white px-4 text-[13px] font-semibold text-ink hover:bg-paper transition-colors";
+
 export default function PublicReportPage({ loaderData }: Route.ComponentProps) {
   const { report, tasks, loginEmail, loginRedirect, canGoToReportList, isAdminPreview, websiteUrl } = loaderData as {
     report: MonthlyReport;
@@ -72,103 +84,166 @@ export default function PublicReportPage({ loaderData }: Route.ComponentProps) {
     websiteUrl: string | null;
   };
 
-  const heading = `รายงานประจำเดือน ${getThaiMonth(report.month)} ${report.year + 543}`;
-  const brandLogo = (
-    <div>
-      <div className="flex items-center gap-3 mb-1">
-        <img src="/logo-dark.svg" alt="do action" className="w-[150px] mx-auto"/>
-      </div>
-      <p className="block text-center text-[10px] text-black mt-1 tracking-widest font-bold">
-        CLIENT PORTAL
-      </p>
-    </div>
-  );
+  const monthLabel = `${getThaiMonth(report.month)} ${report.year + 543}`;
+  const completedCount = tasks.filter((t) => t.completed).length;
+  const grouped = tasks.reduce<Partial<Record<TaskCategory, ReportTask[]>>>((acc, task) => {
+    (acc[task.category] ??= []).push(task);
+    return acc;
+  }, {});
+  const categories = (Object.keys(CATEGORIES) as TaskCategory[]).filter((c) => grouped[c]?.length);
+
+  const stats: { label: string; value: string }[] = [
+    { label: "งานที่ดำเนินการ", value: String(tasks.length) },
+    ...(report.uptime_percent != null ? [{ label: "Uptime", value: `${report.uptime_percent}%` }] : []),
+    ...(report.speed_score != null ? [{ label: "Speed score", value: String(report.speed_score) }] : []),
+    { label: "หมวดงาน", value: String(categories.length) },
+  ];
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <main className="mx-auto max-w-4xl px-4 py-4 space-y-6">
-        <div className="print:hidden">
-          {isAdminPreview ? (
-            <div className="pb-1 flex items-center justify-between gap-3 no-print">
-              <a
-                href="/admin/reports"
-                className="inline-flex items-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 transition-colors shadow-sm"
-              >
-                <span className="mr-2 text-slate-500" aria-hidden="true">←</span>
+    <div className="min-h-screen bg-paper text-ink print:bg-white">
+      <main className="mx-auto max-w-4xl space-y-5 px-4 py-6 md:py-10 print:max-w-none print:px-0 print:py-0">
+        {/* Top bar */}
+        <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
+          <img src="/logo-dark-tight.svg" alt="do action" className="h-12 w-auto" />
+          <div className="flex flex-wrap items-center gap-2">
+            {isAdminPreview ? (
+              <a href="/admin/reports" className={backLinkCls}>
+                <FaArrowLeft className="text-[11px]" aria-hidden="true" />
                 กลับไปหน้ารายงาน (Admin)
               </a>
-              <div>{brandLogo}</div>
-            </div>
-          ) : canGoToReportList ? (
-            <div className="pb-1 flex flex-col sm:flex-row items-center justify-between gap-3 no-print">
-              <a
-                href="/reports"
-                className="order-2 sm:order-1 inline-flex items-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 transition-colors shadow-sm"
-              >
-                <span className="mr-2 text-slate-500" aria-hidden="true">←</span>
+            ) : canGoToReportList ? (
+              <a href="/reports" className={backLinkCls}>
+                <FaArrowLeft className="text-[11px]" aria-hidden="true" />
                 ไปหน้ารายงานทั้งหมด
               </a>
-              <div className="order-1 sm:order-2">{brandLogo}</div>
-            </div>
-          ) : (
-            <div className="no-print">{brandLogo}</div>
-          )}
+            ) : null}
+            <button type="button" onClick={() => window.print()} className={backLinkCls}>
+              <FaPrint className="text-[11px]" aria-hidden="true" />
+              Print / PDF
+            </button>
+          </div>
         </div>
-        <section className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 space-y-4 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+        <img src="/logo-dark-tight.svg" alt="do action" className="hidden h-12 w-auto print:block" />
+
+        {/* Hero */}
+        <section className="rounded-[24px] bg-ink p-7 text-white md:p-10 print:break-inside-avoid print:border print:border-line print:bg-white print:text-ink">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-brand-yellow px-2.5 py-0.5 text-xs font-semibold text-ink">
               Monthly Service Report
-            </div>
+            </span>
             {websiteUrl && (
               <a
                 href={websiteUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex w-fit items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-200 transition-colors"
+                className="rounded-full border border-white/20 px-2.5 py-0.5 text-xs font-medium text-white/80 hover:text-white print:border-line print:text-muted-ink"
               >
                 {websiteUrl.replace(/^https?:\/\//, "")}
               </a>
             )}
           </div>
-          <h1 className="text-xl sm:text-2xl font-semibold text-slate-900">{heading}</h1>
-
+          <p className="mt-6 text-sm text-white/60 print:text-muted-ink">รายงานประจำเดือน</p>
+          <h1 className="font-display text-[40px] font-bold leading-none tracking-[-0.03em] md:text-[56px]">
+            {monthLabel}
+          </h1>
           {report.summary && (
-            <p className="text-sm text-slate-600 leading-relaxed">{report.summary}</p>
+            <p className="mt-5 max-w-2xl whitespace-pre-line text-[15px] leading-relaxed text-white/80 print:text-ink-soft">
+              {report.summary}
+            </p>
           )}
-          {!canGoToReportList && !isAdminPreview && (
-            <div className="rounded-xl border border-violet-200 bg-violet-50/80 p-4 space-y-3">
-              <p className="text-sm text-violet-900">
-                เข้าสู่ระบบ เพื่อดูรายงานทั้งหมดหรือหน้าอื่นในพอร์ทัล
-              </p>
-              <Form method="post" action={`/login?redirect=${encodeURIComponent(loginRedirect)}`}>
-                <input type="hidden" name="mode" value="magic" />
-                <Input
-                  name="email"
-                  type="email"
-                  required
-                  defaultValue={loginEmail}
-                  placeholder="you@example.com"
-                  className="mb-2 h-10 !bg-white"
-                />
-                <button
-                  type="submit"
-                  className="inline-flex items-center rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 transition-colors mt-2 shadow-sm"
-                >
-                  ส่ง Magic Link เพื่อเข้าสู่ระบบ
-                </button>
-              </Form>
+          <div className="mt-8 grid grid-cols-2 gap-x-6 gap-y-5 border-t border-white/10 pt-6 sm:grid-cols-4 print:border-line">
+            {stats.map((s) => (
+              <div key={s.label}>
+                <p className="font-display text-[34px] font-bold leading-none tracking-[-0.03em] tabular-nums text-brand-yellow print:text-ink">
+                  {s.value}
+                </p>
+                <p className="mt-1.5 text-xs text-white/60 print:text-muted-ink">{s.label}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Tasks by category */}
+        <section className="rounded-[20px] border border-line bg-white p-6 md:p-8">
+          <div className="mb-6 flex items-baseline justify-between gap-3">
+            <h2 className="text-[18px] font-semibold">งานที่ดำเนินการ</h2>
+            <span className="text-[13px] text-muted-ink">
+              {completedCount}/{tasks.length} รายการ
+            </span>
+          </div>
+          {categories.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-ink">ไม่มีรายการงาน</p>
+          ) : (
+            <div className="space-y-8">
+              {categories.map((cat) => {
+                const items = grouped[cat] ?? [];
+                return (
+                  <div key={cat} className="print:break-inside-avoid">
+                    <div className="mb-3 flex items-center gap-2.5">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-paper text-xs text-ink" aria-hidden="true">
+                        {CATEGORIES[cat].icon}
+                      </span>
+                      <h3 className="text-[15px] font-semibold">{CATEGORIES[cat].label}</h3>
+                      <span className="ml-auto rounded-full bg-paper px-2.5 py-0.5 text-xs font-semibold text-muted-ink">
+                        {items.length}
+                      </span>
+                    </div>
+                    <ul className="divide-y divide-line-soft border-t border-line-soft">
+                      {items.map((task) => (
+                        <li key={task.id} className="flex items-start gap-3 py-3.5">
+                          <FaCircleCheck
+                            className={`mt-0.5 shrink-0 text-sm ${task.completed ? "text-ink" : "text-line"}`}
+                            aria-hidden="true"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-ink">{task.title}</p>
+                            {task.description && (
+                              <p className="mt-1 whitespace-pre-line text-[13px] leading-relaxed text-muted-ink">
+                                {task.description}
+                              </p>
+                            )}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })}
             </div>
           )}
         </section>
 
-        <ReportStats report={report} />
+        {!canGoToReportList && !isAdminPreview && (
+          <section className="rounded-[24px] bg-brand-yellow p-6 text-ink md:p-7 print:hidden">
+            <h2 className="text-[18px] font-semibold">ดูรายงานทั้งหมดในพอร์ทัล</h2>
+            <p className="mt-1 text-sm text-ink-soft">
+              เข้าสู่ระบบ เพื่อดูรายงานทั้งหมดหรือหน้าอื่นในพอร์ทัล
+            </p>
+            <Form
+              method="post"
+              action={`/login?redirect=${encodeURIComponent(loginRedirect)}`}
+              className="mt-4 flex flex-col gap-2 sm:flex-row"
+            >
+              <input type="hidden" name="mode" value="magic" />
+              <Input
+                name="email"
+                type="email"
+                required
+                defaultValue={loginEmail}
+                placeholder="you@example.com"
+                className="h-10 flex-1 !bg-white"
+              />
+              <button
+                type="submit"
+                className="inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-ink px-5 text-[13px] font-semibold text-white hover:bg-black transition-colors"
+              >
+                ส่ง Magic Link เพื่อเข้าสู่ระบบ
+              </button>
+            </Form>
+          </section>
+        )}
 
-        <section className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-900 mb-5">
-            งานที่ดำเนินการ ({tasks.length} รายการ)
-          </h2>
-          <TaskList tasks={tasks} />
-        </section>
+        <p className="pb-4 text-center text-xs text-faint-ink">do action client portal</p>
       </main>
     </div>
   );

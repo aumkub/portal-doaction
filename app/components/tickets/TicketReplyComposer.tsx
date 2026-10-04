@@ -117,13 +117,13 @@ export function TicketReplyComposer({
       isDragging={isDragging}
       dropHandlers={dropZoneProps}
       dropLabel={dropLabel}
-      className={isDragging ? "ring-2 ring-violet-400/50 ring-offset-2 rounded-xl" : ""}
+      className={isDragging ? "ring-2 ring-ink/20 ring-offset-2 rounded-xl" : ""}
     >
       <form method="post" onSubmit={onSubmit} className="space-y-3">
         {Object.entries(hiddenFields ?? {}).map(([name, value]) => (
           <input key={name} type="hidden" name={name} value={value} />
         ))}
-        <label className="block text-sm font-medium text-slate-700">{label}</label>
+        <label className="block text-sm font-medium text-ink-soft">{label}</label>
         <textarea
           name="message"
           rows={4}
@@ -131,11 +131,11 @@ export function TicketReplyComposer({
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder={placeholder}
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+          className="w-full rounded-[14px] border border-line bg-white px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ink/10 focus:border-ink/40"
         />
         {serverError ? <p className="text-xs text-rose-600">{serverError}</p> : null}
         <div className="space-y-1">
-          <label className="block text-xs font-medium text-slate-600">{attachHint}</label>
+          <label className="block text-xs font-medium text-muted-ink">{attachHint}</label>
           <input
             type="file"
             accept="application/pdf,image/*,video/*"
@@ -144,14 +144,14 @@ export function TicketReplyComposer({
               onFileInputChange(e.target.files);
               e.target.value = "";
             }}
-            className="block w-full text-xs text-slate-600 file:mr-3 file:rounded-md file:border file:border-slate-200 file:bg-white file:px-2.5 file:py-2 mt-2"
+            className="block w-full text-xs text-muted-ink file:mr-3 file:rounded-md file:border file:border-line file:bg-white file:px-2.5 file:py-2 mt-2"
           />
           {uploading ? (
             <div className="space-y-2 mt-2">
-              <p className="text-xs text-slate-500">Uploading... {uploadProgress}%</p>
-              <div className="h-1.5 w-full rounded bg-slate-200 overflow-hidden">
+              <p className="text-xs text-muted-ink">Uploading... {uploadProgress}%</p>
+              <div className="h-1.5 w-full rounded bg-line overflow-hidden">
                 <div
-                  className="h-full bg-violet-600 transition-all"
+                  className="h-full bg-ink transition-all"
                   style={{ width: `${uploadProgress}%` }}
                 />
               </div>
@@ -159,11 +159,11 @@ export function TicketReplyComposer({
           ) : null}
           {uploadError ? <p className="text-xs text-rose-600">{uploadError}</p> : null}
           {uploadedFiles.length > 0 ? (
-            <ul className="text-xs text-slate-600 space-y-2 mt-2 max-w-[500px] bg-slate-100 rounded-lg p-2">
+            <ul className="text-xs text-muted-ink space-y-2 mt-2 max-w-[500px] bg-paper rounded-lg p-2">
               {uploadedFiles.map((f) => (
                 <li
                   key={f.fileKey}
-                  className="flex items-center justify-between gap-2 bg-slate-50 rounded px-2 py-1"
+                  className="flex items-center justify-between gap-2 bg-paper rounded px-2 py-1"
                 >
                   <span>
                     <FaPaperclip className="inline mr-1" aria-hidden="true" />
@@ -172,7 +172,7 @@ export function TicketReplyComposer({
                   <button
                     type="button"
                     onClick={() => removeFile(f.fileKey)}
-                    className="rounded border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-500 hover:bg-slate-50"
+                    className="rounded-md border border-line bg-white px-2 py-0.5 text-[11px] text-muted-ink hover:bg-paper"
                   >
                     Remove
                   </button>
@@ -186,7 +186,7 @@ export function TicketReplyComposer({
           <button
             type="submit"
             disabled={busy || uploading}
-            className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex h-9 items-center rounded-full bg-ink px-3.5 text-[13px] font-medium text-white hover:bg-black transition-colors disabled:cursor-not-allowed disabled:opacity-60"
           >
             {uploading ? "Uploading..." : busy ? sendingLabel : sendLabel}
           </button>

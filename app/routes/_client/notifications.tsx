@@ -22,26 +22,26 @@ export default function ClientNotificationsPage({ loaderData }: any) {
   const { t, lang } = useT();
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-slate-900">{t("topbar_notifications")}</h1>
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <h1 className="text-[28px] md:text-[32px] font-bold leading-tight tracking-[-0.02em] text-ink">{t("topbar_notifications")}</h1>
         <Form method="post" action="/api/notifications/read">
-          <button type="submit" className="text-sm text-violet-600 hover:text-violet-700">
+          <button type="submit" className="h-10 rounded-full border border-line bg-white px-4 text-[13px] font-semibold text-ink hover:bg-paper">
             {t("topbar_mark_all_read")}
           </button>
         </Form>
       </div>
-      <div className="rounded-xl border border-slate-200 bg-white divide-y divide-slate-100">
+      <div className="rounded-[20px] border border-line bg-white divide-y divide-line-soft overflow-hidden">
         {notifications.length === 0 ? (
-          <p className="p-6 text-sm text-slate-500">{t("topbar_no_notifications")}</p>
+          <p className="p-6 text-sm text-muted-ink">{t("topbar_no_notifications")}</p>
         ) : (
           notifications.map((n) => (
-            <Form key={n.id} method="post" action="/api/notifications/read" className="p-4">
+            <Form key={n.id} method="post" action="/api/notifications/read" className="px-5 py-3.5 hover:bg-paper transition-colors">
               <input type="hidden" name="id" value={n.id} />
               <button type="submit" className="w-full text-left">
-                <p className="text-sm font-medium text-slate-800">{n.title}</p>
-                {n.body ? <p className="mt-1 text-xs text-slate-500">{n.body}</p> : null}
-                <p className="mt-1 text-[11px] text-slate-500">
+                <p className="text-sm font-medium text-ink">{n.title}</p>
+                {n.body ? <p className="mt-1 text-xs text-muted-ink">{n.body}</p> : null}
+                <p className="mt-1 text-[11px] text-muted-ink">
                   {formatRelativeTime(n.created_at, lang)}
                 </p>
               </button>

@@ -33,50 +33,84 @@ export default function AdminEmailLogsPage({ loaderData }: any) {
   const [selected, setSelected] = useState<EmailLog | null>(null);
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-semibold text-slate-900">{t("admin_email_logs_title")}</h1>
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+    <div className="space-y-6">
+      <h1 className="text-[28px] md:text-[32px] font-bold tracking-[-0.02em] text-ink">{t("admin_email_logs_title")}</h1>
+      <div className="overflow-hidden rounded-[20px] border border-line bg-white">
+        <div className="md:hidden divide-y divide-[#F4F2EC]">
+          {logs.length === 0 ? (
+            <p className="px-5 py-10 text-center text-sm text-muted-ink">{t("admin_email_logs_empty")}</p>
+          ) : (
+            logs.map((l) => (
+              <div key={l.id} className="space-y-1.5 px-5 py-4">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="min-w-0 text-sm font-semibold text-ink">{l.subject}</p>
+                  <span
+                    className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                      l.status === "sent" ? "bg-emerald-50 text-emerald-700" : "bg-[#FDE7DA] text-[#B4541A]"
+                    }`}
+                  >
+                    {l.status}
+                  </span>
+                </div>
+                <p className="truncate text-[13px] text-ink-soft">{l.to_email}</p>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs text-muted-ink">
+                    {formatDate(l.created_at, lang)} · {l.source ?? "—"}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setSelected(l)}
+                    className="h-10 shrink-0 rounded-full border border-line bg-white px-4 text-xs font-semibold text-ink-soft hover:bg-paper"
+                  >
+                    {t("admin_email_logs_preview")}
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+        <div className="hidden md:block overflow-x-auto">
         <table className="w-full min-w-[960px] text-sm">
           <thead>
-            <tr className="border-b border-slate-100">
-              <th className="px-4 py-3 text-left text-xs text-slate-500">{t("admin_email_logs_col_when")}</th>
-              <th className="px-4 py-3 text-left text-xs text-slate-500">{t("admin_email_logs_col_to")}</th>
-              <th className="px-4 py-3 text-left text-xs text-slate-500">{t("admin_email_logs_col_subject")}</th>
-              <th className="px-4 py-3 text-left text-xs text-slate-500">{t("admin_email_logs_col_source")}</th>
-              <th className="px-4 py-3 text-left text-xs text-slate-500">{t("admin_email_logs_col_status")}</th>
-              <th className="px-4 py-3 text-right text-xs text-slate-500">{t("admin_email_logs_col_action")}</th>
+            <tr className="border-b border-line-soft text-xs font-medium text-muted-ink">
+              <th className="px-5 py-3 text-left">{t("admin_email_logs_col_when")}</th>
+              <th className="px-5 py-3 text-left">{t("admin_email_logs_col_to")}</th>
+              <th className="px-5 py-3 text-left">{t("admin_email_logs_col_subject")}</th>
+              <th className="px-5 py-3 text-left">{t("admin_email_logs_col_source")}</th>
+              <th className="px-5 py-3 text-left">{t("admin_email_logs_col_status")}</th>
+              <th className="px-5 py-3 text-right">{t("admin_email_logs_col_action")}</th>
             </tr>
           </thead>
           <tbody>
             {logs.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-slate-500">
+                <td colSpan={6} className="px-4 py-10 text-center text-muted-ink">
                   {t("admin_email_logs_empty")}
                 </td>
               </tr>
             ) : (
               logs.map((l) => (
-                <tr key={l.id} className="border-b border-slate-100 last:border-0">
-                  <td className="px-4 py-3 text-slate-500">{formatDate(l.created_at, lang)}</td>
-                  <td className="px-4 py-3 text-slate-700">{l.to_email}</td>
-                  <td className="px-4 py-3 text-slate-800">{l.subject}</td>
-                  <td className="px-4 py-3 text-slate-500">{l.source ?? "—"}</td>
-                  <td className="px-4 py-3">
+                <tr key={l.id} className="border-t border-line-soft hover:bg-paper">
+                  <td className="px-5 py-3.5 text-muted-ink">{formatDate(l.created_at, lang)}</td>
+                  <td className="px-5 py-3.5 text-ink-soft">{l.to_email}</td>
+                  <td className="px-5 py-3.5 font-medium text-ink">{l.subject}</td>
+                  <td className="px-5 py-3.5 text-muted-ink">{l.source ?? "—"}</td>
+                  <td className="px-5 py-3.5">
                     <span
-                      className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
                         l.status === "sent"
                           ? "bg-emerald-50 text-emerald-700"
-                          : "bg-rose-50 text-rose-700"
+                          : "bg-[#FDE7DA] text-[#B4541A]"
                       }`}
                     >
                       {l.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-5 py-3.5 text-right">
                     <button
                       type="button"
                       onClick={() => setSelected(l)}
-                      className="rounded border border-slate-200 px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50"
+                      className="h-8 rounded-full border border-line bg-white px-2.5 text-xs font-medium text-ink-soft hover:bg-paper"
                     >
                       {t("admin_email_logs_preview")}
                     </button>
@@ -86,23 +120,24 @@ export default function AdminEmailLogsPage({ loaderData }: any) {
             )}
           </tbody>
         </table>
+        </div>
         <Pagination page={page} totalPages={totalPages} />
       </div>
       {selected ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-4xl rounded-xl bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-              <h2 className="text-sm font-semibold text-slate-900">{t("admin_email_logs_preview_title")}</h2>
+          <div className="w-full max-w-4xl rounded-[20px] border border-line bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-line-soft px-4 py-3">
+              <h2 className="text-sm font-semibold text-ink">{t("admin_email_logs_preview_title")}</h2>
               <button
                 type="button"
                 onClick={() => setSelected(null)}
-                className="text-sm text-slate-500 hover:text-slate-700"
+                className="text-sm text-muted-ink hover:text-ink-soft"
               >
                 {t("admin_report_email_close")}
               </button>
             </div>
             <div className="max-h-[75vh] overflow-auto p-4">
-              <div className="mb-3 text-xs text-slate-500">
+              <div className="mb-3 text-xs text-muted-ink">
                 <p>
                   <strong>{t("admin_report_email_to")}:</strong> {selected.to_name ? `${selected.to_name} <${selected.to_email}>` : selected.to_email}
                 </p>
@@ -115,14 +150,14 @@ export default function AdminEmailLogsPage({ loaderData }: any) {
                   <strong>{t("admin_report_email_subject")}:</strong> {selected.subject}
                 </p>
                 {selected.error_message ? (
-                  <p className="text-rose-600">
+                  <p className="text-[#B4541A]">
                     <strong>{t("admin_email_logs_error")}:</strong> {selected.error_message}
                   </p>
                 ) : null}
               </div>
               <iframe
                 title={`email-preview-${selected.id}`}
-                className="h-[60vh] w-full rounded border border-slate-200"
+                className="h-[60vh] w-full rounded border border-line"
                 srcDoc={selected.html_body}
               />
             </div>

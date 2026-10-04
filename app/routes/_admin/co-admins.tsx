@@ -1,4 +1,5 @@
 import { Form, Link, redirect, useSearchParams } from "react-router";
+import { ConfirmButton } from "~/components/ui/confirm-button";
 import { z } from "zod";
 import type { Route } from "./+types/co-admins";
 import { requireAdmin, hashPassword, startImpersonation, evictUserCache } from "~/lib/auth.server";
@@ -233,10 +234,10 @@ function getInitials(name: string) {
 
 function avatarColor(name: string) {
   const colors = [
-    "bg-violet-100 text-violet-700", "bg-blue-100 text-blue-700",
-    "bg-emerald-100 text-emerald-700", "bg-orange-100 text-orange-700",
-    "bg-rose-100 text-rose-700", "bg-indigo-100 text-indigo-700",
-    "bg-teal-100 text-teal-700", "bg-pink-100 text-pink-700",
+    "bg-paper text-ink-soft", "bg-paper text-ink-soft",
+    "bg-paper text-ink", "bg-paper text-ink",
+    "bg-paper text-ink-soft", "bg-paper text-ink-soft",
+    "bg-paper text-ink", "bg-paper text-ink",
   ];
   let hash = 0;
   for (const c of name) hash = (hash * 31 + c.charCodeAt(0)) & 0xffff;
@@ -264,15 +265,15 @@ export default function CoAdminsPage({ loaderData, actionData }: Route.Component
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">จัดการทีมงาน</h1>
-        <p className="text-slate-500 text-sm mt-0.5">สลับแท็บเพื่อจัดการ Co-Admin หรือ Freelance แล้วมอบหมายลูกค้า</p>
+        <h1 className="text-[28px] md:text-[32px] font-bold tracking-[-0.02em] text-ink">จัดการทีมงาน</h1>
+        <p className="text-muted-ink text-sm mt-1">สลับแท็บเพื่อจัดการ Co-Admin หรือ Freelance แล้วมอบหมายลูกค้า</p>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-1.5 flex gap-1.5 w-full sm:w-fit">
+      <div className="inline-flex rounded-full bg-[#ECEAE3] p-[3px] gap-0.5 w-full sm:w-fit">
         <Link
           to="/admin/co-admins"
-          className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-            !isFreelance ? "bg-violet-600 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"
+          className={`inline-flex flex-1 sm:flex-none justify-center items-center gap-2 h-9 px-4 rounded-full text-[13px] font-medium transition-all ${
+            !isFreelance ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-muted-ink hover:text-ink"
           }`}
         >
           <FaUserSecret className="text-[11px]" />
@@ -280,8 +281,8 @@ export default function CoAdminsPage({ loaderData, actionData }: Route.Component
         </Link>
         <Link
           to="/admin/co-admins?tab=freelance"
-          className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-            isFreelance ? "bg-violet-600 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"
+          className={`inline-flex flex-1 sm:flex-none justify-center items-center gap-2 h-9 px-4 rounded-full text-[13px] font-medium transition-all ${
+            isFreelance ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-muted-ink hover:text-ink"
           }`}
         >
           <FaLaptopCode className="text-[11px]" />
@@ -291,33 +292,33 @@ export default function CoAdminsPage({ loaderData, actionData }: Route.Component
 
       {/* ── Stats strip ── */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3.5 flex items-center gap-3">
-          <span className={`flex h-9 w-9 items-center justify-center rounded-lg shrink-0 ${
-            isFreelance ? "bg-sky-50 text-sky-600" : "bg-emerald-50 text-emerald-600"
+        <div className="rounded-[20px] border border-line bg-white px-5 py-4 flex items-center gap-3">
+          <span className={`flex h-9 w-9 items-center justify-center rounded-[10px] shrink-0 ${
+            "bg-paper text-ink"
           }`}>
             {isFreelance ? <FaLaptopCode className="text-sm" /> : <FaUserSecret className="text-sm" />}
           </span>
           <div>
-            <p className="text-xs text-slate-500">{label} ทั้งหมด</p>
-            <p className="text-xl font-semibold text-slate-900">{members.length}</p>
+            <p className="text-xs text-muted-ink">{label} ทั้งหมด</p>
+            <p className="text-2xl font-semibold tracking-tight tabular-nums text-ink">{members.length}</p>
           </div>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3.5 flex items-center gap-3">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600 shrink-0">
+        <div className="rounded-[20px] border border-line bg-white px-5 py-4 flex items-center gap-3">
+          <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-paper text-ink-soft shrink-0">
             <FaUsers className="text-sm" />
           </span>
           <div>
-            <p className="text-xs text-slate-500">การมอบหมายทั้งหมด</p>
-            <p className="text-xl font-semibold text-slate-900">{totalAssignments}</p>
+            <p className="text-xs text-muted-ink">การมอบหมายทั้งหมด</p>
+            <p className="text-2xl font-semibold tracking-tight tabular-nums text-ink">{totalAssignments}</p>
           </div>
         </div>
       </div>
 
       {/* ── Create form ── */}
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100">
-          <FaCirclePlus className="text-violet-500 text-sm" />
-          <p className="text-sm font-semibold text-slate-900">เพิ่ม {label} ใหม่</p>
+      <div className="bg-white rounded-[20px] border border-line overflow-hidden">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-line-soft">
+          <FaCirclePlus className="text-faint-ink text-sm" />
+          <p className="text-sm font-semibold text-ink">เพิ่ม {label} ใหม่</p>
         </div>
         <div className="p-5">
           <Form method="post" className="grid sm:grid-cols-4 gap-4 items-end">
@@ -339,25 +340,25 @@ export default function CoAdminsPage({ loaderData, actionData }: Route.Component
               <Input id="create-password" name="password" type="password" required minLength={6} placeholder="••••••" />
               {errors?.password && <p className="text-xs text-red-500">{errors.password[0]}</p>}
             </div>
-            <Button type="submit" className="bg-violet-600 hover:bg-violet-700 text-white">
+            <Button type="submit" className="bg-ink hover:bg-black text-white">
               <FaCirclePlus aria-hidden="true" />
               เพิ่ม {label}
             </Button>
           </Form>
 
           {errors?.general && (
-            <p className="mt-3 flex items-center gap-2 text-xs font-medium text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+            <p className="mt-3 flex items-center gap-2 text-xs font-medium text-rose-700 bg-rose-50 border border-rose-200 rounded-[14px] px-3 py-2">
               {errors.general[0]}
             </p>
           )}
           {/* Success toasts */}
           {success?.password_reset && (
-            <p className="mt-3 flex items-center gap-2 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+            <p className="mt-3 flex items-center gap-2 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-[14px] px-3 py-2">
               <FaCircleCheck /> เปลี่ยนรหัสผ่านเรียบร้อยแล้ว
             </p>
           )}
           {success?.test_fire && (
-            <p className="mt-3 flex items-center gap-2 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+            <p className="mt-3 flex items-center gap-2 text-xs font-medium text-sky-700 bg-sky-50 ring-1 ring-inset ring-sky-600/20 rounded-md px-3 py-2">
               <FaCircleCheck /> ส่งการแจ้งเตือนทดสอบเรียบร้อยแล้ว
             </p>
           )}
@@ -366,13 +367,13 @@ export default function CoAdminsPage({ loaderData, actionData }: Route.Component
 
       {/* ── Co-admin cards ── */}
       {members.length === 0 ? (
-        <div className="bg-white rounded-xl border border-slate-200 p-16 text-center">
+        <div className="bg-white rounded-[20px] border border-line p-16 text-center">
           {isFreelance ? (
-            <FaLaptopCode className="mx-auto text-3xl text-slate-200 mb-3" />
+            <FaLaptopCode className="mx-auto text-3xl text-line mb-3" />
           ) : (
-            <FaUserSecret className="mx-auto text-3xl text-slate-200 mb-3" />
+            <FaUserSecret className="mx-auto text-3xl text-line mb-3" />
           )}
-          <p className="text-sm text-slate-500">ยังไม่มี {label}</p>
+          <p className="text-sm text-muted-ink">ยังไม่มี {label}</p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -381,21 +382,21 @@ export default function CoAdminsPage({ loaderData, actionData }: Route.Component
             const avatarCls = avatarColor(coAdmin.name);
             const unassignedClients = clients.filter((c) => !coAdmin.assigned_client_ids.includes(c.id));
             return (
-              <div key={coAdmin.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <div key={coAdmin.id} className="bg-white rounded-[20px] border border-line overflow-hidden">
                 {/* Card header */}
-                <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between px-5 py-4 border-b border-slate-100">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between px-5 py-4 border-b border-line-soft">
                   <div className="flex items-center gap-3">
-                    <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold ${avatarCls}`}>
+                    <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] text-xs font-semibold ${avatarCls}`}>
                       {initials}
                     </span>
                     <div>
                       <div className="flex items-center gap-2">
-                        <p className="text-sm font-semibold text-slate-900">{coAdmin.name}</p>
-                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ring-1 ${badgeCls}`}>
+                        <p className="text-sm font-semibold text-ink">{coAdmin.name}</p>
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-md ring-1 ring-inset ${badgeCls}`}>
                           {isFreelance ? "FREELANCE" : "CO-ADMIN"}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-500 mt-0.5">{coAdmin.email}</p>
+                      <p className="text-xs text-muted-ink mt-0.5">{coAdmin.email}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
@@ -404,43 +405,44 @@ export default function CoAdminsPage({ loaderData, actionData }: Route.Component
                       <input type="hidden" name="intent" value="impersonate" />
                       <input type="hidden" name="co_admin_id" value={coAdmin.id} />
                       <input type="hidden" name="tab" value={tab} />
-                      <button
-                        type="submit"
-                        onClick={(e) => { if (!confirm(`จำลองบทบาทเป็น "${coAdmin.name}"?`)) e.preventDefault(); }}
-                        className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-lg transition-colors"
+                      <ConfirmButton
+                        message={`จำลองบทบาทเป็น "${coAdmin.name}"?`}
+                        confirmLabel="จำลองบทบาท"
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-full transition-colors"
                       >
                         <FaUserCheck className="text-[10px]" />
                         จำลองบทบาท
-                      </button>
+                      </ConfirmButton>
                     </Form>
                     {/* Delete */}
                     <Form method="post">
                       <input type="hidden" name="intent" value="delete" />
                       <input type="hidden" name="co_admin_id" value={coAdmin.id} />
                       <input type="hidden" name="tab" value={tab} />
-                      <button
-                        type="submit"
-                        onClick={(e) => { if (!confirm(`ลบ ${label} นี้?`)) e.preventDefault(); }}
-                        className="inline-flex items-center gap-1.5 text-xs font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-1.5 rounded-lg transition-colors"
+                      <ConfirmButton
+                        message={`ลบ ${label} นี้?`}
+                        confirmLabel="ลบ"
+                        destructive
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-1.5 rounded-full transition-colors"
                       >
                         <FaTrash className="text-[10px]" />
                         ลบ
-                      </button>
+                      </ConfirmButton>
                     </Form>
                   </div>
                 </div>
 
                 <div className="p-5 space-y-5">
                   {/* Reset password (collapsible) */}
-                  <details className="group rounded-lg border border-slate-200 overflow-hidden">
-                    <summary className="flex items-center justify-between px-4 py-3 cursor-pointer select-none bg-slate-50 hover:bg-slate-100 transition-colors list-none">
-                      <div className="flex items-center gap-2 text-xs font-medium text-slate-700">
-                        <FaKey className="text-slate-500 text-[10px]" />
+                  <details className="group rounded-[14px] border border-line overflow-hidden">
+                    <summary className="flex items-center justify-between px-4 py-3 cursor-pointer select-none bg-paper hover:bg-paper transition-colors list-none">
+                      <div className="flex items-center gap-2 text-xs font-medium text-ink-soft">
+                        <FaKey className="text-muted-ink text-[10px]" />
                         ความปลอดภัย — เปลี่ยนรหัสผ่าน
                       </div>
-                      <FaChevronDown className="text-slate-500 text-[10px] transition-transform group-open:rotate-180" />
+                      <FaChevronDown className="text-muted-ink text-[10px] transition-transform group-open:rotate-180" />
                     </summary>
-                    <div className="px-4 py-3 border-t border-slate-100">
+                    <div className="px-4 py-3 border-t border-line-soft">
                       <Form method="post" className="flex flex-col sm:flex-row sm:items-end gap-3">
                         <input type="hidden" name="intent" value="reset_password" />
                         <input type="hidden" name="co_admin_id" value={coAdmin.id} />
@@ -457,14 +459,14 @@ export default function CoAdminsPage({ loaderData, actionData }: Route.Component
                           />
                           {errors?.new_password && <p className="text-xs text-red-500">{errors.new_password[0]}</p>}
                         </div>
-                        <button
-                          type="submit"
-                          onClick={(e) => { if (!confirm(`เปลี่ยนรหัสผ่านของ "${coAdmin.name}"?`)) e.preventDefault(); }}
-                          className="inline-flex items-center gap-1.5 h-9 px-4 text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg transition-colors whitespace-nowrap"
+                        <ConfirmButton
+                          message={`เปลี่ยนรหัสผ่านของ "${coAdmin.name}"?`}
+                          confirmLabel="บันทึกรหัสผ่าน"
+                          className="inline-flex items-center gap-1.5 h-10 px-4 text-[13px] font-semibold text-ink-soft bg-white border border-line hover:bg-paper rounded-full transition-colors whitespace-nowrap"
                         >
                           <FaKey className="text-[10px]" />
                           บันทึกรหัสผ่าน
-                        </button>
+                        </ConfirmButton>
                       </Form>
                     </div>
                   </details>
@@ -472,9 +474,9 @@ export default function CoAdminsPage({ loaderData, actionData }: Route.Component
                   {/* Assigned clients */}
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <p className="text-xs font-semibold text-slate-700">
+                      <p className="text-xs font-semibold text-ink-soft">
                         ลูกค้าที่ดูแล
-                        <span className="ml-1.5 text-slate-500 font-normal">({coAdmin.assigned_clients.length})</span>
+                        <span className="ml-1.5 text-muted-ink font-normal">({coAdmin.assigned_clients.length})</span>
                       </p>
                     </div>
 
@@ -499,12 +501,12 @@ export default function CoAdminsPage({ loaderData, actionData }: Route.Component
                         placeholder="-1004487258170:5 หรือวางลิงก์ t.me/c/…"
                         className="h-9 text-xs flex-1 min-w-0"
                       />
-                      <p className="text-[11px] text-slate-500 sm:col-span-full">
+                      <p className="text-[11px] text-muted-ink sm:col-span-full">
                         กลุ่มแบบ Topics ต้องมี <span className="font-mono">{":เลข topic"}</span> ไม่เช่นนั้นจะเข้า General
                       </p>
                       <button
                         type="submit"
-                        className="inline-flex items-center gap-1.5 h-9 px-4 text-xs font-medium text-white bg-slate-900 hover:bg-slate-700 rounded-lg transition-colors whitespace-nowrap shrink-0"
+                        className="inline-flex items-center gap-1.5 h-10 px-4 text-[13px] font-semibold text-white bg-ink hover:bg-black rounded-full transition-colors whitespace-nowrap shrink-0"
                       >
                         <FaPlus className="text-[10px]" />
                         เพิ่ม
@@ -513,18 +515,18 @@ export default function CoAdminsPage({ loaderData, actionData }: Route.Component
 
                     {/* Client list */}
                     {coAdmin.assigned_clients.length === 0 ? (
-                      <p className="text-xs text-slate-500 py-3 text-center border border-dashed border-slate-200 rounded-lg">
+                      <p className="text-xs text-muted-ink py-3 text-center border border-dashed border-line rounded-[14px]">
                         ยังไม่ได้รับมอบหมายลูกค้า
                       </p>
                     ) : (
-                      <div className="rounded-lg border border-slate-200 divide-y divide-slate-100 overflow-hidden">
+                      <div className="rounded-[14px] border border-line divide-y divide-line-soft overflow-hidden">
                         {coAdmin.assigned_clients.map((client) => (
-                          <div key={client.id} className="p-3 bg-white hover:bg-slate-50/60 transition-colors">
+                          <div key={client.id} className="p-3 bg-white hover:bg-paper/60 transition-colors">
                             <div className="flex items-start justify-between gap-3 mb-2">
                               <div>
-                                <p className="text-sm font-medium text-slate-800">{client.company_name}</p>
+                                <p className="text-sm font-medium text-ink">{client.company_name}</p>
                                 {client.telegram_group_id && (
-                                  <div className="flex items-center gap-1 mt-0.5 text-[11px] text-blue-600">
+                                  <div className="flex items-center gap-1 mt-0.5 text-[11px] text-muted-ink">
                                     <FaTelegram className="shrink-0" />
                                     <span className="truncate max-w-[220px]" title={client.telegram_group_id}>
                                       {client.telegram_group_id}
@@ -537,14 +539,15 @@ export default function CoAdminsPage({ loaderData, actionData }: Route.Component
                                 <input type="hidden" name="intent" value="unassign" />
                                 <input type="hidden" name="co_admin_id" value={coAdmin.id} />
                                 <input type="hidden" name="client_id" value={client.id} />
-                                <button
-                                  type="submit"
-                                  onClick={(e) => { if (!confirm(`ลบการมอบหมาย ${client.company_name}?`)) e.preventDefault(); }}
-                                  className="p-1.5 rounded-lg text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-colors"
+                                <ConfirmButton
+                                  message={`ลบการมอบหมาย ${client.company_name}?`}
+                                  confirmLabel="ยกเลิกการมอบหมาย"
+                                  destructive
+                                  className="p-1.5 rounded-[14px] text-faint-ink hover:text-rose-500 hover:bg-rose-50 transition-colors"
                                   title="ยกเลิกการมอบหมาย"
                                 >
                                   <FaTrash className="text-[10px]" />
-                                </button>
+                                </ConfirmButton>
                               </Form>
                             </div>
 
@@ -555,7 +558,7 @@ export default function CoAdminsPage({ loaderData, actionData }: Route.Component
                                 <input type="hidden" name="co_admin_id" value={coAdmin.id} />
                                 <input type="hidden" name="client_id" value={client.id} />
                                 <div className="relative flex-1 min-w-0">
-                                  <FaTelegram className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-500" />
+                                  <FaTelegram className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-ink" />
                                   <Input
                                     type="text"
                                     name="telegram_group_id"
@@ -566,7 +569,7 @@ export default function CoAdminsPage({ loaderData, actionData }: Route.Component
                                 </div>
                                 <button
                                   type="submit"
-                                  className="inline-flex items-center h-8 px-3 text-xs font-medium text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg transition-colors whitespace-nowrap"
+                                  className="inline-flex items-center h-8 px-3 text-xs font-medium text-ink-soft bg-white border border-line hover:bg-paper rounded-full transition-colors whitespace-nowrap"
                                 >
                                   บันทึก
                                 </button>
@@ -577,19 +580,16 @@ export default function CoAdminsPage({ loaderData, actionData }: Route.Component
                                 <input type="hidden" name="intent" value="test_fire" />
                                 <input type="hidden" name="co_admin_id" value={coAdmin.id} />
                                 <input type="hidden" name="client_id" value={client.id} />
-                                <button
-                                  type="submit"
-                                  onClick={(e) => {
-                                    const msg = client.telegram_group_id
-                                      ? `ทดสอบส่งการแจ้งเตือนไปยัง Telegram Group สำหรับ ${client.company_name}?`
-                                      : `ทดสอบส่งการแจ้งเตือน (ไม่ได้ระบุ Group ID) สำหรับ ${client.company_name}?`;
-                                    if (!confirm(msg)) e.preventDefault();
-                                  }}
-                                  className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors whitespace-nowrap"
+                                <ConfirmButton
+                                  message={client.telegram_group_id
+                                    ? `ทดสอบส่งการแจ้งเตือนไปยัง Telegram Group สำหรับ ${client.company_name}?`
+                                    : `ทดสอบส่งการแจ้งเตือน (ไม่ได้ระบุ Group ID) สำหรับ ${client.company_name}?`}
+                                  confirmLabel="ส่งทดสอบ"
+                                  className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-medium text-ink-soft bg-white hover:bg-paper border border-line rounded-md  transition-colors whitespace-nowrap"
                                 >
                                   <FaPaperPlane className="text-[10px]" />
                                   ทดสอบ
-                                </button>
+                                </ConfirmButton>
                               </Form>
                             </div>
                           </div>
@@ -605,16 +605,16 @@ export default function CoAdminsPage({ loaderData, actionData }: Route.Component
       )}
 
       {/* ── Info box ── */}
-      <div className="bg-violet-50 border border-violet-100 rounded-xl p-5">
+      <div className="bg-white border border-line rounded-[20px] p-6 ">
         <div className="flex items-center gap-2 mb-3">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-100 text-violet-600 shrink-0">
+          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-paper text-ink-soft shrink-0">
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </span>
-          <h3 className="text-sm font-semibold text-violet-900">ข้อมูลเพิ่มเติม</h3>
+          <h3 className="text-sm font-semibold text-ink">ข้อมูลเพิ่มเติม</h3>
         </div>
-        <ul className="text-xs text-violet-800 space-y-1.5 list-disc list-inside leading-relaxed">
+        <ul className="text-xs text-ink-soft space-y-1.5 list-disc list-inside leading-relaxed">
           <li>{label} สามารถดูข้อมูลเฉพาะลูกค้าที่ได้รับมอบหมายเท่านั้น</li>
           <li>{label} สามารถตอบทิกเก็ตได้ แต่อ่านรายงานแบบ Read-Only</li>
           <li>{label} ไม่สามารถเข้าถึง Settings, Email Logs, และ Attachments</li>
