@@ -70,20 +70,30 @@ const CHECKS: Record<HealthCheckId, (env: CloudflareEnv) => Promise<Outcome>> = 
   async uptimerobot(env) {
     const key = getUptimeRobotKey(env);
     if (!key) return { status: "fail", detail: "ยังไม่ได้ตั้ง UPTIMEROBOT_API_KEY" };
-    const res = await withTimeout("https://api.uptimerobot.com/v2/getAccountDetails", {
+    // getMonitors is the call the portal really makes, and the one a
+    // read-only key may use (getAccountDetails needs a main key).
+    const res = await withTimeout("https://api.uptimerobot.com/v2/getMonitors", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({ api_key: key, format: "json" }).toString(),
     });
     const data = (await res.json().catch(() => null)) as
-      | { stat?: string; account?: { email?: string; up_monitors?: number; down_monitors?: number }; error?: { message?: string } }
+      | { stat?: string; monitors?: Array<{ status?: number; friendly_name?: string }>; error?: { message?: string } }
       | null;
     if (data?.stat !== "ok") return { status: "fail", detail: data?.error?.message ?? `HTTP ${res.status}` };
-    const down = data.account?.down_monitors ?? 0;
-    const up = data.account?.up_monitors ?? 0;
-    return down > 0
-      ? { status: "warn", detail: `เชื่อมต่อได้ · เว็บล่ม ${down} จาก ${up + down} เว็บ` }
-      : { status: "ok", detail: `เชื่อมต่อได้ · ทุกเว็บออนไลน์ (${up} เว็บ)` };
+    const monitors = data.monitors ?? [];
+    // UptimeRobot status: 8 = seems down, 9 = down.
+    const down = monitors.filter((m) => m.status === 8 || m.status === 9);
+    if (monitors.length === 0) return { status: "warn", detail: "เชื่อมต่อได้ แต่ยังไม่มี monitor" };
+    return down.length > 0
+      ? {
+          status: "warn",
+          detail: `เชื่อมต่อได้ · เว็บล่ม ${down.length} จาก ${monitors.length} เว็บ (${down
+            .map((m) => m.friendly_name)
+            .filter(Boolean)
+            .join(", ")})`,
+        }
+      : { status: "ok", detail: `เชื่อมต่อได้ · ทุกเว็บออนไลน์ (${monitors.length} เว็บ)` };
   },
 
   async telegram(env) {
