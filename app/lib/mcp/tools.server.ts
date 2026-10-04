@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isContractExpired } from "~/lib/contract";
 import type { DB } from "~/lib/db.server";
 import type { User, SupportTicket, TaskCategory } from "~/types";
 import { generateId, getThaiMonth } from "~/lib/utils";
@@ -109,7 +110,8 @@ export const tools = [
     input: z.object({}),
     readOnly: true,
     async run(_args, { db }) {
-      const [clients, open] = await Promise.all([db.listClients(), db.listAllOpenTickets()]);
+      const [allClients, open] = await Promise.all([db.listClients(), db.listAllOpenTickets()]);
+      const clients = allClients.filter((c) => !isContractExpired(c.contract_end));
       const { year, month } = bangkokYearMonth();
       const missing = await db.listClientsWithoutReportForMonth(year, month);
       const count = (key: "status" | "priority") =>

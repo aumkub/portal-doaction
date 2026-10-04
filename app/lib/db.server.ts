@@ -330,6 +330,11 @@ export function createDB(d1: D1Database) {
           FROM clients c
           JOIN users u ON u.id = c.user_id
           WHERE c.deleted_at IS NULL
+            -- Expired contracts and our own company get no monthly report
+            -- (keep in sync with needsMonthlyReport in app/lib/contract.ts)
+            AND (c.contract_end IS NULL OR c.contract_end = ''
+                 OR c.contract_end >= date('now', '+7 hours'))
+            AND c.company_name != 'บริษัท ดู แอคชั่น จำกัด'
             AND c.id NOT IN (
               SELECT client_id FROM monthly_reports
               WHERE year = ? AND month = ?

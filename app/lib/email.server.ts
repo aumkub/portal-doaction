@@ -327,7 +327,7 @@ function magicLinkHtml({
           <!-- Logo row -->
           <tr>
             <td style="padding:32px 40px 0;">
-              <img src="${logoUrl}" alt="do action" width="140" style="display:block;height:auto;border:0;outline:none;text-decoration:none;" />
+              <img src="${logoUrl}" alt="do action" width="220" style="display:block;height:auto;border:0;outline:none;text-decoration:none;" />
             </td>
           </tr>
 
