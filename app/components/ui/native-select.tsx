@@ -37,7 +37,8 @@ export function NativeSelect({
       <select
         disabled={disabled}
         className={cn(
-          "select-native w-full rounded-xl border border-line bg-white pl-3.5 pr-8 text-ink",
+          // appearance-none hides the browser arrow; SelectChevron draws the only one.
+          "select-native w-full appearance-none rounded-xl border border-line bg-white pl-3.5 pr-9 text-ink",
           "focus:outline-none focus:ring-2 focus:ring-ink/10 focus:border-ink/40 transition",
           "disabled:cursor-not-allowed disabled:bg-paper disabled:text-muted-ink",
           size === "sm" ? "h-8 text-xs" : "h-10 text-sm",
