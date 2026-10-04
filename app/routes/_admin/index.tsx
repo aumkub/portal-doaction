@@ -6,6 +6,8 @@ import { formatRelativeTime, getMonthName } from "~/lib/utils";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useFetcher } from "react-router";
 import { getBackupList } from "~/lib/backup.server";
+import { fetchAllMonitors, hostOf, type MonitorSummary } from "~/lib/uptime.server";
+import { getUptimeRobotKey } from "~/lib/secrets.server";
 import {
   filterBackupSnapshots,
   parseBackupTimestamp,
@@ -111,7 +113,29 @@ export async function loader({ request, context }: any) {
     }
   }
 
+  // Website uptime (admin only): one cached UptimeRobot call, matched to
+  // active clients by website host.
+  let uptime: UptimeData | null = null;
+  if (user.role === "admin") {
+    const env = context.cloudflare.env;
+    const monitors = await fetchAllMonitors(getUptimeRobotKey(env), env.SESSIONPORTAL);
+    if (monitors) {
+      const byHost = new Map(monitors.map((m) => [m.host, m]));
+      const used = new Set<string>();
+      const rows = clients.map((c) => {
+        const host = hostOf(c.website_url);
+        const m = host ? byHost.get(host) : undefined;
+        if (m) used.add(m.host);
+        return { client_id: c.id, company_name: c.company_name, host, monitor: m ?? null };
+      });
+      uptime = { rows, others: monitors.filter((m) => !used.has(m.host)) };
+    } else {
+      uptime = { rows: [], others: [], unavailable: true };
+    }
+  }
+
   return {
+    uptime,
     totalClients: clients.length,
     unresolvedCount: unresolved.length,
     queue,
@@ -144,6 +168,104 @@ function ageLabel(seconds: number, t: (k: any) => string) {
   if (s >= DAY) return t("rd_admin_age_days").replace("{n}", String(Math.floor(s / DAY)));
   if (s >= 3600) return t("rd_admin_age_hours").replace("{n}", String(Math.floor(s / 3600)));
   return t("rd_admin_age_minutes").replace("{n}", String(Math.max(1, Math.floor(s / 60))));
+}
+
+type UptimeData = {
+  rows: { client_id: string; company_name: string; host: string | null; monitor: MonitorSummary | null }[];
+  others: MonitorSummary[];
+  unavailable?: boolean;
+};
+
+function shortName(company: string) {
+  return company.replace(/^บริษัท\s*/, "").replace(/\s*(จำกัด|จํากัด).*$/, "");
+}
+
+/** Per-client 30-day uptime tiles, worst first, plus monitors not tied to a client. */
+function UptimeSection({ data, lang }: { data: UptimeData; lang: "th" | "en" }) {
+  const L = (th: string, en: string) => (lang === "en" ? en : th);
+  if (data.unavailable) {
+    return (
+      <section className="rounded-[20px] border border-line bg-white px-5 py-4 text-sm text-muted-ink">
+        {L("ดึงข้อมูล UptimeRobot ไม่ได้ — ตรวจที่ ตั้งค่า → การเชื่อมต่อ", "UptimeRobot unavailable — check Settings → Integrations")}
+      </section>
+    );
+  }
+  const withMon = data.rows.filter((r) => r.monitor);
+  const values = withMon.map((r) => r.monitor!.uptime30).filter((v): v is number => v != null);
+  const avg = values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
+  const down = [...withMon.filter((r) => r.monitor!.state === "down")];
+  // Down first, then lowest uptime, then clients without a monitor.
+  const rank = (r: UptimeData["rows"][number]) =>
+    !r.monitor ? 1e9 : r.monitor.state === "down" ? -1 : r.monitor.uptime30 ?? 101;
+  const rows = [...data.rows].sort((a, b) => rank(a) - rank(b));
+
+  return (
+    <section className="overflow-hidden rounded-[20px] border border-line bg-white">
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-line-soft px-5 py-4">
+        <div>
+          <h2 className="text-[16px] font-semibold text-ink">{L("สถานะเว็บไซต์ลูกค้า", "Client websites")}</h2>
+          <p className="mt-0.5 text-sm text-muted-ink">
+            {down.length > 0
+              ? L(`เว็บล่มตอนนี้ ${down.length} เว็บ`, `${down.length} site(s) down now`)
+              : L("ทุกเว็บออนไลน์", "All sites online")}
+            {" · "}
+            {L("Uptime 30 วัน", "30-day uptime")}
+          </p>
+        </div>
+        {avg != null && (
+          <p className="text-right">
+            <span className="block text-xs text-muted-ink">{L("เฉลี่ย", "Average")}</span>
+            <span className="font-display text-[28px] font-bold leading-none tabular-nums text-ink">{avg.toFixed(2)}%</span>
+          </p>
+        )}
+      </div>
+      <div className="grid grid-cols-1 gap-2.5 p-4 sm:grid-cols-2 lg:grid-cols-3">
+        {rows.map((r) => {
+          const m = r.monitor;
+          const isDown = m?.state === "down";
+          const dot = !m ? "bg-line" : isDown ? "bg-[#E0622A]" : m.state === "up" ? "bg-emerald-500" : "bg-brand-yellow";
+          const low = m?.uptime30 != null && m.uptime30 < 99.5;
+          return (
+            <a
+              key={r.client_id}
+              href={`/admin/clients/${r.client_id}`}
+              className={`flex min-w-0 items-center gap-3 rounded-[14px] border px-3.5 py-3 transition-colors hover:border-ink/30 ${
+                isDown ? "border-[#F3C9B0] bg-[#FFF5EE]" : "border-line-soft"
+              }`}
+            >
+              <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${dot} ${isDown ? "animate-pulse" : ""}`} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold text-ink">{shortName(r.company_name)}</span>
+                <span className="block truncate text-xs text-muted-ink">
+                  {r.host ?? L("ไม่มีเว็บไซต์", "No website")}
+                  {!m && r.host ? L(" · ไม่มี monitor", " · no monitor") : ""}
+                </span>
+              </span>
+              <span
+                className={`shrink-0 font-display text-[18px] font-bold tabular-nums ${
+                  !m ? "text-faint-ink" : isDown ? "text-[#B4541A]" : low ? "text-[#B4541A]" : "text-ink"
+                }`}
+              >
+                {m ? (isDown ? L("ล่ม", "Down") : m.uptime30 != null ? `${m.uptime30.toFixed(2)}%` : "—") : "—"}
+              </span>
+            </a>
+          );
+        })}
+      </div>
+      {data.others.length > 0 && (
+        <p className="border-t border-line-soft px-5 py-3 text-xs text-muted-ink">
+          {L("Monitor อื่นที่ไม่ผูกกับลูกค้า: ", "Other monitors: ")}
+          {data.others.map((m, i) => (
+            <span key={m.host || i} className={m.state === "down" ? "font-semibold text-[#B4541A]" : ""}>
+              {i > 0 ? ", " : ""}
+              {m.name}
+              {m.state === "down" ? L(" (ล่ม)", " (down)") : ""}
+            </span>
+          ))}
+        </p>
+      )}
+    </section>
+  );
 }
 
 export default function AdminOverviewPage({ loaderData }: any) {
@@ -331,6 +453,9 @@ export default function AdminOverviewPage({ loaderData }: any) {
           )}
         </div>
       </section>
+
+      {/* Website uptime — admin only */}
+      {!isCoAdmin && data.uptime && <UptimeSection data={data.uptime} lang={lang} />}
 
       {/* Site health — admin only */}
       {!isCoAdmin && (
