@@ -223,6 +223,14 @@ function RowActions({ report, isCoAdmin, t, L, onDialog, telegramSending, onTele
   );
 }
 
+/** Pipeline order and colours for this month's report stages. */
+const STAGES = [
+  { key: "none", dot: "bg-[#D9D6CC]", bar: "bg-[#D9D6CC]" },
+  { key: "draft", dot: "bg-brand-yellow", bar: "bg-brand-yellow" },
+  { key: "published", dot: "bg-emerald-500", bar: "bg-emerald-500" },
+  { key: "sent", dot: "bg-ink", bar: "bg-ink" },
+] as const;
+
 export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
   const { reports, bulkResult, userRole, page, totalPages, monthStats, missingClients } = loaderData as {
     reports: ReportRowForEmail[];
@@ -275,6 +283,15 @@ export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
     });
   }, [reports, search, statusFilter]);
 
+  // Group the filtered rows under report-month headings.
+  const groups: { key: string; label: string; rows: ReportRowForEmail[] }[] = [];
+  for (const r of filtered) {
+    const key = `${r.year}-${r.month}`;
+    const last = groups[groups.length - 1];
+    if (last?.key === key) last.rows.push(r);
+    else groups.push({ key, label: formatReportPeriod(r.month, r.year), rows: [r] });
+  }
+
   const ms = monthStats;
   const done = ms.sent;
   const pct = ms.totalClients > 0 ? Math.round((done / ms.totalClients) * 100) : 0;
@@ -311,37 +328,63 @@ export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
         )}
       </div>
 
-      {/* ── Month progress ── */}
-      <div className="grid gap-3 lg:grid-cols-[1.2fr_2fr]">
-        <div className="rounded-[24px] bg-ink p-7 text-white">
-          <p className="text-sm text-white/60">{L("ความคืบหน้าเดือนนี้", "This month's progress")}</p>
-          <p className="mt-2 font-display text-[56px] leading-none font-bold tracking-[-0.03em] tabular-nums text-brand-yellow">
-            {done}<span className="text-[28px] text-white/40">/{ms.totalClients}</span>
-          </p>
-          <p className="mt-2 text-sm text-white/70">{L("ส่งถึงลูกค้าแล้ว", "delivered to clients")} · {pct}%</p>
-          <div className="mt-5 flex h-1.5 gap-1 overflow-hidden rounded-full">
-            {ms.totalClients > 0 && (
-              <>
-                <span className="bg-brand-yellow" style={{ flexGrow: ms.sent }} />
-                <span className="bg-emerald-400" style={{ flexGrow: ms.published }} />
-                <span className="bg-white/40" style={{ flexGrow: ms.draft }} />
-                <span className="bg-white/10" style={{ flexGrow: ms.none }} />
-              </>
-            )}
+      {/* ── Month progress: one card, read left → right as a pipeline ── */}
+      <section className="overflow-hidden rounded-[24px] border border-line bg-white">
+        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2 px-5 pt-5 md:px-7 md:pt-6">
+          <div className="min-w-0">
+            <p className="text-sm text-muted-ink">{L("ส่งถึงลูกค้าแล้ว", "Delivered to clients")}</p>
+            <p className="mt-1 font-display text-[44px] leading-none font-bold tracking-[-0.03em] tabular-nums text-ink">
+              {done}
+              <span className="text-[24px] text-faint-ink">/{ms.totalClients}</span>
+            </p>
+          </div>
+          <p className="font-display text-[22px] font-bold tabular-nums text-ink">{pct}%</p>
+        </div>
+
+        {/* Stacked bar: each stage's share of this month's clients */}
+        <div className="px-5 pb-5 pt-4 md:px-7 md:pb-6" aria-hidden="true">
+          <div className="flex h-2.5 gap-[3px] overflow-hidden rounded-full bg-paper">
+            {ms.totalClients > 0 &&
+              STAGES.map((st) => {
+                const n = kpis.find((k) => k.key === st.key)?.value ?? 0;
+                return n > 0 ? <span key={st.key} className={st.bar} style={{ flexGrow: n }} /> : null;
+              })}
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          {kpis.map((k) => (
-            <button key={k.key} type="button"
-              onClick={() => k.key !== "none" && setStatusFilter(statusFilter === k.key ? "all" : (k.key as RowState))}
-              className={`rounded-[20px] border bg-white p-5 text-left transition-colors ${statusFilter === k.key ? "border-ink" : "border-line hover:border-ink/30"} ${k.key === "none" ? "cursor-default" : ""}`}>
-              <StatePill state={k.key} label={k.label} />
-              <p className="mt-3 font-display text-[34px] leading-none font-bold tracking-[-0.03em] tabular-nums text-ink">{k.value}</p>
-              <p className="mt-1.5 text-xs text-muted-ink">{k.hint}</p>
-            </button>
-          ))}
+
+        {/* Stages — click to filter the list below */}
+        <div className="grid grid-cols-2 border-t border-line-soft sm:grid-cols-4">
+          {kpis.map((k, idx) => {
+            const st = STAGES.find((x) => x.key === k.key)!;
+            const active = statusFilter === k.key;
+            const clickable = k.key !== "none";
+            return (
+              <button
+                key={k.key}
+                type="button"
+                disabled={!clickable}
+                aria-pressed={clickable ? active : undefined}
+                onClick={() => clickable && setStatusFilter(active ? "all" : (k.key as RowState))}
+                className={`relative min-w-0 px-5 py-4 text-left transition-colors md:px-6 ${
+                  idx % 2 === 1 ? "border-l border-line-soft" : ""
+                } ${idx >= 2 ? "border-t border-line-soft sm:border-t-0" : ""} ${
+                  idx === 2 ? "sm:border-l" : ""
+                } ${active ? "bg-paper" : clickable ? "hover:bg-paper/60" : "cursor-default"}`}
+              >
+                {active && <span className="absolute inset-x-0 top-0 h-[3px] bg-ink" />}
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${st.dot}`} />
+                  <span className="truncate text-[13px] font-semibold text-ink">{k.label}</span>
+                </span>
+                <span className="mt-2 block font-display text-[30px] leading-none font-bold tracking-[-0.03em] tabular-nums text-ink">
+                  {k.value}
+                </span>
+                <span className="mt-1.5 block text-xs leading-snug text-muted-ink">{k.hint}</span>
+              </button>
+            );
+          })}
         </div>
-      </div>
+      </section>
 
       {/* ── Bulk result banner ── */}
       {(bulkResult.created > 0 || bulkResult.failed > 0) && (
@@ -352,45 +395,28 @@ export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
 
       {/* ── Clients still missing a report ── */}
       {missingClients.length > 0 && !isCoAdmin && (
-        <div className="rounded-[20px] border border-line bg-white p-5">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-[16px] font-semibold text-ink">{L(`ยังไม่มี Report ของ ${periodLabel}`, `No report yet for ${periodLabel}`)}</p>
-            <a href="/admin/reports/new" className="text-[13px] font-semibold text-ink underline-offset-4 hover:underline">
-              {t("admin_reports_new_btn").replace(/^\+\s*/, "")} →
+        <section className="rounded-[20px] border border-line bg-white px-5 py-4">
+          <div className="flex items-center justify-between gap-3">
+            <p className="min-w-0 truncate text-sm font-semibold text-ink">
+              {L(`ยังไม่มี Report ของเดือนนี้`, `No report yet this month`)}
+              <span className="ml-1.5 font-normal text-muted-ink">· {missingClients.length}</span>
+            </p>
+            <a href="/admin/reports/new"
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-brand-yellow px-3.5 text-[13px] font-semibold text-ink hover:brightness-95">
+              <FaFileCirclePlus className="text-[11px]" aria-hidden="true" />
+              {t("admin_reports_new_btn").replace(/^\+\s*/, "")}
             </a>
           </div>
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="-mx-5 mt-3 flex gap-2 overflow-x-auto px-5 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
             {missingClients.map((c) => (
-              <span key={c.id} className="inline-flex items-center gap-2 rounded-full bg-paper py-1 pl-1 pr-3 text-[13px] text-ink-soft">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-[10px] font-semibold text-ink">{getInitials(c.company_name)}</span>
-                {c.company_name}
+              <span key={c.id} className="inline-flex max-w-[220px] shrink-0 items-center gap-2 rounded-full bg-paper py-1 pl-1 pr-3 text-[13px] text-ink-soft">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white text-[10px] font-semibold text-ink">{getInitials(c.company_name)}</span>
+                <span className="truncate">{c.company_name}</span>
               </span>
             ))}
           </div>
-        </div>
+        </section>
       )}
-
-      {/* ── Filters ── */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="relative flex-1">
-          <FaMagnifyingGlass className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-xs text-faint-ink" />
-          <input
-            type="search"
-            placeholder={L("ค้นหาบริษัท...", "Search company...")}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="h-10 w-full rounded-xl border border-line bg-white pl-9 pr-3.5 text-sm text-ink placeholder:text-faint-ink focus:border-ink/40 focus:outline-none focus:ring-2 focus:ring-ink/10"
-          />
-        </div>
-        <div className="inline-flex self-start overflow-x-auto rounded-full bg-paper p-[3px] max-w-full">
-          {filterOptions.map((s) => (
-            <button key={s} type="button" onClick={() => setStatusFilter(s)}
-              className={`h-8 shrink-0 rounded-full px-3.5 text-[13px] font-medium transition-colors ${statusFilter === s ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-muted-ink hover:text-ink"}`}>
-              {s === "all" ? L("ทั้งหมด", "All") : stateLabel(s)}
-            </button>
-          ))}
-        </div>
-      </div>
 
       <ReportCustomerEmailDialog
         report={emailDialog?.report ?? null}
@@ -400,81 +426,75 @@ export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
       />
 
       {/* ── List ── */}
-      <div className="overflow-hidden rounded-[20px] border border-line bg-white">
+      <section className="overflow-hidden rounded-[20px] border border-line bg-white">
+        <div className="flex flex-col gap-3 border-b border-line-soft px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative min-w-0 sm:max-w-xs sm:flex-1">
+            <FaMagnifyingGlass className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-xs text-faint-ink" />
+            <input
+              type="search"
+              placeholder={L("ค้นหาบริษัท...", "Search company...")}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-9 w-full rounded-full border border-line bg-white pl-9 pr-3.5 text-sm text-ink placeholder:text-faint-ink focus:border-ink/40 focus:outline-none focus:ring-2 focus:ring-ink/10"
+            />
+          </div>
+          <div className="-mx-5 overflow-x-auto px-5 sm:mx-0 sm:px-0">
+            <div className="inline-flex rounded-full bg-paper p-[3px]">
+              {filterOptions.map((s) => (
+                <button key={s} type="button" aria-pressed={statusFilter === s} onClick={() => setStatusFilter(s)}
+                  className={`flex h-8 shrink-0 items-center whitespace-nowrap rounded-full px-3.5 text-[13px] font-medium ${statusFilter === s ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-muted-ink hover:text-ink"}`}>
+                  {s === "all" ? L("ทั้งหมด", "All") : stateLabel(s)}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
         {filtered.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 px-5 py-16 text-center">
-            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-paper text-muted-ink"><FaFileLines /></span>
-            <p className="font-semibold text-ink">{search || statusFilter !== "all" ? L("ไม่พบ Report ที่ค้นหา", "No matching reports") : t("admin_reports_empty")}</p>
+          <div className="px-5 py-14 text-center">
+            <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-paper text-ink-soft"><FaFileLines /></span>
+            <p className="text-sm text-muted-ink">{search || statusFilter !== "all" ? L("ไม่พบ Report ที่ค้นหา", "No matching reports") : t("admin_reports_empty")}</p>
             {!isCoAdmin && !search && statusFilter === "all" && (
-              <a href="/admin/reports/new" className="inline-flex h-10 items-center rounded-full bg-ink px-5 text-[13px] font-semibold text-white hover:bg-black">
+              <a href="/admin/reports/new" className="mt-4 inline-flex h-10 items-center rounded-full bg-ink px-5 text-[13px] font-semibold text-white hover:bg-black">
                 {t("admin_reports_new_btn").replace(/^\+\s*/, "")}
               </a>
             )}
           </div>
         ) : (
-          <>
-            {/* Desktop table */}
-            <table className="hidden w-full text-sm md:table">
-              <thead>
-                <tr className="border-b border-line-soft">
-                  <th className="px-5 py-3 text-left text-xs font-medium text-muted-ink">{t("admin_col_client")}</th>
-                  <th className="px-5 py-3 text-left text-xs font-medium text-muted-ink">{t("admin_reports_col_month")}</th>
-                  <th className="px-5 py-3 text-left text-xs font-medium text-muted-ink">{t("admin_reports_col_tasks_short")}</th>
-                  <th className="px-5 py-3 text-left text-xs font-medium text-muted-ink">{t("admin_reports_col_status")}</th>
-                  <th className="px-5 py-3" />
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((report) => {
+          groups.map((g) => (
+            <div key={g.key}>
+              <p className="sticky top-0 z-[1] border-b border-line-soft bg-paper/80 px-5 py-2 text-xs font-semibold text-muted-ink backdrop-blur">
+                {g.label}
+              </p>
+              <ul className="divide-y divide-[#F4F2EC]">
+                {g.rows.map((report) => {
                   const st = rowState(report);
+                  const href = isCoAdmin ? `/reports/${report.id}` : `/admin/reports/${report.id}`;
                   return (
-                    <tr key={report.id} className="border-b border-[#F4F2EC] last:border-0 hover:bg-paper/50">
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center gap-3">
-                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-paper text-xs font-semibold text-ink">{getInitials(report.company_name)}</span>
-                          <span className="font-medium text-ink">{report.company_name}</span>
-                        </div>
-                      </td>
-                      <td className="px-5 py-3.5 text-ink-soft">{formatReportPeriod(report.month, report.year)}</td>
-                      <td className="px-5 py-3.5 tabular-nums text-muted-ink">{report.total_tasks} {t("items")}</td>
-                      <td className="px-5 py-3.5">
-                        <StatePill state={st} label={stateLabel(st)} />
-                        <EmailMeta report={report} lang={lang} />
-                      </td>
-                      <td className="px-5 py-3.5">
+                    <li key={report.id} className="flex min-w-0 flex-col gap-2.5 px-5 py-3.5 hover:bg-paper/60 sm:flex-row sm:items-center sm:gap-3.5">
+                      <a href={href} {...(isCoAdmin ? { target: "_blank", rel: "noopener noreferrer" } : {})} className="flex min-w-0 flex-1 items-center gap-3.5">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-paper text-xs font-semibold text-ink">{getInitials(report.company_name)}</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-semibold text-ink">{report.company_name}</span>
+                          <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-ink">
+                            <span className="truncate">{report.title || formatReportPeriod(report.month, report.year)}</span>
+                            <span aria-hidden="true">·</span>
+                            <span className="shrink-0 tabular-nums">{report.total_tasks} {t("items")}</span>
+                          </span>
+                          <EmailMeta report={report} lang={lang} />
+                        </span>
+                        <span className="shrink-0 sm:hidden"><StatePill state={st} label={stateLabel(st)} /></span>
+                      </a>
+                      <div className="flex shrink-0 items-center justify-end gap-3">
+                        <span className="hidden sm:inline-flex"><StatePill state={st} label={stateLabel(st)} /></span>
                         <RowActions report={report} isCoAdmin={isCoAdmin} t={t} L={L} onDialog={setEmailDialog} telegramSending={telegramSending} onTelegram={sendTelegram} />
-                      </td>
-                    </tr>
+                      </div>
+                    </li>
                   );
                 })}
-              </tbody>
-            </table>
-
-            {/* Phone cards */}
-            <div className="md:hidden">
-              {filtered.map((report) => {
-                const st = rowState(report);
-                return (
-                  <div key={report.id} className="space-y-3 border-b border-[#F4F2EC] px-5 py-4 last:border-0">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex min-w-0 items-center gap-2.5">
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-paper text-xs font-semibold text-ink">{getInitials(report.company_name)}</span>
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-ink">{report.company_name}</p>
-                          <p className="text-xs text-muted-ink">{formatReportPeriod(report.month, report.year)} · {report.total_tasks} {t("items")}</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <StatePill state={st} label={stateLabel(st)} />
-                      </div>
-                    </div>
-                    <EmailMeta report={report} lang={lang} />
-                    <RowActions report={report} isCoAdmin={isCoAdmin} t={t} L={L} onDialog={setEmailDialog} telegramSending={telegramSending} onTelegram={sendTelegram} />
-                  </div>
-                );
-              })}
+              </ul>
             </div>
-          </>
+          ))
         )}
 
         {filtered.length > 0 && (
@@ -483,7 +503,7 @@ export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
           </div>
         )}
         <Pagination page={page} totalPages={totalPages} />
-      </div>
+      </section>
     </div>
   );
 }

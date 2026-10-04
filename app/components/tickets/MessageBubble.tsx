@@ -40,7 +40,7 @@ export default function MessageBubble({
 
   return (
     <div className={`flex ${shouldAlignRight ? "justify-end" : "justify-start"}`}>
-      <div className={`max-w-[85%] md:max-w-[72%] rounded-2xl px-4 py-3 text-sm leading-[1.65] ${bubbleClass}`}>
+      <div className={`min-w-0 max-w-[85%] md:max-w-[72%] rounded-2xl px-4 py-3 text-sm leading-[1.65] [overflow-wrap:anywhere] ${bubbleClass}`}>
         {isInternal && (
           <p className="mb-1.5 text-[11px] font-bold tracking-[0.06em] text-[#8A6D00]">
             {internalLabel ?? "โน้ตภายใน · ลูกค้าไม่เห็น"}
@@ -59,12 +59,12 @@ export default function MessageBubble({
                   key={a.id}
                   type="button"
                   onClick={() => onAttachmentClick?.(a)}
-                  className="block rounded-lg overflow-hidden border border-white/20 hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-slate-400"
+                  className="block max-w-full rounded-lg overflow-hidden border border-white/20 hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-slate-400"
                 >
                   <img
                     src={a.href}
                     alt={a.name}
-                    className="max-h-40 max-w-[240px] object-cover block"
+                    className="block max-h-40 w-auto max-w-full object-cover sm:max-w-[240px]"
                   />
                 </button>
               ) : (

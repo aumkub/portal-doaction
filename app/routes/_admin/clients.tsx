@@ -163,6 +163,13 @@ function ClientActions({
   );
 }
 
+function daysUntil(end: string | null): number | null {
+  if (!end) return null;
+  const ms = Date.parse(`${end}T23:59:59+07:00`);
+  if (Number.isNaN(ms)) return null;
+  return Math.ceil((ms - Date.now()) / 86400000);
+}
+
 export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
   const { clients, userRole, page, totalPages, total, currentMonth, currentYear, contractFilter, expiredCount, activeCount } = loaderData as {
     clients: Array<Client & { first_login_at: number | null; has_monthly_report: boolean; skip_report_check?: boolean; contract_expired: boolean }>;
@@ -177,11 +184,10 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
     activeCount: number;
   };
   const { t, lang } = useT();
+  const L = (th: string, en: string) => (lang === "en" ? en : th);
   const [search, setSearch] = useState("");
   const [reportFilter, setReportFilter] = useState<"all" | "missing" | "has">("all");
-
-  const activated = clients.filter((c) => c.first_login_at).length;
-  const pending    = clients.length - activated;
+  const [loginFilter, setLoginFilter] = useState<"all" | "activated" | "pending">("all");
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -194,14 +200,29 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
         reportFilter === "all" ||
         (reportFilter === "missing" && !c.contract_expired && !c.has_monthly_report) ||
         (reportFilter === "has" && !c.contract_expired && c.has_monthly_report);
-      return matchesSearch && matchesReport;
+      const matchesLogin =
+        loginFilter === "all" ||
+        (loginFilter === "activated" && !!c.first_login_at) ||
+        (loginFilter === "pending" && !c.first_login_at);
+      return matchesSearch && matchesReport && matchesLogin;
     });
-  }, [clients, search, reportFilter]);
+  }, [clients, search, reportFilter, loginFilter]);
 
   const isCoAdmin = userRole === "co-admin";
 
+  const contractCards = [
+    { value: "active" as const, label: L("ใช้งานอยู่", "Active"), count: activeCount, chip: "bg-emerald-50 text-emerald-700", icon: FaCircleCheck },
+    { value: "expired" as const, label: L("หมดอายุ", "Expired"), count: expiredCount, chip: "bg-[#FDE7DA] text-[#B4541A]", icon: FaClock },
+    { value: "all" as const, label: L("ทั้งหมด", "All"), count: activeCount + expiredCount, chip: "bg-paper text-ink-soft", icon: FaUsers },
+  ];
+
+  const segBtn = (on: boolean) =>
+    `flex h-8 items-center rounded-full px-3.5 text-[13px] font-medium whitespace-nowrap ${
+      on ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-muted-ink hover:text-ink"
+    }`;
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/* ── Header ── */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
@@ -223,214 +244,126 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
         )}
       </div>
 
-      {/* ── Stats strip ── */}
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { label: "ทั้งหมด", value: clients.length },
-          { label: t("admin_login_status_activated"), value: activated },
-          { label: t("admin_login_status_pending"), value: pending },
-        ].map((s) => (
-          <div key={s.label} className="rounded-[18px] border border-line bg-white p-4 sm:p-[18px]">
-            <p className="text-[13px] text-muted-ink truncate">{s.label}</p>
-            <p className="mt-2 font-display text-[28px] sm:text-[34px] font-bold leading-none tracking-[-0.03em] tabular-nums text-ink">{s.value}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* ── Filters ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-        <div className="relative flex-1">
-          <FaMagnifyingGlass className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-faint-ink text-xs" />
-          <input
-            type="search"
-            placeholder="ค้นหาบริษัท หรือเว็บไซต์..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full h-10 rounded-xl border border-line bg-white pl-9 pr-3.5 text-sm text-ink placeholder:text-faint-ink focus:outline-none focus:ring-2 focus:ring-ink/10 focus:border-ink/40 transition"
-          />
-        </div>
-        <div className="inline-flex self-start rounded-full bg-paper p-[3px] max-w-full overflow-x-auto">
-          {([
-            { value: "active" as const, label: lang === "en" ? "Active" : "ใช้งานอยู่", count: activeCount },
-            { value: "expired" as const, label: lang === "en" ? "Expired" : "หมดอายุ", count: expiredCount },
-            { value: "all" as const, label: lang === "en" ? "All" : "ทั้งหมด", count: activeCount + expiredCount },
-          ]).map((opt) => (
+      {/* ── Contract filter cards ── */}
+      <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0 sm:pb-0">
+        {contractCards.map((c) => {
+          const active = contractFilter === c.value;
+          return (
             <a
-              key={opt.value}
-              href={opt.value === "active" ? "/admin/clients" : `/admin/clients?contract=${opt.value}`}
-              aria-current={contractFilter === opt.value ? "page" : undefined}
-              className={`flex h-9 items-center gap-1.5 px-3.5 rounded-full text-[13px] font-medium whitespace-nowrap transition-colors ${
-                contractFilter === opt.value
-                  ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]"
-                  : "text-muted-ink hover:text-ink"
+              key={c.value}
+              href={c.value === "active" ? "/admin/clients" : `/admin/clients?contract=${c.value}`}
+              aria-current={active ? "page" : undefined}
+              className={`w-[148px] shrink-0 rounded-[18px] border bg-white p-4 transition-colors sm:w-auto sm:min-w-0 ${
+                active ? "border-ink ring-1 ring-ink" : "border-line hover:border-ink/30"
               }`}
             >
-              {opt.label}
-              <span className="text-xs text-faint-ink tabular-nums">{opt.count}</span>
+              <span className="flex min-w-0 items-center gap-2">
+                <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-[9px] ${c.chip}`}>
+                  <c.icon className="text-[12px]" aria-hidden="true" />
+                </span>
+                <span className="truncate text-[13px] font-semibold text-ink">{c.label}</span>
+              </span>
+              <span className="mt-2 block font-display text-[28px] leading-none font-bold tabular-nums text-ink">{c.count}</span>
             </a>
-          ))}
-        </div>
-        <div className="inline-flex self-start rounded-full bg-paper p-[3px] max-w-full overflow-x-auto">
-          {([
-            { value: "all" as const, label: "ทั้งหมด" },
-            { value: "missing" as const, label: "ยังไม่มี Report" },
-            { value: "has" as const, label: "มี Report แล้ว" },
-          ] as const).map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() => setReportFilter(opt.value)}
-              className={`h-9 px-3.5 rounded-full text-[13px] font-medium whitespace-nowrap transition-colors ${
-                reportFilter === opt.value
-                  ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]"
-                  : "text-muted-ink hover:text-ink"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
+          );
+        })}
       </div>
 
       {/* ── List ── */}
-      <div className="rounded-[20px] border border-line bg-white overflow-hidden">
-        {filtered.length === 0 ? (
-          <div className="px-5 py-16 text-center">
-            <div className="flex flex-col items-center gap-2 text-muted-ink">
-              <FaUsers className="text-base text-faint-ink" />
-              <p className="text-sm">{search || reportFilter !== "all" ? "ไม่พบลูกค้าที่ค้นหา" : t("admin_clients_empty")}</p>
+      <section className="overflow-hidden rounded-[20px] border border-line bg-white">
+        <div className="space-y-3 border-b border-line-soft px-5 py-3.5">
+          <div className="relative">
+            <FaMagnifyingGlass className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-faint-ink text-xs" />
+            <input
+              type="search"
+              placeholder="ค้นหาบริษัท หรือเว็บไซต์..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full h-10 rounded-full border border-line bg-white pl-9 pr-3.5 text-sm text-ink placeholder:text-faint-ink focus:outline-none focus:ring-2 focus:ring-ink/10 focus:border-ink/40 transition"
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex max-w-full overflow-x-auto rounded-full bg-paper p-[3px]">
+              {([
+                { v: "all" as const, label: L("ทั้งหมด", "All") },
+                { v: "missing" as const, label: L("ยังไม่มี Report", "No report") },
+                { v: "has" as const, label: L("มี Report แล้ว", "Has report") },
+              ]).map((o) => (
+                <button key={o.v} type="button" onClick={() => setReportFilter(o.v)} className={segBtn(reportFilter === o.v)}>
+                  {o.label}
+                </button>
+              ))}
+            </div>
+            <div className="inline-flex max-w-full overflow-x-auto rounded-full bg-paper p-[3px]">
+              {([
+                { v: "all" as const, label: L("ทุกสถานะ", "Any login") },
+                { v: "activated" as const, label: t("admin_login_status_activated") },
+                { v: "pending" as const, label: t("admin_login_status_pending") },
+              ]).map((o) => (
+                <button key={o.v} type="button" onClick={() => setLoginFilter(o.v)} className={segBtn(loginFilter === o.v)}>
+                  {o.label}
+                </button>
+              ))}
             </div>
           </div>
-        ) : (
-          <>
-            {/* Desktop table — lg+ */}
-            <div className="hidden lg:block overflow-x-auto">
-              <table className="w-full text-sm md:min-w-[1024px]">
-                <thead>
-                  <tr className="border-b border-line-soft">
-                    <th className="text-left text-xs font-medium text-muted-ink px-5 py-3">{t("admin_col_client")}</th>
-                    <th className="text-center text-xs font-medium text-muted-ink px-5 py-3 w-14" title="Report ประจำเดือน">
-                      <FaFileCircleXmark className="inline text-faint-ink text-[10px]" aria-hidden="true" />
-                      <span className="sr-only">Report ประจำเดือน</span>
-                    </th>
-                    <th className="text-left text-xs font-medium text-muted-ink px-5 py-3">{t("admin_col_website")}</th>
-                    <th className="text-left text-xs font-medium text-muted-ink px-5 py-3">{t("admin_col_package")}</th>
-                    <th className="text-left text-xs font-medium text-muted-ink px-5 py-3">{t("admin_col_contract")}</th>
-                    <th className="text-left text-xs font-medium text-muted-ink px-5 py-3">{t("admin_col_login_status")}</th>
-                    {!isCoAdmin && (
-                      <th className="text-center text-xs font-medium text-muted-ink px-5 py-3 w-14" title={t("admin_col_backup")}>
-                        <FaCloud className="inline text-faint-ink text-[10px]" aria-hidden="true" />
-                        <span className="sr-only">{t("admin_col_backup")}</span>
-                      </th>
-                    )}
-                    <th className="px-5 py-3" />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#F4F2EC]">
-                  {filtered.map((client) => {
-                    const styles = packageStyles[client.package];
-                    const initials = getInitials(client.company_name);
-                    const missingReport = !client.has_monthly_report;
-                    const hideReport = client.contract_expired;
-                    return (
-                      <tr key={client.id} className="hover:bg-paper/60 transition-colors">
-                        <td className="px-5 py-3.5">
-                          <div className="flex items-center gap-3">
-                            <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-paper text-ink text-xs font-semibold`}>{initials}</span>
-                            <span className="font-medium text-ink min-w-[180px]">{client.company_name}</span>
-                          </div>
-                        </td>
-                        <td className="px-5 py-3.5">
-                          {hideReport ? (
-                            <span className="rounded-full bg-paper px-2.5 py-0.5 text-xs font-semibold text-muted-ink whitespace-nowrap">
-                              {lang === "en" ? "Expired" : "หมดอายุ"}
-                            </span>
-                          ) : missingReport ? (
-                            <span
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-[#FDE7DA] text-[#B4541A]"
-                              title={`${currentMonth}/${currentYear} - ยังไม่มี Report`}
-                            >
-                              <FaFileCircleXmark className="text-xs" aria-label="ยังไม่มี Report" />
-                            </span>
-                          ) : (
-                            <span className="text-faint-ink" aria-label="มี Report แล้ว">
-                              <FaCircleCheck className="text-emerald-500" />
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-5 py-3.5 text-muted-ink">
-                          {client.website_url ? (
-                            <a href={client.website_url} target="_blank" rel="noopener noreferrer"
-                              className="hover:text-ink hover:underline underline-offset-2 transition-colors max-w-[200px] truncate block">
-                              {client.website_url.replace(/^https?:\/\//, "").replace(/\/$/, "")}
-                            </a>
-                          ) : <span className="text-faint-ink">—</span>}
-                        </td>
-                        <td className="px-5 py-3.5">
-                          <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full ${styles.badge}`}>
-                            <span className={`h-1.5 w-1.5 rounded-full ${styles.dot}`} />
-                            {t(packageKeys[client.package])}
-                          </span>
-                        </td>
-                        <td className="px-5 py-3.5 text-muted-ink text-sm">
-                          {client.contract_end ?? <span className="text-muted-ink text-xs">{t("settings_contract_no_expiry")}</span>}
-                        </td>
-                        <td className="px-5 py-3.5">
-                          {client.first_login_at ? (
-                            <div>
-                              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
-                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />{t("admin_login_status_activated")}
-                              </span>
-                              <p className="text-[11px] text-muted-ink mt-1">{formatRelativeTime(client.first_login_at, lang)}</p>
-                            </div>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#FFF6C2] px-2.5 py-0.5 text-xs font-semibold text-[#6B5B00] whitespace-nowrap">
-                              <span className="h-1.5 w-1.5 rounded-full bg-[#B89B00]" />{t("admin_login_status_pending")}
-                            </span>
-                          )}
-                        </td>
-                        {!isCoAdmin && (
-                          <td className="px-3 py-3.5 text-center">
-                            <BackupConnectedIcon path={client.backup_path} t={t} />
-                          </td>
-                        )}
-                        <td className="px-5 py-3.5">
-                          <ClientActions client={client} isCoAdmin={isCoAdmin} t={t} confirmMsg={`${t("admin_impersonate_confirm")} ${client.company_name}?`} />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+        </div>
 
-            {/* Cards — below lg */}
-            <div className="lg:hidden divide-y divide-[#F4F2EC]">
-              {filtered.map((client) => {
-                const styles = packageStyles[client.package];
-                const initials = getInitials(client.company_name);
-                const missingReport = !client.has_monthly_report;
-                const hideReport = client.contract_expired;
-                return (
-                  <div key={client.id} className="p-4 space-y-3">
-                    {/* Top: avatar + name + report status */}
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-paper text-ink text-xs font-semibold`}>{initials}</span>
-                        <div className="min-w-0">
-                          <p className="font-medium text-ink text-sm truncate">{client.company_name}</p>
-                          {client.website_url && (
-                            <a href={client.website_url} target="_blank" rel="noopener noreferrer"
-                              className="text-xs text-muted-ink hover:text-ink-soft hover:underline underline-offset-2 truncate block max-w-[200px]">
-                              {client.website_url.replace(/^https?:\/\//, "").replace(/\/$/, "")}
-                            </a>
-                          )}
-                        </div>
-                      </div>
-                      {hideReport ? (
-                        <span className="rounded-full bg-paper px-2.5 py-0.5 text-xs font-semibold text-muted-ink whitespace-nowrap">
-                          {lang === "en" ? "Expired" : "หมดอายุ"}
+        {filtered.length === 0 ? (
+          <div className="px-5 py-14 text-center">
+            <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-paper text-ink-soft">
+              <FaUsers />
+            </span>
+            <p className="text-sm text-muted-ink">
+              {search || reportFilter !== "all" || loginFilter !== "all" ? "ไม่พบลูกค้าที่ค้นหา" : t("admin_clients_empty")}
+            </p>
+          </div>
+        ) : (
+          <ul className="divide-y divide-line-soft">
+            {filtered.map((client) => {
+              const styles = packageStyles[client.package];
+              const days = daysUntil(client.contract_end);
+              const endingSoon = !client.contract_expired && days !== null && days <= 30;
+              const site = client.website_url?.replace(/^https?:\/\//, "").replace(/\/$/, "");
+              return (
+                <li key={client.id} className="flex flex-col gap-3 px-5 py-3.5 hover:bg-paper/60 sm:flex-row sm:items-center">
+                  <a href={`/admin/clients/${client.id}`} className="flex min-w-0 flex-1 items-center gap-3.5">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-paper text-xs font-semibold text-ink">
+                      {getInitials(client.company_name)}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold text-ink">{client.company_name}</span>
+                      <span className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-ink">
+                        {site && (
+                          <>
+                            <span className="max-w-full truncate">{site}</span>
+                            <span aria-hidden="true">·</span>
+                          </>
+                        )}
+                        <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${styles.badge}`}>
+                          <span className={`h-1.5 w-1.5 rounded-full ${styles.dot}`} />
+                          {t(packageKeys[client.package])}
                         </span>
-                      ) : missingReport ? (
+                        <span aria-hidden="true">·</span>
+                        {client.contract_expired ? (
+                          <span className="shrink-0 rounded-full bg-[#FDE7DA] px-2 py-0.5 text-[11px] font-semibold text-[#B4541A]">
+                            {L("หมดอายุ", "Expired")} {client.contract_end}
+                          </span>
+                        ) : client.contract_end ? (
+                          <span className={`shrink-0 tabular-nums ${endingSoon ? "font-semibold text-[#B4541A]" : ""}`}>
+                            {t("admin_col_contract")}: {client.contract_end}
+                            {endingSoon && days !== null ? ` (${L(`อีก ${days} วัน`, `${days}d left`)})` : ""}
+                          </span>
+                        ) : (
+                          <span className="shrink-0">{t("settings_contract_no_expiry")}</span>
+                        )}
+                      </span>
+                    </span>
+                    <span className="flex shrink-0 flex-col items-end gap-1">
+                      {client.contract_expired ? (
+                        <span className="rounded-full bg-paper px-2.5 py-0.5 text-xs font-semibold text-muted-ink whitespace-nowrap">
+                          {L("หมดอายุ", "Expired")}
+                        </span>
+                      ) : !client.has_monthly_report ? (
                         <span
                           className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-[#FDE7DA] text-[#B4541A]"
                           title={`${currentMonth}/${currentYear} - ยังไม่มี Report`}
@@ -438,48 +371,32 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
                           <FaFileCircleXmark className="text-xs" aria-label="ยังไม่มี Report" />
                         </span>
                       ) : (
-                        <span className="text-emerald-500" aria-label="มี Report แล้ว">
-                          <FaCircleCheck className="text-sm" />
+                        <span className="inline-flex h-7 w-7 items-center justify-center" aria-label="มี Report แล้ว">
+                          <FaCircleCheck className="text-emerald-500" />
                         </span>
                       )}
-                    </div>
-
-                    {/* Package badge */}
-                    <div className="flex items-center gap-3">
-                      <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full ${styles.badge}`}>
-                        <span className={`h-1.5 w-1.5 rounded-full ${styles.dot}`} />
-                        {t(packageKeys[client.package])}
-                      </span>
-                    </div>
-
-                    {/* Meta row */}
-                    <div className="flex items-center gap-3 flex-wrap">
                       {client.first_login_at ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
+                        <span
+                          className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 whitespace-nowrap"
+                          title={formatRelativeTime(client.first_login_at, lang)}
+                        >
                           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />{t("admin_login_status_activated")}
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#FFF6C2] px-2.5 py-0.5 text-xs font-semibold text-[#6B5B00] whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-[#FFF6C2] px-2 py-0.5 text-[11px] font-semibold text-[#6B5B00] whitespace-nowrap">
                           <span className="h-1.5 w-1.5 rounded-full bg-[#B89B00]" />{t("admin_login_status_pending")}
                         </span>
                       )}
-                      {client.contract_end && (
-                        <span className="text-xs text-muted-ink">{t("admin_col_contract")}: {client.contract_end}</span>
-                      )}
-                      {!isCoAdmin && (
-                        <BackupConnectedIcon path={client.backup_path} t={t} />
-                      )}
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex gap-2 flex-wrap">
-                      <ClientActions client={client} isCoAdmin={isCoAdmin} t={t} confirmMsg={`${t("admin_impersonate_confirm")} ${client.company_name}?`} />
-                    </div>
+                    </span>
+                  </a>
+                  <div className="flex shrink-0 items-center gap-2 pl-[54px] sm:pl-0">
+                    {!isCoAdmin && <BackupConnectedIcon path={client.backup_path} t={t} />}
+                    <ClientActions client={client} isCoAdmin={isCoAdmin} t={t} confirmMsg={`${t("admin_impersonate_confirm")} ${client.company_name}?`} />
                   </div>
-                );
-              })}
-            </div>
-          </>
+                </li>
+              );
+            })}
+          </ul>
         )}
 
         {filtered.length > 0 && (
@@ -488,7 +405,7 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
           </div>
         )}
         <Pagination page={page} totalPages={totalPages} extra={contractFilter === "active" ? undefined : `contract=${contractFilter}`} />
-      </div>
+      </section>
     </div>
   );
 }
