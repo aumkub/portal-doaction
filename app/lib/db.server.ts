@@ -963,6 +963,40 @@ export function createDB(d1: D1Database) {
       return result.results;
     },
 
+    // ── Monthly care marks (admin only) ─────────────────────────────────────
+
+    async listMonthlyCare(
+      year: number,
+      month: number
+    ): Promise<Array<{ client_id: string; checked_at: number; checked_by_name: string }>> {
+      const result = await d1
+        .prepare(
+          `SELECT m.client_id, m.checked_at, COALESCE(u.name, '') AS checked_by_name
+           FROM client_monthly_care m LEFT JOIN users u ON u.id = m.checked_by
+           WHERE m.year = ? AND m.month = ?`
+        )
+        .bind(year, month)
+        .all<{ client_id: string; checked_at: number; checked_by_name: string }>();
+      return result.results;
+    },
+
+    async setMonthlyCare(client_id: string, year: number, month: number, checked_by: string): Promise<void> {
+      await d1
+        .prepare(
+          `INSERT INTO client_monthly_care (client_id, year, month, checked_by) VALUES (?, ?, ?, ?)
+           ON CONFLICT (client_id, year, month) DO NOTHING`
+        )
+        .bind(client_id, year, month, checked_by)
+        .run();
+    },
+
+    async clearMonthlyCare(client_id: string, year: number, month: number): Promise<void> {
+      await d1
+        .prepare("DELETE FROM client_monthly_care WHERE client_id = ? AND year = ? AND month = ?")
+        .bind(client_id, year, month)
+        .run();
+    },
+
     async hasRecentMagicLinkSent(to_email: string, withinSeconds = 60): Promise<boolean> {
       const row = await d1
         .prepare(

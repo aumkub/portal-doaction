@@ -19,3 +19,9 @@ export function needsMonthlyReport(client: { company_name: string; contract_end:
 export function isContractExpired(contractEnd: string | null | undefined): boolean {
   return !!contractEnd && contractEnd < bangkokToday();
 }
+
+/** Current Bangkok year and month (1-12). */
+export function bangkokYearMonth(): { year: number; month: number } {
+  const [y, m] = bangkokToday().split("-").map(Number);
+  return { year: y, month: m };
+}

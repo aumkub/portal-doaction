@@ -1,10 +1,10 @@
-import { Form } from "react-router";
+import { Form, useFetcher } from "react-router";
 import { ConfirmButton } from "~/components/ui/confirm-button";
-import { isContractExpired, OWN_COMPANY_NAME } from "~/lib/contract";
+import { bangkokYearMonth, isContractExpired, OWN_COMPANY_NAME } from "~/lib/contract";
 import { useState, useMemo, type FormEvent } from "react";
 import type { Route } from "./+types/clients";
 import Pagination from "~/components/ui/Pagination";
-import { requireCoAdminOrAdmin } from "~/lib/auth.server";
+import { requireAdmin, requireCoAdminOrAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { formatRelativeTime } from "~/lib/utils";
 import type { Client } from "~/types";
@@ -72,7 +72,19 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const safePage = Math.min(page, totalPages);
   const clientsWithStatus = contractScoped.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
+  // Monthly "looked after" marks are admin-only; co-admins never receive them.
+  const care: Record<string, { at: number; by: string }> = {};
+  if (user.role === "admin") {
+    const ym = bangkokYearMonth();
+    for (const c of await db.listMonthlyCare(ym.year, ym.month)) {
+      care[c.client_id] = { at: c.checked_at, by: c.checked_by_name };
+    }
+  }
+
   return {
+    care,
+    // Of the active clients, how many are marked this month.
+    careCount: allClientsWithStatus.filter((c) => !isExpired(c) && care[c.id]).length,
     clients: clientsWithStatus,
     userRole: user.role,
     page: safePage,
@@ -87,6 +99,58 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 }
 
 type ContractFilter = "active" | "expired" | "all";
+
+/** Toggle this month's "looked after" mark for a client. Admin only. */
+export async function action({ request, context }: Route.ActionArgs) {
+  const env = context.cloudflare.env;
+  const admin = await requireAdmin(request, env.DB, env.SESSIONPORTAL);
+  const form = await request.formData();
+  const clientId = String(form.get("client_id") ?? "");
+  if (form.get("intent") !== "care" || !clientId) return { ok: false };
+  const db = createDB(env.DB);
+  const { year, month } = bangkokYearMonth();
+  if (form.get("done") === "1") await db.setMonthlyCare(clientId, year, month, admin.id);
+  else await db.clearMonthlyCare(clientId, year, month);
+  return { ok: true };
+}
+
+function CareToggle({
+  clientId,
+  mark,
+  lang,
+}: {
+  clientId: string;
+  mark?: { at: number; by: string };
+  lang: "th" | "en";
+}) {
+  const fetcher = useFetcher();
+  // Show the outcome right away; the server confirms in the background.
+  const pending = fetcher.formData?.get("done");
+  const done = pending != null ? pending === "1" : Boolean(mark);
+  const title = mark
+    ? `${lang === "en" ? "Marked" : "ทำเครื่องหมาย"} ${formatRelativeTime(mark.at, lang)}${mark.by ? ` · ${mark.by}` : ""}`
+    : lang === "en" ? "Mark as looked after this month" : "ทำเครื่องหมายว่าดูแลแล้วเดือนนี้";
+  return (
+    <fetcher.Form method="post">
+      <input type="hidden" name="intent" value="care" />
+      <input type="hidden" name="client_id" value={clientId} />
+      <input type="hidden" name="done" value={done ? "0" : "1"} />
+      <button
+        type="submit"
+        title={title}
+        aria-pressed={done}
+        className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-xs font-semibold transition-colors ${
+          done
+            ? "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20 hover:bg-emerald-100"
+            : "border border-dashed border-line bg-white text-muted-ink hover:border-ink/30 hover:text-ink"
+        }`}
+      >
+        {done ? <FaCircleCheck className="text-[11px]" aria-hidden="true" /> : <span className="h-2.5 w-2.5 rounded-full border border-current" aria-hidden="true" />}
+        {done ? (lang === "en" ? "Looked after" : "ดูแลแล้ว") : lang === "en" ? "Not yet" : "ยังไม่ดูแล"}
+      </button>
+    </fetcher.Form>
+  );
+}
 
 const packageKeys: Record<Client["package"], TranslationKey> = {
   basic: "admin_pkg_basic",
@@ -171,7 +235,9 @@ function daysUntil(end: string | null): number | null {
 }
 
 export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
-  const { clients, userRole, page, totalPages, total, currentMonth, currentYear, contractFilter, expiredCount, activeCount } = loaderData as {
+  const { care, careCount, clients, userRole, page, totalPages, total, currentMonth, currentYear, contractFilter, expiredCount, activeCount } = loaderData as {
+    care: Record<string, { at: number; by: string }>;
+    careCount: number;
     clients: Array<Client & { first_login_at: number | null; has_monthly_report: boolean; skip_report_check?: boolean; contract_expired: boolean }>;
     userRole: string;
     page: number;
@@ -232,6 +298,15 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
           <h1 className="mt-1.5 text-[28px] md:text-[32px] font-bold tracking-[-0.02em] text-ink">
             {t("rd_admin_clients_headline").replace("{n}", String(total))}
           </h1>
+          {!isCoAdmin && (
+            <p className="mt-1.5 flex items-center gap-1.5 text-sm text-muted-ink">
+              <FaCircleCheck className="text-emerald-600" aria-hidden="true" />
+              {L(
+                `ดูแลแล้วเดือนนี้ ${careCount} จาก ${activeCount} ราย · เริ่มนับใหม่ทุกต้นเดือน`,
+                `Looked after this month: ${careCount} of ${activeCount} · resets each month`
+              )}
+            </p>
+          )}
         </div>
         {!isCoAdmin && (
           <a
@@ -390,6 +465,7 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
                     </span>
                   </a>
                   <div className="flex shrink-0 items-center gap-2 pl-[54px] sm:pl-0">
+                    {!isCoAdmin && <CareToggle clientId={client.id} mark={care[client.id]} lang={lang} />}
                     {!isCoAdmin && <BackupConnectedIcon path={client.backup_path} t={t} />}
                     <ClientActions client={client} isCoAdmin={isCoAdmin} t={t} confirmMsg={`${t("admin_impersonate_confirm")} ${client.company_name}?`} />
                   </div>
