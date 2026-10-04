@@ -20,6 +20,7 @@ const IGNORED_ACTIONS = [
   /^\/api\/language/,
   /^\/api\/notifications/,
   /^\/api\/attachments-upload/,
+  /^\/api\/admin\/health/,
 ];
 
 type Toast = { id: number; kind: "ok" | "error"; label: string };

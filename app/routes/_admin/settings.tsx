@@ -1,4 +1,5 @@
 import { Form, Link, redirect, useSearchParams } from "react-router";
+import { HealthPanel } from "~/components/settings/HealthPanel";
 import { sendDigestPreview } from "~/lib/email-alerts.server";
 import { getUptimeRobotKey } from "~/lib/secrets.server";
 import { z } from "zod";
@@ -389,6 +390,7 @@ export default function AdminSettingsPage({ loaderData, actionData }: any) {
 
       {activeTab === "integrations" && (
         <div className="space-y-6">
+          <HealthPanel />
           {/* ── Integrations ── */}
           <SectionCard icon={<FaPlug />} title={t("admin_settings_integrations")} subtitle="เชื่อมต่อบริการภายนอก">
             <div className="space-y-4">

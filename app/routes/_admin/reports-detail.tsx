@@ -148,7 +148,7 @@ export default function AdminReportDetailPage({
       : `${getThaiMonth(report.month)} ${report.year + 543}`;
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6 max-w-6xl">
       <PageHeader
         title={periodTitle}
         subtitle={

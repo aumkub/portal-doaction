@@ -48,7 +48,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   await requireAdmin(request, env.DB, env.SESSIONPORTAL);
   const db = createDB(env.DB);
   const clients = (await db.listClients()).filter((c) => !isContractExpired(c.contract_end));
-  return { clients };
+  const recent = await db.listRecentReportsWithClient(24, clients.map((c) => c.id));
+  const existingReportKeys = recent.map((r) => `${r.client_id}-${r.year}-${r.month}`);
+  return { clients, existingReportKeys };
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -258,11 +260,11 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 export default function AdminReportNewPage({ loaderData, actionData }: Route.ComponentProps) {
-  const { clients } = loaderData;
+  const { clients, existingReportKeys } = loaderData;
   const errors = (actionData as { errors?: Record<string, string[]> } | undefined)?.errors;
   const { t } = useT();
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6 max-w-6xl">
       <div>
         <a
           href="/admin/reports"
@@ -272,7 +274,7 @@ export default function AdminReportNewPage({ loaderData, actionData }: Route.Com
         </a>
         <h1 className="text-[28px] md:text-[32px] font-bold tracking-[-0.02em] text-ink">{t("admin_report_new_title")}</h1>
       </div>
-      <ReportEditor clients={clients} isNew={true} errors={errors} />
+      <ReportEditor clients={clients} isNew={true} errors={errors} existingReportKeys={existingReportKeys} />
     </div>
   );
 }
