@@ -9,6 +9,7 @@ import {
 	useNavigation,
 } from "react-router";
 import { useEffect } from "react";
+import { SaveToast } from "~/components/ui/save-toast";
 
 import type { Route } from "./+types/root";
 import "./app.css";
@@ -67,6 +68,7 @@ export default function App() {
 	const isNavigating = navigation.state !== "idle";
 	return (
 		<I18nProvider initialLang={lang}>
+			<SaveToast />
 			<div
 				aria-hidden="true"
 				className={`fixed top-0 left-0 z-[100] h-1 w-full bg-[#F0D800] transition-all duration-300 ${
