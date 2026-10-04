@@ -1,4 +1,4 @@
-import { Form, redirect, useSearchParams } from "react-router";
+import { Form, Link, redirect, useSearchParams } from "react-router";
 import { z } from "zod";
 import { requireAdmin, evictUserCache } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
@@ -268,9 +268,17 @@ export default function AdminSettingsPage({ loaderData, actionData }: any) {
   return (
     <div className="space-y-6 max-w-4xl">
       {/* ── Page header ── */}
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900">{t("admin_settings_title")}</h1>
-        <p className="text-slate-500 text-sm mt-0.5">{t("admin_settings_subtitle")}</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">{t("admin_settings_title")}</h1>
+          <p className="text-slate-500 text-sm mt-0.5">{t("admin_settings_subtitle")}</p>
+        </div>
+        <Link
+          to="/admin/settings/mcp"
+          className="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+        >
+          MCP / Claude
+        </Link>
       </div>
 
       {/* ── Tab Navigation ── */}
