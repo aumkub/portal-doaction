@@ -38,8 +38,8 @@ const adminNav: NavItem[] = [
   { labelKey: "nav_co_admins", href: "/admin/co-admins", icon: FaUserSecret },
   { labelKey: "nav_admin_reports", href: "/admin/reports", icon: FaFileLines },
   { labelKey: "nav_all_tickets", href: "/admin/tickets", icon: FaTicket },
-  { labelKey: "nav_attachments", href: "/admin/attachments", icon: FaPaperclip },
   { labelKey: "nav_email_logs", href: "/admin/email-logs", icon: FaEnvelope },
+  { labelKey: "nav_attachments", href: "/admin/attachments", icon: FaPaperclip },
   { labelKey: "nav_settings", href: "/admin/settings", icon: FaGear },
 ];
 
