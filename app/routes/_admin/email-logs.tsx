@@ -115,7 +115,6 @@ export default function AdminEmailLogsPage({ loaderData }: any) {
   };
   const { lang, t } = useT();
   const L = (th: string, en: string) => (lang === "en" ? en : th);
-  const [selected, setSelected] = useState<EmailLog | null>(null);
 
   // Group the page's rows under day headings.
   const groups: { day: string; rows: EmailLog[] }[] = [];
@@ -227,9 +226,8 @@ export default function AdminEmailLogsPage({ loaderData }: any) {
                   const isFailed = l.status === "failed";
                   return (
                     <li key={l.id}>
-                      <button
-                        type="button"
-                        onClick={() => setSelected(l)}
+                      <a
+                        href={`/admin/email-logs/${l.id}`}
                         className="flex w-full min-w-0 items-center gap-3.5 px-5 py-3.5 text-left hover:bg-paper/60"
                       >
                         <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] ${info.chip}`}>
@@ -251,7 +249,7 @@ export default function AdminEmailLogsPage({ loaderData }: any) {
                             </span>
                           )}
                         </span>
-                      </button>
+                      </a>
                     </li>
                   );
                 })}
@@ -261,69 +259,6 @@ export default function AdminEmailLogsPage({ loaderData }: any) {
         )}
         <Pagination page={page} totalPages={totalPages} extra={extra.toString() || undefined} />
       </section>
-
-      {/* ── Preview ── */}
-      {selected ? (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
-          onClick={() => setSelected(null)}
-        >
-          <div
-            className="flex max-h-[92dvh] w-full max-w-3xl flex-col overflow-hidden rounded-t-[24px] bg-white sm:rounded-[24px]"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="email-preview-title"
-          >
-            {(() => {
-              const src = sourceInfo(selected.source);
-              const info = CATEGORIES[src.cat];
-              return (
-                <div className="flex items-start gap-3 border-b border-line-soft px-5 py-4">
-                  <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] ${info.chip}`}>
-                    <info.icon className="text-sm" aria-hidden="true" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold text-muted-ink">
-                      {lang === "en" ? src.en : src.th} · {formatDate(selected.created_at, lang)} {timeLabel(selected.created_at)}
-                    </p>
-                    <h2 id="email-preview-title" className="mt-0.5 text-base font-semibold text-ink [overflow-wrap:anywhere]">
-                      {selected.subject}
-                    </h2>
-                    <p className="mt-1 text-xs text-muted-ink [overflow-wrap:anywhere]">
-                      {t("admin_report_email_to")}: {selected.to_name ? `${selected.to_name} <${selected.to_email}>` : selected.to_email}
-                      {selected.cc_emails && parseClientCcEmails(selected.cc_emails).length > 0 && (
-                        <> · CC: {parseClientCcEmails(selected.cc_emails).join(", ")}</>
-                      )}
-                    </p>
-                    {selected.error_message ? (
-                      <p className="mt-2 rounded-[10px] bg-[#FDE7DA] px-3 py-2 text-xs text-[#B4541A]">
-                        {t("admin_email_logs_error")}: {selected.error_message}
-                      </p>
-                    ) : null}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setSelected(null)}
-                    aria-label={t("admin_report_email_close")}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-ink hover:bg-paper hover:text-ink"
-                  >
-                    <FaXmark />
-                  </button>
-                </div>
-              );
-            })()}
-            <div className="min-h-0 flex-1 overflow-auto bg-paper p-3 sm:p-4">
-              <iframe
-                title={`email-preview-${selected.id}`}
-                className="h-[65dvh] w-full rounded-[14px] border border-line bg-white"
-                sandbox=""
-                srcDoc={selected.html_body}
-              />
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

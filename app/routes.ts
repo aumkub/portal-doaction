@@ -44,6 +44,7 @@ export default [
       route("tickets/:ticketId", "routes/_admin/tickets.$ticketId.tsx"),
       route("attachments", "routes/_admin/attachments.tsx"),
       route("email-logs", "routes/_admin/email-logs.tsx"),
+      route("email-logs/:logId", "routes/_admin/email-log-detail.tsx"),
       route("notifications", "routes/_admin/notifications.tsx"),
       route("reports", "routes/_admin/reports.tsx"),
       route("reports/new", "routes/_admin/reports-new.tsx"),
@@ -68,6 +69,7 @@ export default [
   route("api/uptime", "routes/api/uptime.ts"),
   route("api/admin/backup-refresh", "routes/api/admin-backup-refresh.ts"),
   route("api/admin/health", "routes/api/admin-health.ts"),
+  route("api/admin/email-logs/:logId/raw", "routes/api/admin-email-log-raw.ts"),
   route("api/attachments-upload", "routes/api/attachments-upload.ts"),
   route("api/attachments/:key", "routes/api/attachments.$key.ts"),
 ] satisfies RouteConfig;

@@ -6,7 +6,7 @@ import type { DB } from "~/lib/db.server";
 import { EmailMessage } from "cloudflare:email";
 
 export type EmailLanguage = "th" | "en";
-const MAIL_FROM = "aum@doaction.co.th";
+export const MAIL_FROM = "aum@doaction.co.th";
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function isValidEmail(email: string): boolean {

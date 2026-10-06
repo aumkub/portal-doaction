@@ -955,6 +955,10 @@ export function createDB(d1: D1Database) {
         .run();
     },
 
+    async getEmailLog(id: string): Promise<EmailLog | null> {
+      return d1.prepare("SELECT * FROM email_logs WHERE id = ?").bind(id).first<EmailLog>();
+    },
+
     async listEmailLogs(limit = 200): Promise<EmailLog[]> {
       const result = await d1
         .prepare("SELECT * FROM email_logs ORDER BY created_at DESC LIMIT ?")
