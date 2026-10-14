@@ -72,12 +72,6 @@ export async function action({ request, context }: any) {
     }
   }
 
-  if (user.role === "co-admin") {
-    const assignments = await db.listCoAdminClients(user.id);
-    if (!assignments.some((a) => a.client_id === ticket.client_id)) {
-      return Response.json({ error: "forbidden" }, { status: 403 });
-    }
-  }
 
   if (!isAllowedMime(file.type)) {
     return Response.json({ error: "unsupported_type" }, { status: 400 });

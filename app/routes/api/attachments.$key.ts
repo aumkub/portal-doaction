@@ -27,12 +27,6 @@ export async function loader({ request, context, params }: any) {
     }
   }
 
-  if (user.role === "co-admin") {
-    const assignments = await db.listCoAdminClients(user.id);
-    if (!assignments.some((a) => a.client_id === ticket.client_id)) {
-      return new Response("Forbidden", { status: 403 });
-    }
-  }
 
   const object = await env.ATTACHMENTS.get(key);
   if (!object) return new Response("Not Found", { status: 404 });

@@ -51,7 +51,6 @@ export async function loader({ request, context, params }: any) {
 
   const ticket = await db.getTicket(params.ticketId);
   if (!ticket) throw new Response("Ticket not found", { status: 404 });
-  await assertCanAccessTicket(db, admin, ticket.client_id);
 
   const [messages, attachments, authors, client] = await Promise.all([
     db.listMessagesByTicket(ticket.id),
@@ -73,18 +72,6 @@ const STATUSES = [
   "resolved",
   "closed",
 ] as const;
-
-async function assertCanAccessTicket(
-  db: ReturnType<typeof createDB>,
-  user: User,
-  clientId: string
-) {
-  if (user.role !== "co-admin") return;
-  const assignments = await db.listCoAdminClients(user.id);
-  if (!assignments.some((a) => a.client_id === clientId)) {
-    throw new Response("Forbidden", { status: 403 });
-  }
-}
 
 function statusToKey(status: (typeof STATUSES)[number]): TranslationKey {
   if (status === "closed") return "status_closed_short";
@@ -115,7 +102,6 @@ export async function action({ request, context, params }: any) {
 
   const ticket = await db.getTicket(params.ticketId);
   if (!ticket) throw new Response("Ticket not found", { status: 404 });
-  await assertCanAccessTicket(db, admin, ticket.client_id);
 
   const formData = await request.formData();
   const raw = Object.fromEntries(formData);
