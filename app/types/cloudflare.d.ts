@@ -19,6 +19,8 @@ interface CloudflareEnv {
   WEBDAV_USER: string;
   WEBDAV_PATH: string;
   WEBDAV_PASS: string;
+  // UptimeRobot API key (wrangler secret)
+  UPTIMEROBOT_API_KEY?: string;
 }
 
 declare module "react-router" {

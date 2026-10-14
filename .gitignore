@@ -205,3 +205,5 @@ dist
 *.history
 *.claude
 .claude/worktrees/
+# Editor local history (contains copies of config/secrets)
+.history/

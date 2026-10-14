@@ -21,7 +21,7 @@ export default function AdminLayout({ loaderData }: Route.ComponentProps) {
   const navBadges = { "/admin/tickets": unresolvedTickets };
 
   return (
-    <div className="flex h-screen bg-slate-50 overflow-hidden">
+    <div className="flex h-screen bg-paper overflow-hidden">
       <Sidebar role={user.role} navBadges={navBadges} />
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <Topbar
@@ -30,8 +30,8 @@ export default function AdminLayout({ loaderData }: Route.ComponentProps) {
           role={user.role}
           navBadges={navBadges}
         />
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6">
-          <div className="max-w-screen-xl">
+        <main className="flex-1 overflow-y-auto px-4 py-6 lg:px-8 lg:py-8">
+          <div className="mx-auto max-w-screen-xl">
             <Outlet context={{ user }} />
           </div>
         </main>

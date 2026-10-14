@@ -13,7 +13,7 @@ function escapeHtml(s: string): string {
 function getLogoUrlFromTicketUrl(ticketUrl: string): string | null {
   try {
     const origin = new URL(ticketUrl).origin;
-    return `${origin}/logo-dark.svg`;
+    return `${origin}/logo-black.png`;
   } catch {
     return null;
   }
@@ -23,7 +23,7 @@ function logoHeaderHtml(ticketUrl: string): string {
   const logoUrl = getLogoUrlFromTicketUrl(ticketUrl);
   if (!logoUrl) return "";
   return `<p style="margin:0 0 14px;">
-    <img src="${logoUrl}" alt="do action" width="140" style="display:block;height:auto;border:0;outline:none;text-decoration:none;" />
+    <img src="${logoUrl}" alt="do action" width="220" style="display:block;height:auto;border:0;outline:none;text-decoration:none;" />
   </p>`;
 }
 

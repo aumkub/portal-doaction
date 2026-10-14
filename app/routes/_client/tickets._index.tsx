@@ -70,29 +70,29 @@ export default function TicketsIndexPage({ loaderData }: any) {
 
   return (
     <div className="space-y-6 max-w-4xl">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-ink">{t("tickets_title")}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{t("tickets_subtitle")}</p>
+          <h1 className="text-[28px] md:text-[32px] font-bold leading-tight tracking-[-0.02em] text-ink">{t("tickets_title")}</h1>
+          <p className="mt-1 text-sm text-muted-ink">{t("tickets_subtitle")}</p>
         </div>
         <Link
           to="/tickets/new"
-          className="rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/85"
+          className="inline-flex h-10 items-center rounded-full bg-ink px-5 text-[13px] font-semibold text-white hover:bg-black transition-colors"
         >
           {t("tickets_new_btn")}
         </Link>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="inline-flex flex-wrap rounded-lg bg-paper p-0.5">
         {filters.map(([value, label]) => (
           <button
             key={value}
             type="button"
             onClick={() => setSearchParams(value === "all" ? {} : { status: value })}
-            className={`rounded-full px-4 py-1.5 text-xs font-medium transition-colors ${
+            className={`h-8 shrink-0 whitespace-nowrap rounded-full px-3.5 text-[13px] font-medium transition-colors ${
               status === value
-                ? "bg-primary text-primary-foreground"
-                : "border border-hairline bg-canvas text-charcoal hover:bg-surface"
+                ? "bg-white text-ink"
+                : "text-muted-ink hover:text-ink"
             }`}
           >
             {label}
@@ -104,7 +104,7 @@ export default function TicketsIndexPage({ loaderData }: any) {
         {filtered.length ? (
           filtered.map((ticket) => <TicketCard key={ticket.id} ticket={ticket} />)
         ) : (
-          <div className="rounded-xl border border-hairline bg-canvas p-10 text-center text-sm text-stone">
+          <div className="rounded-[20px] border border-line bg-white p-10 text-center text-sm text-muted-ink">
             {t("tickets_empty")}
           </div>
         )}

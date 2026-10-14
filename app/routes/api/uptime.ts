@@ -1,4 +1,5 @@
 import { requireAdmin } from "~/lib/auth.server";
+import { getUptimeRobotKey } from "~/lib/secrets.server";
 import { createDB } from "~/lib/db.server";
 import { fetchUptimeForWebsite } from "~/lib/uptime.server";
 
@@ -19,7 +20,7 @@ export async function loader({ request, context }: any) {
   }
 
   const apiKey =
-    (env as any).UPTIMEROBOT_API_KEY ?? "ur2618139-5281beb51ff9820a629669c2";
+    getUptimeRobotKey(env);
   const uptime = await fetchUptimeForWebsite(client.website_url, apiKey);
   return Response.json(uptime);
 }

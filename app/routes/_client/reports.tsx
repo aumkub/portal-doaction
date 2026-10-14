@@ -54,7 +54,7 @@ export default function ReportsPage({ loaderData }: Route.ComponentProps) {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">
+          <h1 className="text-[22px] font-semibold tracking-tight text-slate-900">
             {t("reports_title")}
           </h1>
           <p className="text-slate-500 text-sm mt-1">{t("reports_subtitle")}</p>
@@ -83,13 +83,13 @@ export default function ReportsPage({ loaderData }: Route.ComponentProps) {
       </div>
 
       {!selectedReport ? (
-        <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
+        <div className="bg-white rounded-xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] p-12 text-center">
           <p className="text-slate-500">{t("reports_no_reports")}</p>
         </div>
       ) : (
         <>
           {/* Summary */}
-          <div className="bg-white rounded-xl border border-slate-200 p-6">
+          <div className="bg-white rounded-xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] p-5">
             <h2 className="text-lg font-semibold text-slate-900 mb-1">
               {selectedReport.title}
             </h2>
@@ -99,15 +99,15 @@ export default function ReportsPage({ loaderData }: Route.ComponentProps) {
               </p>
             )}
             <div className="grid grid-cols-2 gap-4 mt-4">
-              <div className="text-center p-3 bg-slate-50 rounded-lg">
-                <p className="text-xs text-slate-500">{t("reports_total_tasks")}</p>
-                <p className="text-2xl font-semibold text-slate-900">
+              <div className="p-4 rounded-lg border border-slate-200/80">
+                <p className="text-xs font-medium text-slate-500">{t("reports_total_tasks")}</p>
+                <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums text-slate-900">
                   {selectedReport.total_tasks}
                 </p>
               </div>
-              <div className="text-center p-3 bg-slate-50 rounded-lg">
-                <p className="text-xs text-slate-500">{t("reports_uptime")}</p>
-                <p className="text-2xl font-semibold text-slate-900">
+              <div className="p-4 rounded-lg border border-slate-200/80">
+                <p className="text-xs font-medium text-slate-500">{t("reports_uptime")}</p>
+                <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums text-slate-900">
                   {selectedReport.uptime_percent != null
                     ? `${selectedReport.uptime_percent.toFixed(2)}%`
                     : "—"}
@@ -117,7 +117,7 @@ export default function ReportsPage({ loaderData }: Route.ComponentProps) {
           </div>
 
           {/* Task list */}
-          <div className="bg-white rounded-xl border border-slate-200 p-6">
+          <div className="bg-white rounded-xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] p-5">
             <h2 className="text-sm font-semibold text-slate-900 mb-4">
               <span className="inline-flex items-center gap-2">
                 <FaFileLines aria-hidden="true" />
@@ -144,7 +144,7 @@ export default function ReportsPage({ loaderData }: Route.ComponentProps) {
                         </p>
                       )}
                     </div>
-                    <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">
+                    <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-slate-50 text-slate-600 ring-1 ring-inset ring-slate-200">
                       {categoryLabels[task.category] ?? task.category}
                     </span>
                   </li>
@@ -157,7 +157,7 @@ export default function ReportsPage({ loaderData }: Route.ComponentProps) {
           <div className="flex justify-end">
             <button
               type="button"
-              className="flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+              className="flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3.5 text-[13px] font-medium text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:bg-slate-50 transition-colors"
             >
               {t("btn_export_pdf")}
             </button>

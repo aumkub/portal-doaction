@@ -1,4 +1,6 @@
 import { redirect } from "react-router";
+import { isContractExpired } from "~/lib/contract";
+import { getReportLinkSecret, getUptimeRobotKey } from "~/lib/secrets.server";
 import { z } from "zod";
 import type { Route } from "./+types/reports-new";
 import { requireAdmin } from "~/lib/auth.server";
@@ -45,8 +47,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const env = context.cloudflare.env;
   await requireAdmin(request, env.DB, env.SESSIONPORTAL);
   const db = createDB(env.DB);
-  const clients = await db.listClients();
-  return { clients };
+  const clients = (await db.listClients()).filter((c) => !isContractExpired(c.contract_end));
+  const recent = await db.listRecentReportsWithClient(24, clients.map((c) => c.id));
+  const existingReportKeys = recent.map((r) => `${r.client_id}-${r.year}-${r.month}`);
+  return { clients, existingReportKeys };
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -79,7 +83,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   const isPublish = intent === "publish";
   const now = Math.floor(Date.now() / 1000);
   const apiKey =
-    (env as any).UPTIMEROBOT_API_KEY ?? "ur2618139-5281beb51ff9820a629669c2";
+    getUptimeRobotKey(env);
 
   let clientIds: string[] = [];
   try {
@@ -188,7 +192,7 @@ export async function action({ request, context }: Route.ActionArgs) {
         const clientUser = await db.getUserById(client.user_id);
         if (clientUser?.email) {
           const origin = env.APP_URL || new URL(request.url).origin;
-          const secret = env.SESSION_SECRET || "doaction-report-link-secret";
+          const secret = getReportLinkSecret(env);
           const exp = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 14;
           const token = await createReportAccessToken(
             { reportId, email: clientUser.email.toLowerCase(), exp },
@@ -256,21 +260,21 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 export default function AdminReportNewPage({ loaderData, actionData }: Route.ComponentProps) {
-  const { clients } = loaderData;
+  const { clients, existingReportKeys } = loaderData;
   const errors = (actionData as { errors?: Record<string, string[]> } | undefined)?.errors;
   const { t } = useT();
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6 max-w-6xl">
       <div>
         <a
           href="/admin/reports"
-          className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors mb-4"
+          className="inline-flex items-center gap-1.5 text-sm text-muted-ink hover:text-ink transition-colors mb-2"
         >
           ← {t("admin_breadcrumb_reports")}
         </a>
-        <h1 className="text-2xl font-semibold text-slate-900">{t("admin_report_new_title")}</h1>
+        <h1 className="text-[28px] md:text-[32px] font-bold tracking-[-0.02em] text-ink">{t("admin_report_new_title")}</h1>
       </div>
-      <ReportEditor clients={clients} isNew={true} errors={errors} />
+      <ReportEditor clients={clients} isNew={true} errors={errors} existingReportKeys={existingReportKeys} />
     </div>
   );
 }

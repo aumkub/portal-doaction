@@ -14,9 +14,9 @@ const ProfileSchema = z.object({
 });
 
 const packageStyles = {
-  basic:    "bg-slate-100 text-slate-600 ring-1 ring-slate-200",
-  standard: "bg-blue-50 text-blue-700 ring-1 ring-blue-200",
-  premium:  "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
+  basic:    "bg-paper text-muted-ink",
+  standard: "bg-ink text-white",
+  premium:  "bg-brand-yellow text-ink",
 };
 
 const packageLabels = {
@@ -49,7 +49,7 @@ export async function action({ request, context }: any) {
   return redirect("/settings");
 }
 
-const inputCls = "w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-violet-400 transition";
+const inputCls = "w-full h-10 rounded-xl border border-line bg-white px-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-ink/10 focus:border-ink/40 transition";
 
 export default function ClientSettingsPage({ loaderData, actionData }: any) {
   const { user, client } = loaderData;
@@ -65,23 +65,23 @@ export default function ClientSettingsPage({ loaderData, actionData }: any) {
   ];
 
   return (
-    <div className="space-y-5 max-w-2xl">
+    <div className="space-y-6 max-w-2xl">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">{t("settings_title")}</h1>
-        <p className="mt-1 text-sm text-slate-500">{t("settings_subtitle")}</p>
+        <h1 className="text-[28px] md:text-[32px] font-bold leading-tight tracking-[-0.02em] text-ink">{t("settings_title")}</h1>
+        <p className="mt-1 text-sm text-muted-ink">{t("settings_subtitle")}</p>
       </div>
 
       {/* Tab Navigation */}
-      <div className="bg-white rounded-xl border border-slate-200 p-1.5 flex gap-1.5">
+      <div className="inline-flex max-w-full overflow-x-auto rounded-full bg-paper p-[3px]">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setSearchParams({ tab: tab.id })}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+            className={`flex h-8 items-center gap-2 px-3.5 rounded-full text-[13px] font-medium transition-all ${
               activeTab === tab.id
-                ? "bg-violet-600 text-white shadow-sm"
-                : "text-slate-600 hover:bg-slate-100"
+                ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]"
+                : "text-muted-ink hover:text-ink"
             }`}
           >
             {tab.icon}
@@ -92,44 +92,44 @@ export default function ClientSettingsPage({ loaderData, actionData }: any) {
 
       {/* Tab Content */}
       {activeTab === "profile" && (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100">
-            <FaUser className="text-slate-500 text-sm" aria-hidden="true" />
-            <h2 className="text-sm font-semibold text-slate-900">{t("settings_profile_section")}</h2>
+        <div className="bg-white rounded-[20px] border border-line overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-4 border-b border-line-soft">
+            <FaUser className="text-muted-ink text-sm" aria-hidden="true" />
+            <h2 className="text-[16px] font-semibold text-ink">{t("settings_profile_section")}</h2>
           </div>
           <div className="p-5">
             {/* Avatar row */}
-            <div className="flex items-center gap-4 mb-5 pb-5 border-b border-slate-100">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-700 text-lg font-bold">
+            <div className="flex items-center gap-4 mb-5 pb-5 border-b border-line-soft">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[14px] bg-ink text-brand-yellow text-lg font-semibold">
                 {getInitials(user.name)}
               </div>
               <div>
-                <p className="font-semibold text-slate-900">{user.name}</p>
-                <p className="text-sm text-slate-500">{user.email}</p>
+                <p className="font-semibold text-ink">{user.name}</p>
+                <p className="text-sm text-muted-ink">{user.email}</p>
               </div>
             </div>
 
             <Form method="post" className="space-y-4">
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-slate-600">{t("settings_name_label")}</label>
+                  <label className="text-xs font-medium text-muted-ink">{t("settings_name_label")}</label>
                   <input name="name" defaultValue={user.name} required className={inputCls} />
                   {errors?.name && <p className="text-xs text-red-500">{errors.name[0]}</p>}
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-slate-600">{t("settings_email_label")}</label>
+                  <label className="text-xs font-medium text-muted-ink">{t("settings_email_label")}</label>
                   <input
                     value={user.email}
                     readOnly
-                    className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm bg-slate-50 text-slate-500 cursor-not-allowed"
+                    className="w-full h-10 rounded-xl border border-line px-3.5 text-sm bg-paper text-muted-ink cursor-not-allowed"
                   />
-                  <p className="text-xs text-slate-500">{t("settings_email_note")}</p>
+                  <p className="text-xs text-muted-ink">{t("settings_email_note")}</p>
                 </div>
               </div>
               <div className="flex justify-end pt-1">
                 <button
                   type="submit"
-                  className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700 transition-colors"
+                  className="h-10 rounded-full bg-ink px-5 text-[13px] font-semibold text-white hover:bg-black transition-colors"
                 >
                   {t("save")}
                 </button>
@@ -140,28 +140,28 @@ export default function ClientSettingsPage({ loaderData, actionData }: any) {
       )}
 
       {activeTab === "company" && client && (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100">
-            <FaBuilding className="text-slate-500 text-sm" aria-hidden="true" />
-            <h2 className="text-sm font-semibold text-slate-900">{t("settings_company_section")}</h2>
+        <div className="bg-white rounded-[20px] border border-line overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-4 border-b border-line-soft">
+            <FaBuilding className="text-muted-ink text-sm" aria-hidden="true" />
+            <h2 className="text-[16px] font-semibold text-ink">{t("settings_company_section")}</h2>
           </div>
           <div className="p-5 space-y-4">
             <div className="grid sm:grid-cols-2 gap-4">
               <InfoRow label={t("settings_company_name")} value={client.company_name} />
               <div className="flex flex-col gap-1">
-                <span className="text-xs font-medium text-slate-500">{t("settings_package_label")}</span>
-                <span className={`self-start text-xs font-semibold px-2.5 py-1 rounded-full ${packageStyles[client.package as keyof typeof packageStyles] ?? packageStyles.basic}`}>
+                <span className="text-xs font-medium text-muted-ink">{t("settings_package_label")}</span>
+                <span className={`self-start inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${packageStyles[client.package as keyof typeof packageStyles] ?? packageStyles.basic}`}>
                   {packageLabels[client.package as keyof typeof packageLabels] ?? client.package}
                 </span>
               </div>
               {client.website_url && (
                 <div className="flex flex-col gap-1">
-                  <span className="text-xs font-medium text-slate-500">{t("settings_website_label")}</span>
+                  <span className="text-xs font-medium text-muted-ink">{t("settings_website_label")}</span>
                   <a
                     href={client.website_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-sm text-violet-600 hover:underline truncate"
+                    className="text-sm text-ink underline-offset-4 hover:underline truncate"
                   >
                     {client.website_url.replace(/^https?:\/\//, "")}
                   </a>
@@ -172,7 +172,7 @@ export default function ClientSettingsPage({ loaderData, actionData }: any) {
                 value={client.contract_end ?? t("settings_contract_no_expiry")}
               />
             </div>
-            <p className="text-xs text-slate-500 pt-3 border-t border-slate-100">
+            <p className="text-xs text-muted-ink pt-3 border-t border-line-soft">
               {t("settings_company_edit_note")}
             </p>
           </div>
@@ -180,17 +180,17 @@ export default function ClientSettingsPage({ loaderData, actionData }: any) {
       )}
 
       {activeTab === "help" && (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100">
-            <FaCircleQuestion className="text-slate-500 text-sm" aria-hidden="true" />
-            <h2 className="text-sm font-semibold text-slate-900">{t("settings_help_section")}</h2>
+        <div className="bg-white rounded-[20px] border border-line overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-4 border-b border-line-soft">
+            <FaCircleQuestion className="text-muted-ink text-sm" aria-hidden="true" />
+            <h2 className="text-[16px] font-semibold text-ink">{t("settings_help_section")}</h2>
           </div>
           <div className="p-5">
             <a
               href="/tickets/new"
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors"
+              className="inline-flex h-10 items-center gap-2 rounded-full border border-line bg-white px-5 text-[13px] font-semibold text-ink hover:bg-paper transition-colors"
             >
-              <FaTicket className="text-violet-500 text-xs" aria-hidden="true" />
+              <FaTicket className="text-faint-ink text-xs" aria-hidden="true" />
               {t("settings_help_ticket")}
             </a>
           </div>
@@ -203,8 +203,8 @@ export default function ClientSettingsPage({ loaderData, actionData }: any) {
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-slate-500">{label}</span>
-      <span className="text-sm font-medium text-slate-800">{value}</span>
+      <span className="text-xs font-medium text-muted-ink">{label}</span>
+      <span className="text-sm font-medium text-ink-soft">{value}</span>
     </div>
   );
 }

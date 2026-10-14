@@ -31,15 +31,15 @@ export default function ReportsListPage({ loaderData }: Route.ComponentProps) {
     <div className="space-y-6 max-w-5xl">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">{t("reports_title")}</h1>
-        <p className="mt-1 text-sm text-slate-500">{t("reports_subtitle")}</p>
+        <h1 className="text-[28px] md:text-[32px] font-bold leading-tight tracking-[-0.02em] text-ink">{t("reports_title")}</h1>
+        <p className="mt-1 text-sm text-muted-ink">{t("reports_subtitle")}</p>
       </div>
 
       {reports.length === 0 ? (
-        <div className="bg-white rounded-xl border border-slate-200 p-16 text-center">
-          <FaFileLines className="mx-auto mb-3 text-3xl text-slate-400" aria-hidden="true" />
-          <p className="text-slate-700 font-medium">ยังไม่มีรายงาน</p>
-          <p className="text-slate-500 text-sm mt-1">ทีมจะเผยแพร่รายงานหลังสิ้นสุดแต่ละเดือน</p>
+        <div className="bg-white rounded-[20px] border border-line px-6 py-12 md:p-16 text-center">
+          <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-paper text-faint-ink"><FaFileLines className="text-base" aria-hidden="true" /></span>
+          <p className="text-sm text-ink font-medium">ยังไม่มีรายงาน</p>
+          <p className="text-muted-ink text-sm mt-1">ทีมจะเผยแพร่รายงานหลังสิ้นสุดแต่ละเดือน</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -64,51 +64,51 @@ function ReportCard({
   return (
     <a
       href={`/reports/${report.id}`}
-      className="group block bg-white rounded-xl border border-slate-200 hover:border-slate-300 hover:shadow-sm transition-all overflow-hidden"
+      className="group block bg-white rounded-[20px] border border-line hover:border-ink/30 transition-all overflow-hidden"
     >
       {/* Header */}
       <div className="px-5 pt-5 pb-4 flex items-start justify-between gap-2">
         <div>
-          <p className="text-xs text-slate-500 mb-0.5">{yearDisplay(report.year)}</p>
-          <h3 className="text-lg font-semibold text-slate-900 leading-tight">
+          <p className="text-xs text-muted-ink mb-0.5">{yearDisplay(report.year)}</p>
+          <h3 className="font-display text-[22px] font-bold tracking-[-0.02em] text-ink leading-tight">
             {getThaiMonth(report.month)}
           </h3>
-          <p className="text-xs text-slate-500 mt-1 line-clamp-2">{report.title}</p>
+          <p className="text-xs text-muted-ink mt-1 line-clamp-2">{report.title}</p>
         </div>
         {isLatest && (
-          <span className="shrink-0 text-[10px] font-semibold bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full">
+          <span className="shrink-0 inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold bg-brand-yellow text-ink">
             ล่าสุด
           </span>
         )}
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-3 divide-x divide-slate-100 border-t border-slate-100">
+      <div className="grid grid-cols-3 divide-x divide-line-soft border-t border-line-soft">
         <div className="px-4 py-3 text-center">
-          <p className="text-base font-semibold text-slate-900">{report.total_tasks}</p>
-          <p className="text-[10px] text-slate-500 mt-0.5">งาน</p>
+          <p className="font-display text-[18px] font-bold tabular-nums text-ink">{report.total_tasks}</p>
+          <p className="text-[10px] text-muted-ink mt-0.5">งาน</p>
         </div>
         <div className="px-4 py-3 text-center">
-          <p className="text-base font-semibold text-slate-900">
+          <p className="font-display text-[18px] font-bold tabular-nums text-ink">
             {report.uptime_percent != null ? `${report.uptime_percent.toFixed(1)}%` : "—"}
           </p>
-          <p className="text-[10px] text-slate-500 mt-0.5">อัพไทม์</p>
+          <p className="text-[10px] text-muted-ink mt-0.5">อัพไทม์</p>
         </div>
         <div className="px-4 py-3 text-center">
-          <p className="text-base font-semibold text-slate-900">
+          <p className="font-display text-[18px] font-bold tabular-nums text-ink">
             {report.speed_score != null ? report.speed_score : "—"}
           </p>
-          <p className="text-[10px] text-slate-500 mt-0.5">สปีด</p>
+          <p className="text-[10px] text-muted-ink mt-0.5">สปีด</p>
         </div>
       </div>
 
       {/* Footer */}
-      <div className="px-5 py-3 bg-slate-50 flex items-center justify-between">
-        <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-700">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+      <div className="px-5 py-3 border-t border-line-soft bg-paper flex items-center justify-between">
+        <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-ink-soft">
+          <span className="h-1.5 w-1.5 rounded-full bg-ink" />
           เผยแพร่แล้ว
         </span>
-        <FaArrowRight className="text-[10px] text-slate-400 group-hover:text-slate-600 group-hover:translate-x-0.5 transition-all" />
+        <FaArrowRight className="text-[10px] text-faint-ink group-hover:text-muted-ink group-hover:translate-x-0.5 transition-all" />
       </div>
     </a>
   );

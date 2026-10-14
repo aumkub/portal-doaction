@@ -58,7 +58,7 @@ export default function ReportDetailPage({ loaderData }: Route.ComponentProps) {
         </a>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">{heading}</h1>
+            <h1 className="text-[22px] font-semibold tracking-tight text-slate-900">{heading}</h1>
             {report.summary && (
               <p className="mt-1 text-sm text-slate-500">{report.summary}</p>
             )}
@@ -70,7 +70,7 @@ export default function ReportDetailPage({ loaderData }: Route.ComponentProps) {
                 defaultValue={report.id}
                 wrapperClassName="w-auto inline-block"
                 onChange={(e) => { window.location.href = `/reports/${e.target.value}`; }}
-                className="focus:ring-violet-400/30 focus:border-violet-400"
+                className="focus:ring-slate-900/10 focus:border-slate-400"
               >
                 {published.map((r) => (
                   <option key={r.id} value={r.id}>
@@ -82,7 +82,7 @@ export default function ReportDetailPage({ loaderData }: Route.ComponentProps) {
             <button
               type="button"
               onClick={() => window.print()}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors print:hidden"
+              className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3.5 text-[13px] font-medium text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:bg-slate-50 transition-colors print:hidden"
             >
               <Printer className="w-4 h-4" />
               ส่งออก PDF
@@ -95,7 +95,7 @@ export default function ReportDetailPage({ loaderData }: Route.ComponentProps) {
       <ReportStats report={report} />
 
       {/* Task list */}
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <div className="bg-white rounded-xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden">
         <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
           <FaFileLines className="text-slate-500 text-sm" aria-hidden="true" />
           <h2 className="text-sm font-semibold text-slate-900">

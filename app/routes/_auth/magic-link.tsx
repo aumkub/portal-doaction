@@ -42,15 +42,15 @@ export default function MagicLinkVerify({ loaderData }: Route.ComponentProps) {
 
   if (error) {
     return (
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-10 text-center space-y-4">
-        <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto">
-          <FaTriangleExclamation className="text-3xl text-red-500" aria-hidden="true" />
+      <div className="w-full max-w-md bg-white rounded-[24px] border border-line p-8 md:p-10 text-center space-y-4">
+        <div className="w-12 h-12 bg-[#FDE7DA] rounded-2xl flex items-center justify-center mx-auto">
+          <FaTriangleExclamation className="text-base text-[#B4541A]" aria-hidden="true" />
         </div>
-        <h2 className="text-lg font-semibold text-slate-900">ลิ้งก์ไม่ถูกต้อง</h2>
-        <p className="text-sm text-slate-500 leading-relaxed">{error}</p>
+        <h2 className="text-[24px] font-bold tracking-[-0.02em] text-ink">ลิ้งก์ไม่ถูกต้อง</h2>
+        <p className="text-sm text-muted-ink leading-relaxed">{error}</p>
         <a
           href="/login"
-          className="inline-block mt-2 px-5 py-2.5 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 transition-colors"
+          className="inline-flex items-center h-10 mt-2 px-5 rounded-full bg-ink text-white text-[13px] font-semibold hover:bg-black transition-colors"
         >
           ขอลิ้งก์ใหม่
         </a>
@@ -59,11 +59,11 @@ export default function MagicLinkVerify({ loaderData }: Route.ComponentProps) {
   }
 
   return (
-    <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-10 text-center">
-      <div className="w-16 h-16 bg-violet-50 rounded-full flex items-center justify-center mx-auto mb-4">
-        <FaSpinner className="text-3xl text-violet-600 animate-spin" aria-hidden="true" />
+    <div className="w-full max-w-md bg-white rounded-[24px] border border-line p-8 md:p-10 text-center">
+      <div className="w-12 h-12 bg-brand-yellow rounded-2xl flex items-center justify-center mx-auto mb-4">
+        <FaSpinner className="text-base text-ink animate-spin" aria-hidden="true" />
       </div>
-      <p className="text-slate-600 text-sm">กำลังเข้าสู่ระบบ…</p>
+      <p className="text-muted-ink text-sm">กำลังเข้าสู่ระบบ…</p>
     </div>
   );
 }

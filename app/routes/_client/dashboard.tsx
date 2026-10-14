@@ -1,13 +1,14 @@
-import { CheckCircle2, Globe, Ticket, ArrowRight } from "lucide-react";
-import { FaCircleCheck, FaRotateRight, FaTag, FaBoxArchive } from "react-icons/fa6";
+import { Plus } from "lucide-react";
+import { getUptimeRobotKey } from "~/lib/secrets.server";
 import { getClientBackupFromCache, parseBackupTimestamp, type BackupEntry } from "~/lib/backup";
 import type { Route } from "./+types/dashboard";
 import { requireUser } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { formatDate, formatRelativeTime } from "~/lib/utils";
 import { useT } from "~/lib/i18n";
-import TeamContactPanel from "~/components/contact/TeamContactPanel";
-import type { SupportTicket, ReportTask } from "~/types";
+import type { ReportTask } from "~/types";
+import { StatusStepper } from "~/components/tickets/StatusStepper";
+import type { TranslationKey } from "~/lib/translations";
 
 export function meta() {
   return [{ title: "Dashboard — do action portal" }];
@@ -59,9 +60,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const user = await requireUser(request, env.DB, env.SESSIONPORTAL);
   const db = createDB(env.DB);
   const client = await db.getClientByUserId(user.id);
-  if (!client) return { stats: null, activity: [], client: null, latestReportId: null };
+  if (!client) return { stats: null, client: null, latestReport: null, categoryCounts: [], recentTasks: [], inProgress: [], clientBackup: null };
 
-  const apiKey = (env as any).UPTIMEROBOT_API_KEY ?? "ur2618139-5281beb51ff9820a629669c2";
+  const apiKey = getUptimeRobotKey(env);
 
   const [ticketsResult, reportsResult, uptimeResult] = await Promise.allSettled([
     db.listTicketsByClient(client.id),
@@ -81,34 +82,31 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
   const clientBackup = await getClientBackupFromCache(env.SESSIONPORTAL, client.backup_path);
 
-  type ActivityItem = {
-    id: string;
-    type: "task" | "ticket";
-    title: string;
-    iconKind: "resolved" | "in_progress" | "ticket";
-    time: number;
-  };
+  const categoryOrder: ReportTask["category"][] = ["maintenance", "security", "seo", "performance", "development", "other"];
+  const categoryCounts = categoryOrder
+    .map((category) => ({ category, count: tasks.filter((t) => t.category === category).length }))
+    .filter((c) => c.count > 0)
+    .sort((a, b) => b.count - a.count);
 
-  const taskItems: ActivityItem[] = tasks.slice(0, 5).map((t) => ({
-    id: t.id, type: "task", title: t.title, iconKind: "resolved", time: latestReport!.created_at,
-  }));
-  const ticketItems: ActivityItem[] = tickets.slice(0, 5).map((t) => ({
-    id: t.id, type: "ticket", title: t.title,
-    iconKind: t.status === "resolved" ? "resolved" : t.status === "in_progress" ? "in_progress" : "ticket",
-    time: t.updated_at,
-  }));
-  const activity = [...taskItems, ...ticketItems].sort((a, b) => b.time - a.time).slice(0, 5);
+  const inProgress = openTickets
+    .slice()
+    .sort((a, b) => b.updated_at - a.updated_at)
+    .slice(0, 3)
+    .map((t) => ({ id: t.id, title: t.title, status: t.status, updated_at: t.updated_at }));
 
   return {
     stats: {
-      completedTasks: latestReport?.total_tasks ?? 0,
       uptimePercent: uptime.uptimeRatio,
       isUp: uptime.isUp,
       openTickets: openTickets.length,
     },
-    activity,
     client,
-    latestReportId: latestReport?.id ?? null,
+    latestReport: latestReport
+      ? { id: latestReport.id, year: latestReport.year, month: latestReport.month, total_tasks: latestReport.total_tasks }
+      : null,
+    categoryCounts,
+    recentTasks: tasks.slice(0, 3).map((t) => ({ id: t.id, title: t.title, category: t.category })),
+    inProgress,
     clientBackup,
   };
 }
@@ -129,360 +127,191 @@ function formatBackupWhen(entry: BackupEntry, locale: "th" | "en"): string {
   });
 }
 
+const CATEGORY_KEY: Record<ReportTask["category"], TranslationKey> = {
+  maintenance: "cat_maintenance",
+  development: "cat_development",
+  security: "cat_security",
+  seo: "cat_seo",
+  performance: "cat_performance",
+  other: "cat_other",
+};
+
 export default function DashboardPage({ loaderData }: Route.ComponentProps) {
-  const { stats, activity, client, latestReportId, clientBackup } = loaderData;
+  const { stats, client, latestReport, categoryCounts, recentTasks, inProgress, clientBackup } = loaderData;
   const { t, lang } = useT();
-  const fmt = (unix: number) => formatRelativeTime(unix, lang);
-  const isOnline = stats?.isUp;
+  const isOnline = stats?.isUp ?? null;
+  const host = client?.website_url?.replace(/^https?:\/\//, "").replace(/\/$/, "") ?? null;
+  const maxCount = Math.max(1, ...categoryCounts.map((c) => c.count));
+  const reportMonth = latestReport
+    ? new Date(latestReport.year, latestReport.month - 1, 1).toLocaleDateString(lang === "en" ? "en-US" : "th-TH", { month: "long", year: "numeric" })
+    : null;
+  const greeting = isOnline === true ? t("rd_client_greeting_ok") : isOnline === false ? t("rd_client_greeting_down") : t("rd_client_greeting_neutral");
+  const latestBackup = clientBackup && clientBackup.ok !== false ? clientBackup.latest : null;
 
   return (
-    <div className="space-y-6 max-w-6xl">
+    <div className="space-y-5 md:space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900">
-          {t("dash_greeting_prefix")} {client?.company_name ?? t("dash_default_client")}
-        </h1>
-        <p className="mt-1 text-sm text-slate-500">{t("dash_subtitle")}</p>
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div className="min-w-0">
+          <p className="text-sm text-muted-ink">
+            {client?.company_name ?? t("dash_default_client")}
+            {client?.package ? ` · ${client.package}` : ""}
+          </p>
+          <h1 className="mt-1 text-[28px] md:text-[32px] font-bold leading-tight tracking-[-0.02em] text-ink">{greeting}</h1>
+        </div>
+        <a
+          href="/tickets/new"
+          className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-ink px-5 text-[14px] font-semibold text-white hover:bg-black"
+        >
+          <Plus className="h-4 w-4" />
+          {t("rd_client_report_issue")}
+        </a>
       </div>
 
-      {/* Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* Completed tasks */}
-        <div className="bg-white rounded-xl border border-slate-200 p-5 flex items-center gap-4">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 shrink-0">
-            <CheckCircle2 className="w-5 h-5" />
-          </span>
-          <div>
-            <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">{t("dash_completed_tasks")}</p>
-            <p className="text-2xl font-semibold text-slate-900 leading-tight">
-              {stats?.completedTasks ?? 0}
-              <span className="text-sm font-normal text-slate-500 ml-1">{t("items")}</span>
-            </p>
+      {/* Hero row */}
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-3 md:gap-5">
+        <div className="lg:col-span-2 rounded-[24px] bg-ink p-6 md:p-7 text-white">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <span
+                className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                  isOnline === true ? "bg-emerald-400" : isOnline === false ? "bg-[#FF8A3D]" : "bg-white/40"
+                }`}
+              />
+              <div className="min-w-0">
+                {host ? (
+                  <a href={client!.website_url!} target="_blank" rel="noopener noreferrer" className="block truncate text-[15px] font-semibold text-white hover:underline">
+                    {host}
+                  </a>
+                ) : (
+                  <p className="text-[15px] font-semibold">{t("dash_no_website")}</p>
+                )}
+                <p className="text-[13px] text-white/60">
+                  {isOnline === true ? t("rd_client_online") : isOnline === false ? t("rd_client_offline") : t("dash_unknown")}
+                </p>
+              </div>
+            </div>
+            <span className="shrink-0 rounded-full bg-white/10 px-2.5 py-1 text-xs text-white/70">{t("rd_client_last_30d")}</span>
           </div>
-        </div>
-
-        {/* Uptime */}
-        <div className="bg-white rounded-xl border border-slate-200 p-5 flex items-center gap-4">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600 shrink-0">
-            <Globe className="w-5 h-5" />
-          </span>
-          <div>
-            <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">{t("dash_uptime_label")}</p>
-            <p className="text-2xl font-semibold text-slate-900 leading-tight">
+          <div className="mt-8">
+            <p className="font-display text-[56px] md:text-[64px] font-bold leading-none tracking-[-0.03em] tabular-nums text-brand-yellow">
               {stats?.uptimePercent != null ? `${stats.uptimePercent.toFixed(2)}%` : "—"}
             </p>
+            <p className="mt-2 text-sm text-white/60">Uptime</p>
           </div>
+          {latestBackup ? (
+            <div className="mt-7 border-t border-white/10 pt-5">
+              <p className="text-xs text-white/50">{t("dash_backup_latest")}</p>
+              <p className="mt-1 text-[15px] font-semibold">{formatBackupWhen(latestBackup, lang)}</p>
+            </div>
+          ) : null}
         </div>
 
-        {/* Open tickets */}
-        <div className="bg-white rounded-xl border border-slate-200 p-5 flex items-center gap-4">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-50 text-violet-600 shrink-0">
-            <Ticket className="w-5 h-5" />
-          </span>
+        <div className="flex flex-col justify-between gap-6 rounded-[24px] bg-brand-yellow p-6 md:p-7 text-ink">
           <div>
-            <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">{t("dash_open_tickets")}</p>
-            <p className="text-2xl font-semibold text-slate-900 leading-tight">
-              {stats?.openTickets ?? 0}
-              <span className="text-sm font-normal text-slate-500 ml-1">{t("items")}</span>
-            </p>
+            <p className="text-sm font-medium text-ink/70">{t("rd_client_latest_report")}</p>
+            {latestReport ? (
+              <>
+                <p className="mt-2 font-display text-[28px] font-bold leading-tight tracking-[-0.02em]">{reportMonth}</p>
+                <p className="mt-2 text-sm text-ink/80">{t("rd_client_report_summary", { count: latestReport.total_tasks })}</p>
+              </>
+            ) : (
+              <p className="mt-2 text-[15px] font-semibold">{t("rd_client_no_report")}</p>
+            )}
           </div>
+          <a
+            href={latestReport ? `/reports/${latestReport.id}` : "/reports"}
+            className="inline-flex h-11 items-center justify-center rounded-full bg-ink px-5 text-[13px] font-semibold text-white hover:bg-black"
+          >
+            {latestReport ? t("rd_client_read_report") : t("nav_reports")}
+          </a>
         </div>
-      </div>
+      </section>
 
-      {/* Bottom grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* Recent Activity — 2/3 */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-100">
-            <h2 className="text-sm font-semibold text-slate-900">{t("dash_recent_activity")}</h2>
+      {/* Second row */}
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-2 md:gap-5">
+        <div className="rounded-[20px] border border-line bg-white p-5 md:p-6">
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 className="text-[16px] font-semibold text-ink">{t("rd_client_work_done")}</h2>
+            {reportMonth ? <span className="text-[13px] text-muted-ink">{reportMonth}</span> : null}
           </div>
-          {activity.length === 0 ? (
-            <p className="px-5 py-10 text-center text-sm text-slate-500">{t("dash_no_activity")}</p>
+          {categoryCounts.length === 0 ? (
+            <p className="mt-5 text-sm text-muted-ink">{t("rd_client_no_work")}</p>
           ) : (
-            <ul className="divide-y divide-slate-100">
-              {activity.map((item) => {
-                const href = item.type === "ticket"
-                  ? `/tickets/${item.id}`
-                  : latestReportId ? `/reports/${latestReportId}` : "/reports";
-                return (
-                  <li key={item.id}>
-                    <a href={href} className="flex items-center gap-3 px-5 py-3.5 hover:bg-slate-50 transition-colors">
-                      <span className="shrink-0">
-                        {item.iconKind === "resolved" ? (
-                          <FaCircleCheck className="text-emerald-500 text-base" aria-hidden="true" />
-                        ) : item.iconKind === "in_progress" ? (
-                          <FaRotateRight className="text-blue-500 text-base" aria-hidden="true" />
-                        ) : (
-                          <Ticket className="w-4 h-4 text-violet-500" aria-hidden="true" />
-                        )}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-slate-700 truncate">{item.title}</p>
+            <>
+              <div className="mt-5 space-y-3">
+                {categoryCounts.map((c) => (
+                  <div key={c.category} className="flex items-center gap-3">
+                    <span className="w-28 shrink-0 truncate text-sm text-ink-soft">{t(CATEGORY_KEY[c.category])}</span>
+                    <span className="h-2 flex-1 overflow-hidden rounded-full bg-paper">
+                      <span className="block h-full rounded-full bg-ink" style={{ width: `${(c.count / maxCount) * 100}%` }} />
+                    </span>
+                    <span className="w-6 shrink-0 text-right text-sm font-semibold tabular-nums">{c.count}</span>
+                  </div>
+                ))}
+              </div>
+              {recentTasks.length > 0 ? (
+                <ul className="mt-5 space-y-3 border-t border-line-soft pt-4">
+                  {recentTasks.map((task) => (
+                    <li key={task.id} className="flex items-start gap-3">
+                      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-ink" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-ink">{task.title}</p>
+                        <p className="text-xs text-muted-ink">{t(CATEGORY_KEY[task.category])}</p>
                       </div>
-                      <span className={`shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full ${
-                        item.type === "task"
-                          ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-                          : "bg-violet-50 text-violet-700 ring-1 ring-violet-200"
-                      }`}>
-                        {item.type === "task" ? "งาน" : "Ticket"}
-                      </span>
-                      <span className="text-xs text-slate-500 whitespace-nowrap shrink-0 ml-1">
-                        {fmt(item.time)}
-                      </span>
-                    </a>
-                  </li>
-                );
-              })}
-            </ul>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </>
           )}
         </div>
 
-        {/* Right column */}
-        <div className="space-y-4">
-          {/* Quick Actions */}
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-100">
-              <h2 className="text-sm font-semibold text-slate-900">{t("dash_quick_actions")}</h2>
+        <div className="flex flex-col gap-4 md:gap-5">
+          <div className="overflow-hidden rounded-[20px] border border-line bg-white">
+            <div className="flex items-baseline justify-between gap-3 px-5 pt-5 md:px-6">
+              <h2 className="text-[16px] font-semibold text-ink">{t("rd_client_in_progress_title")}</h2>
+              <a href="/tickets" className="text-[13px] font-medium text-muted-ink hover:text-ink">{t("rd_client_view_all")}</a>
             </div>
-            <div className="p-4 space-y-2">
-              <a
-                href="/tickets/new"
-                className="flex items-center justify-between w-full rounded-lg bg-[#F0D800] px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-yellow-400 transition-colors group"
-              >
-                <span>{t("dash_new_request")}</span>
-                <ArrowRight className="w-4 h-4 opacity-60 group-hover:translate-x-0.5 transition-transform" />
-              </a>
-              <a
-                href={latestReportId ? `/reports/${latestReportId}` : "/reports"}
-                className="flex items-center justify-between w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors group"
-              >
-                <span>{t("dash_view_latest_report")}</span>
-                <ArrowRight className="w-4 h-4 opacity-40 group-hover:translate-x-0.5 transition-transform" />
-              </a>
-              <a
-                href="/contact"
-                className="flex items-center justify-between w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors group"
-              >
-                <span>{t("dash_contact_team")}</span>
-                <ArrowRight className="w-4 h-4 opacity-40 group-hover:translate-x-0.5 transition-transform" />
-              </a>
-            </div>
-          </div>
-
-          {/* Website backups */}
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-100">
-              <h2 className="text-sm font-semibold text-slate-900">{t("dash_backup_title")}</h2>
-            </div>
-            <div className="p-5">
-              {!clientBackup || clientBackup.ok === false ? (
-                <p className="text-sm text-slate-500">
-                  {clientBackup?.reason === "cache_empty"
-                    ? t("dash_backup_pending")
-                    : clientBackup?.reason === "site_not_found"
-                      ? t("dash_backup_not_found")
-                      : t("dash_backup_not_configured")}
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs text-slate-500">
-                      {t("dash_backup_count").replace("{count}", String(clientBackup.backupCount))}
-                    </p>
-                    <p className="text-[10px] text-slate-400">
-                      {formatRelativeTime(clientBackup.fetchedAt, lang)}
-                    </p>
-                  </div>
-                  {clientBackup.latest ? (
-                    <div className="rounded-lg border border-emerald-100 bg-emerald-50/50 px-3 py-2.5">
-                      <p className="text-[10px] font-medium text-emerald-700 uppercase tracking-wide">
-                        {t("dash_backup_latest")}
-                      </p>
-                      <p className="text-xs text-slate-700 font-mono truncate mt-1">
-                        {clientBackup.latest.name}
-                      </p>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        {formatBackupWhen(clientBackup.latest, lang)}
-                      </p>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-slate-500">{t("dash_backup_empty")}</p>
-                  )}
-                  {clientBackup.backups.length > 1 && (
-                    <ul className="space-y-1.5 pt-2 border-t border-slate-100 max-h-32 overflow-y-auto">
-                      {clientBackup.backups.slice(1, 5).map((b) => (
-                        <li key={b.name} className="flex items-center gap-2 text-xs text-slate-600">
-                          <FaBoxArchive className="text-emerald-500 shrink-0 text-[10px]" />
-                          <span className="truncate flex-1 font-mono">{b.name}</span>
-                          <span className="shrink-0 text-slate-400">{formatBackupWhen(b, lang)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Website Status */}
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-100">
-              <h2 className="text-sm font-semibold text-slate-900">{t("dash_website_status")}</h2>
-            </div>
-            <div className="p-5">
-              {client?.website_url ? (
-                <div className="space-y-3">
-                  <a
-                    href={client.website_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block text-xs text-slate-500 truncate hover:text-slate-800 transition-colors"
-                  >
-                    {client.website_url.replace(/^https?:\/\//, "").replace(/\/$/, "")}
-                  </a>
-                  <div className="space-y-2.5 pt-3 border-t border-slate-100">
-                    <StatusRow
-                      label={t("dash_status_label")}
-                      value={
-                        isOnline === null ? (
-                          <StatusPill color="slate">{t("dash_unknown")}</StatusPill>
-                        ) : isOnline ? (
-                          <StatusPill color="emerald" pulse>Online</StatusPill>
-                        ) : (
-                          <StatusPill color="red" pulse>Offline</StatusPill>
-                        )
-                      }
-                    />
-                    <StatusRow
-                      label={t("dash_uptime_30d")}
-                      value={
-                        <span className="text-sm font-medium text-slate-800">
-                          {stats?.uptimePercent != null ? `${stats.uptimePercent.toFixed(2)}%` : "—"}
+            {inProgress.length === 0 ? (
+              <p className="px-5 pb-5 pt-4 text-sm text-muted-ink md:px-6">{t("rd_client_no_in_progress")}</p>
+            ) : (
+              <ul className="mt-3">
+                {inProgress.map((tk) => (
+                  <li key={tk.id} className="border-t border-[#F4F2EC]">
+                    <a href={`/tickets/${tk.id}`} className="block px-5 py-4 hover:bg-paper/60 md:px-6">
+                      <div className="mb-3 flex items-start justify-between gap-3">
+                        <p className="min-w-0 text-sm font-semibold text-ink">{tk.title}</p>
+                        <span className="shrink-0 text-xs text-faint-ink">
+                          {t("rd_client_updated", { when: formatRelativeTime(tk.updated_at, lang) })}
                         </span>
-                      }
-                    />
-                    <StatusRow label={t("dash_ssl_cert")} value={<StatusPill color="emerald">{t("set")}</StatusPill>} />
-                    <StatusRow label={t("dash_domain_expiry")} value={<StatusPill color="emerald">{t("not_expired")}</StatusPill>} />
-                  </div>
-                </div>
-              ) : (
-                <p className="text-sm text-slate-500">{t("dash_no_website")}</p>
-              )}
-            </div>
+                      </div>
+                      <StatusStepper status={tk.status} lang={lang} />
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
-          {/* Contract Status */}
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-100">
-              <h2 className="text-sm font-semibold text-slate-900">{t("dash_contract_expiry")}</h2>
+          <div className="flex flex-col gap-4 rounded-[20px] border border-line bg-white p-5 sm:flex-row sm:items-center sm:justify-between md:p-6">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-ink">
+                {client?.contract_end
+                  ? t("rd_client_contract_until", { date: formatDate(new Date(client.contract_end).getTime() / 1000, lang) })
+                  : t("dash_contract_no_expiry")}
+              </p>
+              <p className="mt-0.5 text-[13px] text-muted-ink">{t("rd_client_contact_hint")}</p>
             </div>
-            <div className="p-5">
-              {client?.contract_end ? (
-                <ContractStatus contractEnd={client.contract_end} lang={lang} t={t} formatDate={formatDate} />
-              ) : (
-                <p className="text-sm text-slate-500">{t("dash_contract_no_expiry")}</p>
-              )}
-            </div>
-          </div>
-
-          {/* Contact channels */}
-          <div className="bg-white rounded-xl border border-slate-200 p-5">
-            <TeamContactPanel />
+            <a
+              href="/contact"
+              className="inline-flex h-10 shrink-0 items-center justify-center rounded-full border border-line bg-white px-5 text-[13px] font-semibold text-ink hover:bg-paper"
+            >
+              {t("dash_contact_team")}
+            </a>
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function StatusPill({
-  color,
-  pulse,
-  children,
-}: {
-  color: "emerald" | "red" | "slate";
-  pulse?: boolean;
-  children: React.ReactNode;
-}) {
-  const colorMap = {
-    emerald: { pill: "bg-emerald-50 text-emerald-700", dot: "bg-emerald-500" },
-    red:     { pill: "bg-red-50 text-red-600",         dot: "bg-red-500" },
-    slate:   { pill: "bg-slate-100 text-slate-600",    dot: "bg-slate-400" },
-  };
-  const c = colorMap[color];
-  return (
-    <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full ${c.pill}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${c.dot} ${pulse ? "animate-pulse" : ""}`} />
-      {children}
-    </span>
-  );
-}
-
-function StatusRow({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-2 text-sm">
-      <span className="text-slate-500 shrink-0">{label}</span>
-      <span>{value}</span>
-    </div>
-  );
-}
-
-function ContractStatus({
-  contractEnd,
-  lang,
-  t,
-  formatDate,
-}: {
-  contractEnd: string;
-  lang: string;
-  t: (k: any, params?: Record<string, string | number>) => string;
-  formatDate: (unix: number, locale: any) => string;
-}) {
-  const expiryDate = new Date(contractEnd);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  expiryDate.setHours(0, 0, 0, 0);
-  const diffDays = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  const dateStr = formatDate(expiryDate.getTime() / 1000, lang);
-
-  // expired
-  if (diffDays < 0) {
-    return (
-      <div className="rounded-lg bg-red-50 border border-red-100 px-4 py-3 flex items-start gap-3">
-        <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-red-500" />
-        <div>
-          <p className="text-sm font-semibold text-red-700">{t("dash_contract_expired")}</p>
-          <p className="text-xs text-red-500 mt-0.5">{dateStr}</p>
-        </div>
-      </div>
-    );
-  }
-
-  // expiring soon (≤ 30 days)
-  if (diffDays <= 30) {
-    return (
-      <div className="rounded-lg bg-amber-50 border border-amber-100 px-4 py-3 flex items-start gap-3">
-        <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-amber-500 animate-pulse" />
-        <div>
-          <p className="text-sm font-semibold text-amber-700">
-            {t("dash_contract_days_left", { days: diffDays })}
-          </p>
-          <p className="text-xs text-amber-600 mt-0.5">{dateStr}</p>
-        </div>
-      </div>
-    );
-  }
-
-  // active
-  return (
-    <div className="rounded-lg flex items-start gap-3">
-      <span className="relative top-1.5 h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
-      <div>
-        <p className="text-sm font-semibold text-emerald-700">
-          {t("dash_contract_days_left", { days: diffDays })}
-        </p>
-        <p className="text-xs text-emerald-600 mt-0.5">{dateStr}</p>
-      </div>
+      </section>
     </div>
   );
 }

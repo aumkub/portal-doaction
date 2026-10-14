@@ -118,50 +118,50 @@ export default function AdminClientsNewPage({ actionData }: Route.ComponentProps
       />
 
       <Form method="post" className="space-y-6">
-        <section className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
-          <h2 className="text-sm font-semibold text-slate-900">
+        <section className="rounded-[20px] border border-line bg-white p-5 sm:p-6 space-y-4">
+          <h2 className="text-[16px] font-semibold text-ink">
             {t("admin_client_new_contact")}
           </h2>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="name">{t("admin_client_new_name")}</Label>
               <Input id="name" name="name" placeholder="สมชาย ใจดี" required />
-              {errors?.name && <p className="text-red-500 text-xs">{errors.name[0]}</p>}
+              {errors?.name && <p className="text-[#B4541A] text-xs">{errors.name[0]}</p>}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="email">{t("settings_email_label")}</Label>
               <Input id="email" name="email" type="email" placeholder="client@example.com" required />
-              {errors?.email && <p className="text-red-500 text-xs">{errors.email[0]}</p>}
+              {errors?.email && <p className="text-[#B4541A] text-xs">{errors.email[0]}</p>}
             </div>
           </div>
         </section>
 
-        <section className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
-          <h2 className="text-sm font-semibold text-slate-900">
+        <section className="rounded-[20px] border border-line bg-white p-5 sm:p-6 space-y-4">
+          <h2 className="text-[16px] font-semibold text-ink">
             {t("admin_client_new_company")}
           </h2>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5 col-span-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="company_name">{t("admin_client_new_company_name")}</Label>
               <Input id="company_name" name="company_name" placeholder="บริษัท ตัวอย่าง จำกัด" required />
-              {errors?.company_name && <p className="text-red-500 text-xs">{errors.company_name[0]}</p>}
+              {errors?.company_name && <p className="text-[#B4541A] text-xs">{errors.company_name[0]}</p>}
             </div>
-            <div className="space-y-1.5 col-span-2">
+            <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="website_url">{t("admin_client_new_website")}</Label>
               <Input id="website_url" name="website_url" type="url" placeholder="https://example.com" />
-              {errors?.website_url && <p className="text-red-500 text-xs">{errors.website_url[0]}</p>}
+              {errors?.website_url && <p className="text-[#B4541A] text-xs">{errors.website_url[0]}</p>}
             </div>
-            <div className="space-y-1.5 col-span-2">
+            <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="cc_emails">CC Email (สูงสุด 5)</Label>
               <textarea
                 id="cc_emails"
                 name="cc_emails"
                 rows={2}
                 placeholder="cc1@example.com, cc2@example.com"
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 resize-none"
+                className="w-full rounded-[14px] border border-line bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-faint-ink focus:outline-none focus:ring-2 focus:ring-ink/10 focus:border-ink/40 resize-none"
               />
-              <p className="text-xs text-slate-500">คั่นด้วย comma หรือขึ้นบรรทัดใหม่</p>
-              {errors?.cc_emails && <p className="text-red-500 text-xs">{errors.cc_emails[0]}</p>}
+              <p className="text-xs text-muted-ink">คั่นด้วย comma หรือขึ้นบรรทัดใหม่</p>
+              {errors?.cc_emails && <p className="text-[#B4541A] text-xs">{errors.cc_emails[0]}</p>}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="package">{t("settings_package_label")}</Label>
@@ -183,40 +183,40 @@ export default function AdminClientsNewPage({ actionData }: Route.ComponentProps
                 type="date"
                 disabled={noContractEnd}
               />
-              <label className="mt-2 inline-flex items-center gap-2 text-xs text-slate-600">
+              <label className="mt-2 inline-flex items-center gap-2 text-xs text-ink-soft">
                 <input
                   type="checkbox"
                   name="no_contract_end"
                   value="1"
                   checked={noContractEnd}
                   onChange={(e) => setNoContractEnd(e.target.checked)}
-                  className="rounded accent-violet-600"
+                  className="rounded accent-ink h-4 w-4"
                 />
                 {t("admin_client_new_monthly_no_end")}
               </label>
             </div>
-            <div className="space-y-1.5 col-span-2">
+            <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="notes">{t("admin_client_new_notes")}</Label>
               <textarea id="notes" name="notes" rows={2}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 resize-none" />
+                className="w-full rounded-[14px] border border-line bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-faint-ink focus:outline-none focus:ring-2 focus:ring-ink/10 focus:border-ink/40 resize-none" />
             </div>
           </div>
         </section>
 
-        <div className="flex items-center gap-3 bg-white rounded-xl border border-slate-200 px-5 py-4">
+        <div className="flex items-center gap-3 rounded-[20px] border border-line bg-white px-5 py-4 min-h-[56px]">
           <input id="send_invite" name="send_invite" type="checkbox" defaultChecked
-            className="rounded accent-violet-600" />
-          <label htmlFor="send_invite" className="text-sm text-slate-700">
+            className="rounded accent-ink h-4 w-4" />
+          <label htmlFor="send_invite" className="text-sm text-ink-soft">
             {t("admin_client_new_invite")}
           </label>
         </div>
 
-        <div className="flex justify-end gap-3">
+        <div className="flex flex-wrap justify-end gap-3">
           <a href="/admin/clients"
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors">
+            className="inline-flex h-10 items-center rounded-full border border-line bg-white px-5 text-[13px] font-semibold text-ink hover:bg-paper transition-colors">
             {t("cancel")}
           </a>
-          <Button type="submit" className="bg-violet-600 hover:bg-violet-700 text-white">
+          <Button type="submit">
             {t("admin_client_new_submit")}
           </Button>
         </div>

@@ -1,11 +1,7 @@
 import type { Route } from "./+types/report-notify";
 import { requireAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
-import { sendEmail } from "~/lib/email.server";
-import { buildReportCustomerNotification } from "~/lib/report-customer-email.server";
-import { createReportAccessToken } from "~/lib/report-access.server";
-import { parseClientCcEmails } from "~/lib/client-cc";
-import { sendTelegramNotificationForClient } from "~/lib/telegram.server";
+import { notifyReportToClient } from "~/lib/report-notify.server";
 
 /** POST /api/report-notify — send report notification email to client user */
 export async function action({ request, context }: Route.ActionArgs) {
@@ -22,83 +18,17 @@ export async function action({ request, context }: Route.ActionArgs) {
     return Response.json({ error: "missing_report" }, { status: 400 });
   }
 
-  if (!env.SEND_EMAIL) {
-    return Response.json({ error: "email_not_configured" }, { status: 503 });
-  }
-
-  const db = createDB(env.DB);
-  const report = await db.getReport(reportId);
-  if (!report || report.status !== "published") {
-    return Response.json({ error: "not_found" }, { status: 404 });
-  }
-
-  const client = await db.getClientById(report.client_id);
-  if (!client) return Response.json({ error: "no_client" }, { status: 400 });
-
-  const user = await db.getUserById(client.user_id);
-  if (!user?.email) return Response.json({ error: "no_email" }, { status: 400 });
-
-  const origin = env.APP_URL || new URL(request.url).origin;
-  const secret = env.SESSION_SECRET || "doaction-report-link-secret";
-  const exp = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 14; // 14 days
-  const token = await createReportAccessToken(
-    { reportId: report.id, email: user.email.toLowerCase(), exp },
-    secret
-  );
-  const reportUrl = `${String(origin).replace(/\/$/, "")}/public/report/${report.id}?t=${encodeURIComponent(token)}`;
-
-  const { subject, html, text } = buildReportCustomerNotification({
-    companyName: client.company_name,
-    contactName: user.name,
-    reportTitle: report.title,
-    year: report.year,
-    month: report.month,
-    summary: report.summary,
-    reportUrl,
-    lang: user.language === "en" ? "en" : "th",
+  const result = await notifyReportToClient({
+    env,
+    db: createDB(env.DB),
+    reportId,
+    origin: new URL(request.url).origin,
   });
-  const ccRecipients = parseClientCcEmails(client.cc_emails).map((email) => ({ email }));
-
-  try {
-    await sendEmail({
-      to: user.email,
-      toName: user.name,
-      cc: ccRecipients,
-      subject,
-      html,
-      text,
-      sendEmail: env.SEND_EMAIL,
-      db,
-      source: "report_notify",
-    });
-  } catch (e) {
-    console.error("[report-notify]", e);
+  if (!result.ok) {
     return Response.json(
-      { error: "send_failed", message: e instanceof Error ? e.message : String(e) },
-      { status: 502 }
+      { error: result.error, message: result.message },
+      { status: result.status }
     );
   }
-
-  const now = Math.floor(Date.now() / 1000);
-  await db.updateReport(report.id, {
-    client_notified_at: now,
-    client_notification_subject: subject,
-    client_notification_html: html,
-  });
-
-  // Send Telegram notification to co-admin groups for this client
-  const appUrl = String(env.APP_URL || new URL(request.url).origin).replace(/\/$/, "");
-  await sendTelegramNotificationForClient({
-    db,
-    appUrl,
-    clientId: report.client_id,
-    notification: {
-      title: `📊 ส่งรายงานให้ลูกค้าแล้ว: ${client.company_name}`,
-      body: report.title,
-      link: `/admin/reports/${report.id}`,
-    },
-  });
-  await db.updateReport(report.id, { telegram_notified_at: now });
-
-  return Response.json({ ok: true, notifiedAt: now });
+  return Response.json({ ok: true, notifiedAt: result.notifiedAt });
 }

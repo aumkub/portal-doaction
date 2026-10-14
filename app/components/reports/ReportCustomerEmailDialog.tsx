@@ -149,23 +149,23 @@ export default function ReportCustomerEmailDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton
-        className="sm:max-w-[640px] max-h-[90vh] flex flex-col gap-0 p-0 overflow-hidden border-slate-200"
+        className="sm:max-w-[640px] max-h-[90vh] flex flex-col gap-0 p-0 overflow-hidden border-line"
       >
-        <div className="px-6 pt-6 pb-4 border-b border-slate-100 bg-gradient-to-b from-slate-50/80 to-white">
+        <div className="px-6 pt-6 pb-4 border-b border-line-soft bg-white">
           <DialogHeader className="space-y-1">
-            <DialogTitle className="text-lg text-slate-900">
+            <DialogTitle className="text-lg text-ink">
               {mode === "send"
                 ? t("admin_report_email_dialog_send_title")
                 : t("admin_report_email_dialog_view_title")}
             </DialogTitle>
-            <DialogDescription className="text-slate-500 text-sm">
+            <DialogDescription className="text-muted-ink text-sm">
               {mode === "send"
                 ? t("admin_report_email_dialog_send_desc")
                 : t("admin_report_email_dialog_view_desc")}
             </DialogDescription>
           </DialogHeader>
           {notifiedAt != null && mode === "view" && (
-            <p className="text-xs text-emerald-700 font-medium mt-3 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1">
+            <p className="text-xs text-emerald-700 font-medium mt-3 inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-2 py-0.5 ring-1 ring-inset ring-emerald-600/20">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
               {t("admin_report_email_sent_at")}{" "}
               {lang === "en"
@@ -180,34 +180,34 @@ export default function ReportCustomerEmailDialog({
 
         <div className="px-6 py-4 space-y-3 flex-1 min-h-0 flex flex-col">
           {(displayTo || displaySubject) && (
-            <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3 text-sm space-y-2 shrink-0">
+            <div className="rounded-xl border border-line bg-paper px-4 py-3 text-sm space-y-2 shrink-0">
               {displayTo && (
                 <div className="flex flex-col sm:flex-row sm:items-baseline gap-0.5 sm:gap-3">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 w-20 shrink-0">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-ink w-20 shrink-0">
                     {t("admin_report_email_to")}
                   </span>
-                  <span className="text-slate-800">
+                  <span className="text-ink">
                     {displayToName ? `${displayToName} ` : null}
-                    <span className="text-slate-600">&lt;{displayTo}&gt;</span>
+                    <span className="text-ink-soft">&lt;{displayTo}&gt;</span>
                   </span>
                 </div>
               )}
               {preview?.cc && preview.cc.length > 0 && (
                 <div className="flex flex-col sm:flex-row sm:items-baseline gap-0.5 sm:gap-3">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 w-20 shrink-0">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-ink w-20 shrink-0">
                     CC
                   </span>
-                  <span className="text-slate-800">
+                  <span className="text-ink">
                     {preview.cc.join(", ")}
                   </span>
                 </div>
               )}
               {displaySubject && (
                 <div className="flex flex-col sm:flex-row sm:items-baseline gap-0.5 sm:gap-3">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 w-20 shrink-0">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-ink w-20 shrink-0">
                     {t("admin_report_email_subject")}
                   </span>
-                  <span className="text-slate-800 font-medium leading-snug">{displaySubject}</span>
+                  <span className="text-ink font-medium leading-snug">{displaySubject}</span>
                 </div>
               )}
             </div>
@@ -220,21 +220,21 @@ export default function ReportCustomerEmailDialog({
           )}
 
           {mode === "send" && loading && (
-            <div className="flex flex-col items-center justify-center py-16 text-slate-500 text-sm gap-3">
-              <div className="w-8 h-8 border-2 border-slate-200 border-t-violet-600 rounded-full animate-spin" />
+            <div className="flex flex-col items-center justify-center py-16 text-muted-ink text-sm gap-3">
+              <div className="w-8 h-8 border-2 border-line border-t-ink rounded-full animate-spin" />
               {t("admin_report_email_loading_preview")}
             </div>
           )}
 
           {mode === "view" && !storedHtml && (
-            <p className="text-sm text-slate-500 py-8 text-center">
+            <p className="text-sm text-muted-ink py-8 text-center">
               {t("admin_report_email_no_stored")}
             </p>
           )}
 
           {displayHtml && !(mode === "send" && loading) && (
-            <div className="flex-1 min-h-[280px] flex flex-col rounded-xl border border-slate-200 overflow-hidden bg-white shadow-inner">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 px-3 py-2 bg-slate-50 border-b border-slate-100">
+            <div className="flex-1 min-h-[280px] flex flex-col rounded-xl border border-line overflow-hidden bg-white shadow-inner">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-ink px-3 py-2 bg-paper border-b border-line-soft">
                 {t("admin_report_email_preview_label")}
               </p>
               <iframe
@@ -247,7 +247,7 @@ export default function ReportCustomerEmailDialog({
           )}
         </div>
 
-        <DialogFooter className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 sm:justify-between gap-2">
+        <DialogFooter className="px-6 py-4 border-t border-line-soft bg-paper/60 sm:justify-between gap-2">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             {t("admin_report_email_close")}
           </Button>
@@ -256,7 +256,7 @@ export default function ReportCustomerEmailDialog({
               type="button"
               disabled={loading || !preview || sending}
               onClick={handleSend}
-              className="bg-violet-600 hover:bg-violet-700 text-white"
+              className="bg-ink hover:bg-black rounded-full text-white"
             >
               {sending ? t("admin_report_email_sending") : t("admin_report_email_confirm_send")}
             </Button>

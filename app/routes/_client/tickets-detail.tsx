@@ -8,18 +8,18 @@ import PageHeader from "~/components/layout/PageHeader";
 import type { SupportTicket, TicketMessage, User } from "~/types";
 
 const statusConfig = {
-  open:        { label: "เปิด",          color: "bg-amber-50 text-amber-600" },
-  in_progress: { label: "กำลังดำเนิน",   color: "bg-blue-50 text-blue-600" },
-  waiting:     { label: "รอข้อมูล",       color: "bg-slate-100 text-slate-600" },
-  resolved:    { label: "เสร็จสิ้น",      color: "bg-emerald-50 text-emerald-600" },
-  closed:      { label: "ปิดแล้ว",        color: "bg-slate-100 text-slate-500" },
+  open:        { label: "เปิด",          color: "bg-amber-50 text-amber-700 ring-amber-600/20" },
+  in_progress: { label: "กำลังดำเนิน",   color: "bg-sky-50 text-sky-700 ring-sky-600/20" },
+  waiting:     { label: "รอข้อมูล",       color: "bg-slate-50 text-slate-600 ring-slate-200" },
+  resolved:    { label: "เสร็จสิ้น",      color: "bg-emerald-50 text-emerald-700 ring-emerald-600/20" },
+  closed:      { label: "ปิดแล้ว",        color: "bg-slate-50 text-slate-500 ring-slate-200" },
 };
 
 const priorityConfig = {
-  low:    { label: "ต่ำ",      color: "bg-slate-100 text-slate-500" },
-  medium: { label: "กลาง",    color: "bg-blue-50 text-blue-600" },
-  high:   { label: "สูง",      color: "bg-amber-50 text-amber-600" },
-  urgent: { label: "เร่งด่วน", color: "bg-red-50 text-red-600" },
+  low:    { label: "ต่ำ",      color: "bg-slate-50 text-slate-600 ring-slate-200" },
+  medium: { label: "กลาง",    color: "bg-sky-50 text-sky-700 ring-sky-600/20" },
+  high:   { label: "สูง",      color: "bg-amber-50 text-amber-700 ring-amber-600/20" },
+  urgent: { label: "เร่งด่วน", color: "bg-rose-50 text-rose-700 ring-rose-600/20" },
 };
 
 const ReplySchema = z.object({ message: z.string().min(1) });
@@ -95,10 +95,10 @@ export default function TicketDetailPage({ loaderData, actionData }: Route.Compo
         ]}
         actions={
           <div className="flex items-center gap-2">
-            <span className={`text-xs font-medium px-2 py-1 rounded-full ${pr.color}`}>
+            <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${pr.color}`}>
               {pr.label}
             </span>
-            <span className={`text-xs font-medium px-2 py-1 rounded-full ${st.color}`}>
+            <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${st.color}`}>
               {st.label}
             </span>
           </div>
@@ -106,7 +106,7 @@ export default function TicketDetailPage({ loaderData, actionData }: Route.Compo
       />
 
       {/* Description */}
-      <div className="bg-white rounded-xl border border-slate-200 p-5">
+      <div className="bg-white rounded-xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] p-5">
         <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
           {ticket.description}
         </p>
@@ -127,8 +127,8 @@ export default function TicketDetailPage({ loaderData, actionData }: Route.Compo
               <div
                 className={`max-w-[80%] rounded-xl px-4 py-3 ${
                   isOwn
-                    ? "bg-violet-600 text-white"
-                    : "bg-white border border-slate-200 text-slate-700"
+                    ? "bg-slate-900 text-white"
+                    : "bg-white border border-slate-200/80 text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
                 }`}
               >
                 <p className="text-sm leading-relaxed whitespace-pre-wrap">
@@ -136,7 +136,7 @@ export default function TicketDetailPage({ loaderData, actionData }: Route.Compo
                 </p>
                 <p
                   className={`text-[11px] mt-1.5 ${
-                    isOwn ? "text-violet-200" : "text-slate-500"
+                    isOwn ? "text-slate-400" : "text-slate-500"
                   }`}
                 >
                   {formatRelativeTime(msg.created_at)}
@@ -149,19 +149,19 @@ export default function TicketDetailPage({ loaderData, actionData }: Route.Compo
 
       {/* Reply box */}
       {!["resolved", "closed"].includes(ticket.status) && (
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
+        <div className="bg-white rounded-xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] p-5">
           <Form method="post" className="space-y-3">
             <textarea
               name="message"
               required
               rows={3}
               placeholder="พิมพ์ข้อความ..."
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
+              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-[0_1px_2px_rgba(15,23,42,0.04)] focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 resize-none"
             />
             <div className="flex justify-end">
               <button
                 type="submit"
-                className="bg-violet-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-violet-700 transition-colors"
+                className="h-9 rounded-md bg-slate-900 px-3.5 text-[13px] font-medium text-white hover:bg-slate-800 transition-colors"
               >
                 ส่งข้อความ
               </button>

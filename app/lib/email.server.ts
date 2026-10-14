@@ -6,7 +6,7 @@ import type { DB } from "~/lib/db.server";
 import { EmailMessage } from "cloudflare:email";
 
 export type EmailLanguage = "th" | "en";
-const MAIL_FROM = "aum@doaction.co.th";
+export const MAIL_FROM = "aum@doaction.co.th";
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function isValidEmail(email: string): boolean {
@@ -327,7 +327,7 @@ function magicLinkHtml({
           <!-- Logo row -->
           <tr>
             <td style="padding:32px 40px 0;">
-              <img src="${logoUrl}" alt="do action" width="140" style="display:block;height:auto;border:0;outline:none;text-decoration:none;" />
+              <img src="${logoUrl}" alt="do action" width="220" style="display:block;height:auto;border:0;outline:none;text-decoration:none;" />
             </td>
           </tr>
 

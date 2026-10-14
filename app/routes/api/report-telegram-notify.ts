@@ -1,4 +1,5 @@
 import { requireAdmin } from "~/lib/auth.server";
+import { getReportLinkSecret } from "~/lib/secrets.server";
 import { createDB } from "~/lib/db.server";
 import { createReportAccessToken } from "~/lib/report-access.server";
 import { sendTelegramNotificationForClient } from "~/lib/telegram.server";
@@ -33,7 +34,7 @@ export async function action({ request, context }: any) {
   const user = await db.getUserById(client.user_id);
   let reportLink = `${appUrl}/admin/reports/${report.id}`;
   if (user?.email) {
-    const secret = env.SESSION_SECRET || "doaction-report-link-secret";
+    const secret = getReportLinkSecret(env);
     const exp = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 14;
     const token = await createReportAccessToken(
       { reportId: report.id, email: user.email.toLowerCase(), exp },

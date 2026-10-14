@@ -1,4 +1,5 @@
 import { Form, redirect } from "react-router";
+import { ConfirmButton } from "~/components/ui/confirm-button";
 import { requireAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { formatDate } from "~/lib/utils";
@@ -38,8 +39,8 @@ export async function action({ request, context }: any) {
 const priorityDot: Record<string, string> = {
   urgent: "bg-red-500",
   high:   "bg-orange-400",
-  medium: "bg-amber-400",
-  low:    "bg-slate-300",
+  medium: "bg-brand-yellow",
+  low:    "bg-line",
 };
 
 type TrashedTicket = SupportTicket & { company_name: string };
@@ -54,18 +55,18 @@ export default function AdminTicketsTrashPage({ loaderData }: any) {
       <div className="flex items-center gap-3">
         <a
           href="/admin/tickets"
-          className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors"
+          className="inline-flex items-center gap-1.5 text-xs text-muted-ink hover:text-ink-soft transition-colors"
         >
           ← Tickets
         </a>
       </div>
       <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-50">
-          <FaTrash className="text-red-500 text-sm" />
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-paper">
+          <FaTrash className="text-muted-ink text-sm" />
         </div>
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Ticket Trash</h1>
-          <p className="text-sm text-slate-500 mt-0.5">
+          <h1 className="text-[28px] md:text-[32px] font-bold tracking-[-0.02em] text-ink">Ticket Trash</h1>
+          <p className="text-sm text-muted-ink mt-0.5">
             Tickets ที่ลูกค้าลบแล้ว — เฉพาะ Admin เท่านั้นที่สามารถลบถาวรได้
           </p>
         </div>
@@ -73,81 +74,76 @@ export default function AdminTicketsTrashPage({ loaderData }: any) {
 
       {/* Warning banner */}
       {tickets.length > 0 && (
-        <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-          <FaTriangleExclamation className="text-amber-500 text-sm mt-0.5 shrink-0" />
-          <p className="text-sm text-amber-700">
+        <div className="flex items-start gap-3 rounded-[16px] border border-[#E3CF5C] bg-[#FFF8CC] px-4 py-3">
+          <FaTriangleExclamation className="text-[#8A6D00] text-sm mt-0.5 shrink-0" />
+          <p className="text-sm text-[#6B5B00]">
             การลบถาวรจะไม่สามารถยกเลิกได้ และข้อมูลทั้งหมดรวมถึงข้อความและไฟล์แนบจะหายไปตลอดกาล
           </p>
         </div>
       )}
 
       {/* List */}
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <div className="overflow-hidden rounded-[20px] border border-line bg-white ">
         {tickets.length === 0 ? (
           <div className="px-5 py-16 text-center">
-            <FaTrash className="mx-auto mb-3 text-3xl text-slate-200" />
-            <p className="text-sm text-slate-500">ไม่มี Ticket ในถังขยะ</p>
+            <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-paper text-faint-ink"><FaTrash className="text-base" /></span>
+            <p className="text-sm text-muted-ink">ไม่มี Ticket ในถังขยะ</p>
           </div>
         ) : (
           <>
             <div className="hidden lg:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50/60">
-                    <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">Ticket</th>
-                    <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">ลูกค้า</th>
-                    <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">Priority</th>
-                    <th className="text-left text-xs font-medium text-slate-500 px-5 py-3">ลบเมื่อ</th>
+                  <tr className="border-b border-line-soft bg-paper text-[11px] font-medium uppercase tracking-wider text-muted-ink">
+                    <th className="text-left px-4 py-2.5">Ticket</th>
+                    <th className="text-left px-4 py-2.5">ลูกค้า</th>
+                    <th className="text-left px-4 py-2.5">Priority</th>
+                    <th className="text-left px-4 py-2.5">ลบเมื่อ</th>
                     <th className="px-5 py-3" />
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-line-soft">
                   {tickets.map((ticket) => (
-                    <tr key={ticket.id} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="px-5 py-3.5">
-                        <p className="font-medium text-slate-800 truncate max-w-[280px]">{ticket.title}</p>
-                        <p className="text-xs text-slate-500 font-mono mt-0.5">#{ticket.id.slice(0, 8)}</p>
+                    <tr key={ticket.id} className="hover:bg-paper transition-colors">
+                      <td className="px-4 py-3">
+                        <p className="font-medium text-ink truncate max-w-[280px]">{ticket.title}</p>
+                        <p className="text-xs text-muted-ink font-mono mt-0.5">#{ticket.id.slice(0, 8)}</p>
                       </td>
-                      <td className="px-5 py-3.5 text-slate-600">{ticket.company_name}</td>
-                      <td className="px-5 py-3.5">
-                        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600">
-                          <span className={`h-1.5 w-1.5 rounded-full ${priorityDot[ticket.priority] ?? "bg-slate-300"}`} />
+                      <td className="px-4 py-3 text-muted-ink">{ticket.company_name}</td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-ink">
+                          <span className={`h-1.5 w-1.5 rounded-full ${priorityDot[ticket.priority] ?? "bg-line"}`} />
                           {ticket.priority}
                         </span>
                       </td>
-                      <td className="px-5 py-3.5 text-slate-500 text-xs">
+                      <td className="px-4 py-3 text-muted-ink text-xs">
                         {ticket.deleted_at ? formatDate(ticket.deleted_at, lang) : "—"}
                       </td>
-                      <td className="px-5 py-3.5">
+                      <td className="px-4 py-3">
                         <div className="flex items-center gap-2 justify-end">
                           <Form method="post">
                             <input type="hidden" name="intent" value="restore" />
                             <input type="hidden" name="ticketId" value={ticket.id} />
                             <button
                               type="submit"
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100 transition-colors"
+                              className="inline-flex items-center gap-1.5 h-8 rounded-full border border-line bg-white px-2.5 text-xs font-medium text-ink-soft hover:bg-paper transition-colors"
                             >
                               <FaRotateLeft className="text-[10px]" />
                               คืนค่า
                             </button>
                           </Form>
-                          <Form
-                            method="post"
-                            onSubmit={(e) => {
-                              if (!confirm(`ลบ "${ticket.title}" ถาวรใช่หรือไม่? ไม่สามารถยกเลิกได้`)) {
-                                e.preventDefault();
-                              }
-                            }}
-                          >
+                          <Form method="post">
                             <input type="hidden" name="intent" value="permanent_delete" />
                             <input type="hidden" name="ticketId" value={ticket.id} />
-                            <button
-                              type="submit"
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-100 transition-colors"
+                            <ConfirmButton
+                              message={`ลบ "${ticket.title}" ถาวร ไม่สามารถยกเลิกได้`}
+                              confirmLabel="ลบถาวร"
+                              destructive
+                              className="inline-flex items-center gap-1.5 h-8 rounded-full border border-[#F3C9B0] bg-white px-2.5 text-xs font-medium text-[#B4541A] hover:bg-[#FDE7DA] transition-colors"
                             >
                               <FaTrash className="text-[10px]" />
                               ลบถาวร
-                            </button>
+                            </ConfirmButton>
                           </Form>
                         </div>
                       </td>
@@ -158,16 +154,16 @@ export default function AdminTicketsTrashPage({ loaderData }: any) {
             </div>
 
             {/* Cards — mobile */}
-            <div className="lg:hidden divide-y divide-slate-100">
+            <div className="lg:hidden divide-y divide-line-soft">
               {tickets.map((ticket) => (
                 <div key={ticket.id} className="p-4 space-y-3">
                   <div>
-                    <p className="font-medium text-slate-800 text-sm">{ticket.title}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">{ticket.company_name}</p>
+                    <p className="font-medium text-ink text-sm">{ticket.title}</p>
+                    <p className="text-xs text-muted-ink mt-0.5">{ticket.company_name}</p>
                   </div>
-                  <div className="flex items-center gap-2 flex-wrap text-xs text-slate-500">
+                  <div className="flex items-center gap-2 flex-wrap text-xs text-muted-ink">
                     <span className="inline-flex items-center gap-1.5">
-                      <span className={`h-1.5 w-1.5 rounded-full ${priorityDot[ticket.priority] ?? "bg-slate-300"}`} />
+                      <span className={`h-1.5 w-1.5 rounded-full ${priorityDot[ticket.priority] ?? "bg-line"}`} />
                       {ticket.priority}
                     </span>
                     {ticket.deleted_at && (
@@ -180,35 +176,32 @@ export default function AdminTicketsTrashPage({ loaderData }: any) {
                       <input type="hidden" name="ticketId" value={ticket.id} />
                       <button
                         type="submit"
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100 transition-colors"
+                        className="inline-flex items-center gap-1.5 h-8 rounded-full border border-line bg-white px-2.5 text-xs font-medium text-ink-soft hover:bg-paper transition-colors"
                       >
                         <FaRotateLeft className="text-[10px]" />
                         คืนค่า
                       </button>
                     </Form>
-                    <Form
-                      method="post"
-                      onSubmit={(e) => {
-                        if (!confirm(`ลบ "${ticket.title}" ถาวรใช่หรือไม่?`)) e.preventDefault();
-                      }}
-                    >
+                    <Form method="post">
                       <input type="hidden" name="intent" value="permanent_delete" />
                       <input type="hidden" name="ticketId" value={ticket.id} />
-                      <button
-                        type="submit"
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-100 transition-colors"
+                      <ConfirmButton
+                        message={`ลบ "${ticket.title}" ถาวร ไม่สามารถยกเลิกได้`}
+                        confirmLabel="ลบถาวร "
+                        destructive
+                        className="inline-flex items-center gap-1.5 h-8 rounded-full border border-[#F3C9B0] bg-white px-2.5 text-xs font-medium text-[#B4541A] hover:bg-[#FDE7DA] transition-colors"
                       >
                         <FaTrash className="text-[10px]" />
                         ลบถาวร
-                      </button>
+                      </ConfirmButton>
                     </Form>
                   </div>
                 </div>
               ))}
             </div>
 
-            <div className="border-t border-slate-100 px-5 py-2.5 bg-slate-50/40">
-              <p className="text-xs text-slate-500">{tickets.length} รายการในถังขยะ</p>
+            <div className="border-t border-line-soft px-5 py-2.5 bg-paper/40">
+              <p className="text-xs text-muted-ink">{tickets.length} รายการในถังขยะ</p>
             </div>
           </>
         )}

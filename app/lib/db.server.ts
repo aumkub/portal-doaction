@@ -330,6 +330,11 @@ export function createDB(d1: D1Database) {
           FROM clients c
           JOIN users u ON u.id = c.user_id
           WHERE c.deleted_at IS NULL
+            -- Expired contracts and our own company get no monthly report
+            -- (keep in sync with needsMonthlyReport in app/lib/contract.ts)
+            AND (c.contract_end IS NULL OR c.contract_end = ''
+                 OR c.contract_end >= date('now', '+7 hours'))
+            AND c.company_name != 'บริษัท ดู แอคชั่น จำกัด'
             AND c.id NOT IN (
               SELECT client_id FROM monthly_reports
               WHERE year = ? AND month = ?
@@ -950,12 +955,50 @@ export function createDB(d1: D1Database) {
         .run();
     },
 
+    async getEmailLog(id: string): Promise<EmailLog | null> {
+      return d1.prepare("SELECT * FROM email_logs WHERE id = ?").bind(id).first<EmailLog>();
+    },
+
     async listEmailLogs(limit = 200): Promise<EmailLog[]> {
       const result = await d1
         .prepare("SELECT * FROM email_logs ORDER BY created_at DESC LIMIT ?")
         .bind(limit)
         .all<EmailLog>();
       return result.results;
+    },
+
+    // ── Monthly care marks (admin only) ─────────────────────────────────────
+
+    async listMonthlyCare(
+      year: number,
+      month: number
+    ): Promise<Array<{ client_id: string; checked_at: number; checked_by_name: string }>> {
+      const result = await d1
+        .prepare(
+          `SELECT m.client_id, m.checked_at, COALESCE(u.name, '') AS checked_by_name
+           FROM client_monthly_care m LEFT JOIN users u ON u.id = m.checked_by
+           WHERE m.year = ? AND m.month = ?`
+        )
+        .bind(year, month)
+        .all<{ client_id: string; checked_at: number; checked_by_name: string }>();
+      return result.results;
+    },
+
+    async setMonthlyCare(client_id: string, year: number, month: number, checked_by: string): Promise<void> {
+      await d1
+        .prepare(
+          `INSERT INTO client_monthly_care (client_id, year, month, checked_by) VALUES (?, ?, ?, ?)
+           ON CONFLICT (client_id, year, month) DO NOTHING`
+        )
+        .bind(client_id, year, month, checked_by)
+        .run();
+    },
+
+    async clearMonthlyCare(client_id: string, year: number, month: number): Promise<void> {
+      await d1
+        .prepare("DELETE FROM client_monthly_care WHERE client_id = ? AND year = ? AND month = ?")
+        .bind(client_id, year, month)
+        .run();
     },
 
     async hasRecentMagicLinkSent(to_email: string, withinSeconds = 60): Promise<boolean> {

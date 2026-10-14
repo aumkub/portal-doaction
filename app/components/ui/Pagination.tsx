@@ -23,10 +23,10 @@ export default function Pagination({ page, totalPages, extra }: Props) {
   const qs = (p: number) => `?page=${p}${extra ? `&${extra}` : ""}`;
   const pages = buildPages(page, totalPages);
 
-  const linkBase = "inline-flex h-7 min-w-[28px] items-center justify-center rounded-md px-2 text-xs font-medium transition-colors";
-  const activeStyle = `${linkBase} bg-violet-600 text-white`;
-  const normalStyle = `${linkBase} text-slate-600 hover:bg-slate-100`;
-  const disabledStyle = `${linkBase} text-slate-300 pointer-events-none`;
+  const linkBase = "inline-flex h-9 min-w-[36px] items-center justify-center rounded-full px-2.5 text-xs font-medium transition-colors";
+  const activeStyle = `${linkBase} bg-ink text-white`;
+  const normalStyle = `${linkBase} text-muted-ink hover:bg-white hover:text-ink`;
+  const disabledStyle = `${linkBase} text-line pointer-events-none`;
 
   return (
     <div className="flex items-center justify-center gap-1 py-3">
@@ -35,7 +35,7 @@ export default function Pagination({ page, totalPages, extra }: Props) {
       </a>
       {pages.map((p, i) =>
         p === "…" ? (
-          <span key={`ellipsis-${i}`} className="inline-flex h-7 min-w-[28px] items-center justify-center text-xs text-slate-400">
+          <span key={`ellipsis-${i}`} className="inline-flex h-9 min-w-[28px] items-center justify-center text-xs text-faint-ink">
             …
           </span>
         ) : (
