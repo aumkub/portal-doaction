@@ -49,7 +49,7 @@ export default function MessageBubble({
         {authorName ? (
           <p className="mb-1 text-xs font-medium opacity-80">{authorName}</p>
         ) : null}
-        <p className="whitespace-pre-wrap">{message}</p>
+        <p className="whitespace-pre-wrap">{linkify(message)}</p>
         {attachments.length > 0 ? (
           <div className="mt-2 flex flex-wrap gap-2">
             {attachments.map((a) => {
@@ -84,4 +84,24 @@ export default function MessageBubble({
       </div>
     </div>
   );
+}
+
+const URL_PATTERN = /(https?:\/\/[^\s<]+|www\.[^\s<]+)/g;
+
+/** Turns URLs in plain text into links, leaving trailing punctuation outside. */
+function linkify(text: string) {
+  return text.split(URL_PATTERN).map((part, i) => {
+    if (i % 2 === 0) return part;
+    const trail = part.match(/[.,;:!?)\]}'"]+$/)?.[0] ?? "";
+    const url = trail ? part.slice(0, -trail.length) : part;
+    const href = url.startsWith("www.") ? `https://${url}` : url;
+    return (
+      <span key={i}>
+        <a href={href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:opacity-80">
+          {url}
+        </a>
+        {trail}
+      </span>
+    );
+  });
 }
