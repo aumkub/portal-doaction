@@ -4,7 +4,7 @@ import { parseClientCcEmails } from "~/lib/client-cc";
 import { sendOrHoldTicketEmail } from "~/lib/email-alerts.server";
 import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
-import { requireAdmin } from "~/lib/auth.server";
+import { requireCoAdminOrAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { formatDate, formatRelativeTime, generateId } from "~/lib/utils";
 import { sendTelegramNotification } from "~/lib/telegram.server";
@@ -49,7 +49,7 @@ export function meta({ data }: any) {
 
 export async function loader({ request, context, params }: any) {
   const env = context.cloudflare.env;
-  const admin = await requireAdmin(request, env.DB, env.SESSIONPORTAL);
+  const admin = await requireCoAdminOrAdmin(request, env.DB, env.SESSIONPORTAL);
   const db = createDB(env.DB);
 
   const ticket = await db.getTicket(params.ticketId);
@@ -100,7 +100,7 @@ function getAttachmentIcon(fileName: string, mimeType?: string): string {
 
 export async function action({ request, context, params }: any) {
   const env = context.cloudflare.env;
-  const admin = await requireAdmin(request, env.DB, env.SESSIONPORTAL);
+  const admin = await requireCoAdminOrAdmin(request, env.DB, env.SESSIONPORTAL);
   const db = createDB(env.DB);
 
   const ticket = await db.getTicket(params.ticketId);
