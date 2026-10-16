@@ -57,7 +57,9 @@ export default function MessageBubble({
 
   return (
     <div className={`flex flex-col ${shouldAlignRight ? "items-end" : "items-start"}`}>
-      <div className={`min-w-0 max-w-[85%] md:max-w-[72%] rounded-2xl px-4 py-3 text-sm leading-[1.65] [overflow-wrap:anywhere] ${bubbleClass}`}>
+      {/* Bubble and its action row share one width, so the row spans the bubble. */}
+      <div className={`flex min-w-0 max-w-[85%] md:max-w-[72%] flex-col ${shouldAlignRight ? "items-end" : "items-start"}`}>
+      <div className={`min-w-0 max-w-full rounded-2xl px-4 py-3 text-sm leading-[1.65] [overflow-wrap:anywhere] ${bubbleClass}`}>
         {isInternal && (
           <p className="mb-1.5 text-[11px] font-bold tracking-[0.06em] text-[#8A6D00]">
             {internalLabel ?? "โน้ตภายใน · ลูกค้าไม่เห็น"}
@@ -110,7 +112,7 @@ export default function MessageBubble({
         ) : null}
       </div>
       {onReply || footer || trailing ? (
-        <div className="mt-1 flex flex-wrap items-center gap-1">
+        <div className="mt-1 flex w-full flex-wrap items-center gap-1">
           {footer}
           {onReply ? (
             <button
@@ -121,9 +123,10 @@ export default function MessageBubble({
               <FaReply aria-hidden className="h-3 w-3" /> {replyLabel}
             </button>
           ) : null}
-          {trailing}
+          {trailing ? <div className="ml-auto">{trailing}</div> : null}
         </div>
       ) : null}
+      </div>
     </div>
   );
 }
