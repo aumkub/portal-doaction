@@ -119,8 +119,12 @@ export async function action({ request, context, params }: any) {
 
   if (intent === "delete_message") {
     const target = message_id ? await db.getTicketMessage(message_id) : null;
-    // Only the author may delete, and only within this ticket.
-    if (!target || target.ticket_id !== ticket.id || target.user_id !== admin.id) {
+    // Admins may delete any message; co-admins only their own.
+    if (
+      !target ||
+      target.ticket_id !== ticket.id ||
+      (admin.role !== "admin" && target.user_id !== admin.id)
+    ) {
       throw new Response("Forbidden", { status: 403 });
     }
     const fileKeys = await db.deleteTicketMessage(target.id);
@@ -515,7 +519,7 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
                       textareaRef.current?.focus();
                     }}
                   />
-                  {msg.user_id === admin.id && (
+                  {(admin.role === "admin" || msg.user_id === admin.id) && (
                     <Form
                       method="post"
                       className="mt-1 flex justify-end"
