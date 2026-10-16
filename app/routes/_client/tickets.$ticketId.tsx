@@ -255,6 +255,8 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
   const navigation = useNavigation();
   const formRef = useRef<HTMLFormElement | null>(null);
   const isSubmittingReplyRef = useRef(false);
+  const replying =
+    navigation.state !== "idle" && navigation.formData?.get("intent") !== "close";
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState<string>("");
@@ -433,7 +435,14 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
       />
 
       <div key={messages.length} className="shrink-0 border-t border-line-soft bg-white p-4 md:max-h-[50%] md:overflow-y-auto md:px-5">
-        <Form method="post" className="space-y-3">
+        <Form method="post" ref={formRef} onSubmit={(e) => {
+            // A second click can land before the disabled state renders.
+            if (isSubmittingReplyRef.current || uploading) {
+              e.preventDefault();
+              return;
+            }
+            isSubmittingReplyRef.current = true;
+          }} className="space-y-3">
           <input type="hidden" name="attachments_json" value={JSON.stringify(uploadedFiles)} />
           <label className="block text-sm font-medium text-slate-700">
             {t("ticket_reply_label")}
@@ -501,7 +510,8 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
           <div className="flex justify-end">
             <button
               type="submit"
-              className="h-11 w-full sm:h-10 sm:w-auto rounded-full bg-ink px-5 text-[13px] font-semibold text-white hover:bg-black"
+              disabled={replying || uploading}
+              className="h-11 w-full sm:h-10 sm:w-auto rounded-full bg-ink px-5 text-[13px] font-semibold text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
             >
               {t("btn_send_message")}
             </button>

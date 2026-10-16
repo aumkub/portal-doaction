@@ -38,7 +38,8 @@ import type { TranslationKey } from "~/lib/translations";
 const ReplySchema = z.object({
   message: z.string().default(""),
   is_internal: z.string().optional(),
-  intent: z.enum(["reply", "status"]).default("reply"),
+  intent: z.enum(["reply", "status", "delete_message"]).default("reply"),
+  message_id: z.string().optional(),
   status: z.string().optional(),
 });
 
@@ -113,7 +114,22 @@ export async function action({ request, context, params }: any) {
     return { errors: parsed.error.flatten().fieldErrors };
   }
 
-  const { intent, message, is_internal, status } = parsed.data;
+  const { intent, message, is_internal, status, message_id } = parsed.data;
+
+  if (intent === "delete_message") {
+    const target = message_id ? await db.getTicketMessage(message_id) : null;
+    // Only the author may delete, and only within this ticket.
+    if (!target || target.ticket_id !== ticket.id || target.user_id !== admin.id) {
+      throw new Response("Forbidden", { status: 403 });
+    }
+    const fileKeys = await db.deleteTicketMessage(target.id);
+    if (fileKeys.length > 0) {
+      context.cloudflare.ctx.waitUntil(
+        Promise.allSettled(fileKeys.map((key) => env.ATTACHMENTS.delete(key)))
+      );
+    }
+    return redirect(`/admin/tickets/${ticket.id}`);
+  }
 
   // Validate message only for reply intent
   if (intent === "reply" && !message.trim()) {
@@ -270,6 +286,8 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
   const navigation = useNavigation();
   const formRef = useRef<HTMLFormElement | null>(null);
   const isSubmittingReplyRef = useRef(false);
+  const replying =
+    navigation.state !== "idle" && navigation.formData?.get("intent") === "reply";
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState<string>("");
@@ -476,6 +494,25 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
                     attachments={toBubbleAttachments(msg.id)}
                     onAttachmentClick={(a) => openLightbox(a.id)}
                   />
+                  {msg.user_id === admin.id && (
+                    <Form
+                      method="post"
+                      className="mt-1 flex justify-end"
+                      onSubmit={(e) => {
+                        if (!confirm(lang === "en" ? "Delete this message?" : "ลบข้อความนี้?")) e.preventDefault();
+                      }}
+                    >
+                      <input type="hidden" name="intent" value="delete_message" />
+                      <input type="hidden" name="message_id" value={msg.id} />
+                      <button
+                        type="submit"
+                        disabled={navigation.state !== "idle"}
+                        className="text-[11px] text-faint-ink hover:text-rose-600 disabled:opacity-50"
+                      >
+                        {lang === "en" ? "Delete" : "ลบ"}
+                      </button>
+                    </Form>
+                  )}
                 </div>
               </div>
             ) };
@@ -484,7 +521,14 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
 
       {/* Reply form — pinned under the thread */}
       <div key={messages.length} className="shrink-0 border-t border-line-soft bg-white px-4 pb-4 pt-3 md:px-5 lg:max-h-[50%] lg:overflow-y-auto">
-        <Form method="post" ref={formRef} className="space-y-3">
+        <Form method="post" onSubmit={(e) => {
+            // A second click can land before the disabled state renders.
+            if (isSubmittingReplyRef.current || uploading) {
+              e.preventDefault();
+              return;
+            }
+            isSubmittingReplyRef.current = true;
+          }} ref={formRef} className="space-y-3">
           <input type="hidden" name="intent" value="reply" />
           <input type="hidden" name="is_internal" value={composeMode === "internal" ? "1" : ""} />
           <div className="inline-flex rounded-full bg-paper p-[3px]" role="tablist">
@@ -590,7 +634,8 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
             </div>
             <button
               type="submit"
-              className="inline-flex h-10 items-center rounded-full bg-ink px-5 text-[13px] font-semibold text-white hover:bg-black transition-colors"
+              disabled={replying || uploading}
+              className="inline-flex h-10 items-center rounded-full bg-ink px-5 text-[13px] font-semibold text-white hover:bg-black transition-colors disabled:cursor-not-allowed disabled:opacity-60"
             >
               {t(composeMode === "internal" ? "rd_ticket_mode_internal" : "admin_ticket_send")}
             </button>
