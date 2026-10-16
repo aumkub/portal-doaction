@@ -565,6 +565,35 @@ export function createDB(d1: D1Database) {
         .first<TicketMessage>();
     },
 
+    async listReactionsByTicket(ticket_id: string) {
+      const result = await d1
+        .prepare(
+          `SELECT r.message_id, r.user_id, r.reaction, u.name
+           FROM ticket_message_reactions r
+           LEFT JOIN users u ON u.id = r.user_id
+           WHERE r.ticket_id = ?
+           ORDER BY r.created_at`
+        )
+        .bind(ticket_id)
+        .all<{ message_id: string; user_id: string; reaction: string; name: string | null }>();
+      return result.results;
+    },
+
+    /** Adds the reaction, or removes it if this user already gave it. */
+    async toggleReaction(r: { message_id: string; ticket_id: string; user_id: string; reaction: string }) {
+      const removed = await d1
+        .prepare("DELETE FROM ticket_message_reactions WHERE message_id = ? AND user_id = ? AND reaction = ?")
+        .bind(r.message_id, r.user_id, r.reaction)
+        .run();
+      if (removed.meta.changes > 0) return;
+      await d1
+        .prepare(
+          "INSERT OR IGNORE INTO ticket_message_reactions (message_id, ticket_id, user_id, reaction) VALUES (?, ?, ?, ?)"
+        )
+        .bind(r.message_id, r.ticket_id, r.user_id, r.reaction)
+        .run();
+    },
+
     /** Deletes a message and its attachment rows; returns the R2 keys to purge. */
     async deleteTicketMessage(id: string): Promise<string[]> {
       const keys = await d1
@@ -573,6 +602,7 @@ export function createDB(d1: D1Database) {
         .all<{ file_key: string }>();
       await d1.batch([
         d1.prepare("DELETE FROM ticket_attachments WHERE message_id = ?").bind(id),
+        d1.prepare("DELETE FROM ticket_message_reactions WHERE message_id = ?").bind(id),
         d1.prepare("DELETE FROM ticket_messages WHERE id = ?").bind(id),
       ]);
       return keys.results.map((r) => r.file_key);

@@ -1,4 +1,5 @@
 import { Form, Link, redirect, useNavigation } from "react-router";
+import { REACTIONS, ReactionBar, summarizeReactions, type ReactionSummary } from "~/components/tickets/ReactionBar";
 import { AttachmentIcon, attachmentKind } from "~/components/tickets/AttachmentIcon";
 import { FaReply, FaXmark } from "react-icons/fa6";
 import { ConfirmButton } from "~/components/ui/confirm-button";
@@ -37,6 +38,7 @@ type LoaderData = {
   messages: TicketMessage[];
   attachments: TicketAttachment[];
   usersById: Record<string, MessageAuthor>;
+  reactionsByMessage: Record<string, ReactionSummary[]>;
   currentUserId: string;
 };
 
@@ -64,10 +66,11 @@ export async function loader({ request, context, params }: any) {
   const db = createDB(context.cloudflare.env.DB);
   const ticket = await getOwnTicket(db, user, params.ticketId);
 
-  const [allMessages, allAttachments, admins] = await Promise.all([
+  const [allMessages, allAttachments, admins, reactionRows] = await Promise.all([
     db.listMessagesByTicket(ticket.id),
     db.listAttachmentsByTicket(ticket.id),
     db.listMessageAuthors(ticket.id),
+    db.listReactionsByTicket(ticket.id),
   ]);
   // Internal notes and their files must never leave the server for a client.
   const messages = allMessages.filter((m) => m.is_internal === 0);
@@ -77,7 +80,12 @@ export async function loader({ request, context, params }: any) {
   const usersById: Record<string, MessageAuthor> = {};
   for (const author of admins) usersById[author.id] = author;
 
-  return { ticket, messages, attachments, usersById, currentUserId: user.id };
+  const reactionsByMessage = summarizeReactions(
+    reactionRows.filter((r) => visibleIds.has(r.message_id)),
+    user.id
+  );
+
+  return { ticket, messages, attachments, usersById, currentUserId: user.id, reactionsByMessage };
 }
 
 export async function action({ request, context, params }: any) {
@@ -91,6 +99,22 @@ export async function action({ request, context, params }: any) {
   const ticket = await getOwnTicket(db, user, params.ticketId);
 
   const formData = await request.formData();
+
+  if (formData.get("intent") === "react") {
+    const target = await db.getTicketMessage(String(formData.get("message_id") ?? ""));
+    const reaction = String(formData.get("reaction") ?? "");
+    // Internal notes are invisible to clients, so they can't be reacted to.
+    if (
+      !target ||
+      target.ticket_id !== ticket.id ||
+      target.is_internal !== 0 ||
+      !(REACTIONS as readonly string[]).includes(reaction)
+    ) {
+      return Response.json({ error: "invalid_reaction" }, { status: 400 });
+    }
+    await db.toggleReaction({ message_id: target.id, ticket_id: ticket.id, user_id: user.id, reaction });
+    return { ok: true };
+  }
 
   // The client closes their own ticket, e.g. one opened by mistake. Replying
   // later reopens it, as for any closed ticket.
@@ -246,7 +270,7 @@ export async function action({ request, context, params }: any) {
 }
 
 export default function TicketDetailPage({ loaderData, actionData }: any) {
-  const { ticket, messages, attachments, usersById, currentUserId } = loaderData as LoaderData;
+  const { ticket, messages, attachments, usersById, currentUserId, reactionsByMessage } = loaderData as LoaderData;
   const errors = actionData?.errors;
   const { t, lang } = useT();
   const navigation = useNavigation();
@@ -449,6 +473,11 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
                 setReplyTo({ id: msg.id, author: authorOf(msg.user_id), text: msg.message });
                 textareaRef.current?.focus();
               }}
+            />
+            <ReactionBar
+              messageId={msg.id}
+              reactions={reactionsByMessage[msg.id] ?? []}
+              alignRight={!isTeamAuthor(msg.user_id)}
             />
             </div>
           ) }))}

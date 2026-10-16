@@ -1,4 +1,5 @@
 import { Form, redirect, useNavigation } from "react-router";
+import { REACTIONS, ReactionBar, summarizeReactions, type ReactionSummary } from "~/components/tickets/ReactionBar";
 import { AttachmentIcon, attachmentKind } from "~/components/tickets/AttachmentIcon";
 import { FaReply, FaXmark } from "react-icons/fa6";
 import { ChatThread } from "~/components/tickets/ChatThread";
@@ -25,6 +26,7 @@ import type {
   SupportTicket,
   TicketAttachment,
   TicketMessage,
+  MessageAuthor,
   User,
   Client,
 } from "~/types";
@@ -40,7 +42,7 @@ import type { TranslationKey } from "~/lib/translations";
 const ReplySchema = z.object({
   message: z.string().default(""),
   is_internal: z.string().optional(),
-  intent: z.enum(["reply", "status", "delete_message"]).default("reply"),
+  intent: z.enum(["reply", "status", "delete_message", "react"]).default("reply"),
   message_id: z.string().optional(),
   reply_to_id: z.string().optional(),
   status: z.string().optional(),
@@ -59,17 +61,19 @@ export async function loader({ request, context, params }: any) {
   const ticket = await db.getTicket(params.ticketId);
   if (!ticket) throw new Response("Ticket not found", { status: 404 });
 
-  const [messages, attachments, admins, client] = await Promise.all([
+  const [messages, attachments, admins, client, reactionRows] = await Promise.all([
     db.listMessagesByTicket(ticket.id),
     db.listAttachmentsByTicket(ticket.id),
-    db.listAdminUsers(),
+    db.listMessageAuthors(ticket.id),
     db.getClientById(ticket.client_id),
+    db.listReactionsByTicket(ticket.id),
   ]);
+  const reactionsByMessage = summarizeReactions(reactionRows, admin.id);
 
-  const usersById: Record<string, User> = {};
-  for (const a of admins) usersById[a.id] = a;
+  const usersById: Record<string, MessageAuthor> = {};
+  for (const a of admins) if (a.role !== "client") usersById[a.id] = a;
 
-  return { ticket, messages, attachments, usersById, client, admin };
+  return { ticket, messages, attachments, usersById, client, admin, reactionsByMessage };
 }
 
 const STATUSES = [
@@ -110,6 +114,16 @@ export async function action({ request, context, params }: any) {
   }
 
   const { intent, message, is_internal, status, message_id, reply_to_id } = parsed.data;
+
+  if (intent === "react") {
+    const target = message_id ? await db.getTicketMessage(message_id) : null;
+    const reaction = String(formData.get("reaction") ?? "");
+    if (!target || target.ticket_id !== ticket.id || !(REACTIONS as readonly string[]).includes(reaction)) {
+      return Response.json({ error: "invalid_reaction" }, { status: 400 });
+    }
+    await db.toggleReaction({ message_id: target.id, ticket_id: ticket.id, user_id: admin.id, reaction });
+    return { ok: true };
+  }
 
   if (intent === "delete_message") {
     const target = message_id ? await db.getTicketMessage(message_id) : null;
@@ -274,13 +288,14 @@ export async function action({ request, context, params }: any) {
 }
 
 export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
-  const { ticket, messages, attachments, usersById, client, admin } = loaderData as {
+  const { ticket, messages, attachments, usersById, client, admin, reactionsByMessage } = loaderData as {
     ticket: SupportTicket;
     messages: TicketMessage[];
     attachments: TicketAttachment[];
-    usersById: Record<string, User>;
+    usersById: Record<string, MessageAuthor>;
     client: Client | null;
     admin: User;
+    reactionsByMessage: Record<string, ReactionSummary[]>;
   };
   const errors = actionData?.errors;
   const { t, lang } = useT();
@@ -512,6 +527,11 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
                       setReplyTo({ id: msg.id, author: who, text: msg.message });
                       textareaRef.current?.focus();
                     }}
+                  />
+                  <ReactionBar
+                    messageId={msg.id}
+                    reactions={reactionsByMessage[msg.id] ?? []}
+                    alignRight={isTeam}
                   />
                   {(admin.role === "admin" || msg.user_id === admin.id) && (
                     <Form
