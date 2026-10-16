@@ -1,4 +1,6 @@
 import { Form, Link, redirect, useNavigation } from "react-router";
+import { AttachmentIcon, attachmentKind } from "~/components/tickets/AttachmentIcon";
+import { FaReply, FaXmark } from "react-icons/fa6";
 import { ConfirmButton } from "~/components/ui/confirm-button";
 import { ChatThread } from "~/components/tickets/ChatThread";
 import { sendOrHoldTicketEmail } from "~/lib/email-alerts.server";
@@ -37,14 +39,6 @@ type LoaderData = {
   usersById: Record<string, MessageAuthor>;
   currentUserId: string;
 };
-
-function getAttachmentIcon(fileName: string, mimeType?: string): string {
-  const lower = fileName.toLowerCase();
-  if (mimeType === "application/pdf" || lower.endsWith(".pdf")) return "📄";
-  if (mimeType?.startsWith("image/") || /\.(png|jpe?g|gif|webp|svg)$/.test(lower)) return "🖼️";
-  if (mimeType?.startsWith("video/") || /\.(mp4|mov|webm|mkv|avi)$/.test(lower)) return "🎬";
-  return "📎";
-}
 
 /**
  * Load a ticket for the signed-in client, or throw. This route is the client
@@ -278,7 +272,7 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
     id: att.id,
     name: att.file_name,
     href: `/api/attachments/${encodeURIComponent(att.file_key)}`,
-    icon: getAttachmentIcon(att.file_name, att.mime_type),
+    icon: attachmentKind(att.file_name, att.mime_type),
   }));
 
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -443,7 +437,7 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
                 id: att.id,
                 name: att.file_name,
                 href: `/api/attachments/${encodeURIComponent(att.file_key)}`,
-                icon: getAttachmentIcon(att.file_name, att.mime_type),
+                icon: attachmentKind(att.file_name, att.mime_type),
               }))}
               onAttachmentClick={(a) => openLightbox(a.id)}
               quote={(() => {
@@ -451,7 +445,7 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
                 return q ? { author: authorOf(q.user_id), text: q.message, onClick: () => jumpToMessage(q.id) } : undefined;
               })()}
               replyLabel={lang === "en" ? "Reply" : "ตอบกลับ"}
-              onReply={() => {
+              onReply={msg.user_id === currentUserId ? undefined : () => {
                 setReplyTo({ id: msg.id, author: authorOf(msg.user_id), text: msg.message });
                 textareaRef.current?.focus();
               }}
@@ -477,7 +471,7 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
             <div className="flex items-start gap-2 rounded-[12px] border-l-[3px] border-ink/40 bg-paper px-3 py-2 text-xs">
               <div className="min-w-0 flex-1">
                 <input type="hidden" name="reply_to_id" value={replyTo.id} />
-                <p className="font-semibold text-ink">↩ {replyTo.author}</p>
+                <p className="flex items-center gap-1.5 font-semibold text-ink"><FaReply aria-hidden className="h-3 w-3" /> {replyTo.author}</p>
                 <p className="line-clamp-2 whitespace-pre-wrap text-muted-ink">{replyTo.text}</p>
               </div>
               <button
@@ -486,7 +480,7 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
                 aria-label={lang === "en" ? "Cancel reply" : "ยกเลิกการตอบกลับ"}
                 className="text-muted-ink hover:text-ink"
               >
-                ✕
+                <FaXmark aria-hidden className="h-3.5 w-3.5" />
               </button>
             </div>
           )}
@@ -532,7 +526,7 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
                   className="flex items-center justify-between gap-2 bg-slate-50 rounded px-2 py-1"
                 >
                     <span>
-                      {getAttachmentIcon(f.fileName, f.mimeType)} {f.fileName}
+                      <span className="inline-flex items-center gap-1.5"><AttachmentIcon kind={attachmentKind(f.fileName, f.mimeType)} /> {f.fileName}</span>
                     </span>
                     <button
                       type="button"

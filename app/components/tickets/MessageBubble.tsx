@@ -1,3 +1,6 @@
+import { FaReply } from "react-icons/fa6";
+import { AttachmentIcon } from "./AttachmentIcon";
+
 export interface BubbleAttachment {
   id: string;
   name: string;
@@ -71,7 +74,7 @@ export default function MessageBubble({
         {attachments.length > 0 ? (
           <div className="mt-2 flex flex-wrap gap-2">
             {attachments.map((a) => {
-              const isImage = a.icon === "🖼️";
+              const isImage = a.icon === "image";
               return isImage ? (
                 <button
                   key={a.id}
@@ -92,7 +95,7 @@ export default function MessageBubble({
                   onClick={() => onAttachmentClick ? onAttachmentClick(a) : window.open(a.href, "_blank")}
                   className={`inline-flex items-center rounded-md border px-2.5 py-1 text-xs transition-colors ${attachmentClass}`}
                 >
-                  {a.icon ? `${a.icon} ` : "📎 "}
+                  <AttachmentIcon kind={a.icon} className="mr-1.5 h-3.5 w-3.5 shrink-0" />
                   {a.name}
                 </button>
               );
@@ -104,9 +107,9 @@ export default function MessageBubble({
         <button
           type="button"
           onClick={onReply}
-          className="mt-1 px-1 text-[11px] text-faint-ink hover:text-ink"
+          className="mt-1 inline-flex items-center gap-1 px-1 text-[11px] text-faint-ink hover:text-ink"
         >
-          ↩ {replyLabel}
+          <FaReply aria-hidden className="h-3 w-3" /> {replyLabel}
         </button>
       ) : null}
     </div>

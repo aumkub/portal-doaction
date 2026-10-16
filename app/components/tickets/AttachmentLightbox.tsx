@@ -1,4 +1,5 @@
 import { useEffect, useCallback, useState, useRef } from "react";
+import { AttachmentIcon } from "./AttachmentIcon";
 
 export interface LightboxItem {
   id: string;
@@ -21,7 +22,7 @@ export default function AttachmentLightbox({ items, initialIndex, onClose }: Pro
   const imgRef = useRef<HTMLImageElement>(null);
 
   const current = items[index];
-  const isImage = current.icon === "🖼️";
+  const isImage = current.icon === "image";
   const total = items.length;
 
   const resetView = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
@@ -148,7 +149,7 @@ export default function AttachmentLightbox({ items, initialIndex, onClose }: Pro
           />
         ) : (
           <div className="flex flex-col items-center gap-5 px-16 py-12 rounded-2xl bg-white/5 text-white text-center">
-            <span className="text-7xl leading-none">{current.icon ?? "📎"}</span>
+            <AttachmentIcon kind={current.icon} className="h-16 w-16" />
             <p className="text-base font-medium max-w-xs break-all">{current.name}</p>
             <a
               href={current.href}

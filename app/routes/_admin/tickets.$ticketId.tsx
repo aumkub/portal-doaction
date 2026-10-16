@@ -1,4 +1,6 @@
 import { Form, redirect, useNavigation } from "react-router";
+import { AttachmentIcon, attachmentKind } from "~/components/tickets/AttachmentIcon";
+import { FaReply, FaXmark } from "react-icons/fa6";
 import { ChatThread } from "~/components/tickets/ChatThread";
 import { parseClientCcEmails } from "~/lib/client-cc";
 import { sendOrHoldTicketEmail } from "~/lib/email-alerts.server";
@@ -91,14 +93,6 @@ const STATUS_LABEL_TH: Record<string, string> = {
   resolved: "เสร็จสิ้น",
   closed: "ปิด",
 };
-
-function getAttachmentIcon(fileName: string, mimeType?: string): string {
-  const lower = fileName.toLowerCase();
-  if (mimeType === "application/pdf" || lower.endsWith(".pdf")) return "📄";
-  if (mimeType?.startsWith("image/") || /\.(png|jpe?g|gif|webp|svg)$/.test(lower)) return "🖼️";
-  if (mimeType?.startsWith("video/") || /\.(mp4|mov|webm|mkv|avi)$/.test(lower)) return "🎬";
-  return "📎";
-}
 
 export async function action({ request, context, params }: any) {
   const env = context.cloudflare.env;
@@ -313,7 +307,7 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
     id: att.id,
     name: att.file_name,
     href: `/api/attachments/${encodeURIComponent(att.file_key)}`,
-    icon: getAttachmentIcon(att.file_name, att.mime_type),
+    icon: attachmentKind(att.file_name, att.mime_type),
   }));
 
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -338,7 +332,7 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
       id: att.id,
       name: att.file_name,
       href: `/api/attachments/${encodeURIComponent(att.file_key)}`,
-      icon: getAttachmentIcon(att.file_name, att.mime_type),
+      icon: attachmentKind(att.file_name, att.mime_type),
     }));
 
   const initials = (name?: string | null) =>
@@ -514,7 +508,7 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
                       return { author: authorOf(q), text: q.message, onClick: () => jumpToMessage(q.id) };
                     })()}
                     replyLabel={lang === "en" ? "Reply" : "ตอบกลับ"}
-                    onReply={() => {
+                    onReply={msg.user_id === admin.id ? undefined : () => {
                       setReplyTo({ id: msg.id, author: who, text: msg.message });
                       textareaRef.current?.focus();
                     }}
@@ -581,7 +575,7 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
             <div className="flex items-start gap-2 rounded-[12px] border-l-[3px] border-ink/40 bg-paper px-3 py-2 text-xs">
               <div className="min-w-0 flex-1">
                 <input type="hidden" name="reply_to_id" value={replyTo.id} />
-                <p className="font-semibold text-ink">↩ {replyTo.author}</p>
+                <p className="flex items-center gap-1.5 font-semibold text-ink"><FaReply aria-hidden className="h-3 w-3" /> {replyTo.author}</p>
                 <p className="line-clamp-2 whitespace-pre-wrap text-muted-ink">{replyTo.text}</p>
               </div>
               <button
@@ -590,7 +584,7 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
                 aria-label={lang === "en" ? "Cancel reply" : "ยกเลิกการตอบกลับ"}
                 className="text-muted-ink hover:text-ink"
               >
-                ✕
+                <FaXmark aria-hidden className="h-3.5 w-3.5" />
               </button>
             </div>
           )}
@@ -642,7 +636,7 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
                     className="flex items-center justify-between gap-2 bg-paper rounded px-2 py-1"
                   >
                     <span>
-                      {getAttachmentIcon(f.fileName, f.mimeType)} {f.fileName}
+                      <span className="inline-flex items-center gap-1.5"><AttachmentIcon kind={attachmentKind(f.fileName, f.mimeType)} /> {f.fileName}</span>
                     </span>
                     <button
                       type="button"
