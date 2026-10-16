@@ -133,6 +133,8 @@ export interface TicketMessage {
   user_id: string;
   message: string;
   is_internal: number;
+  /** Earlier message in the same ticket this one replies to. */
+  reply_to_id?: string | null;
   created_at: number;
 }
 

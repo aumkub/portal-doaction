@@ -14,6 +14,9 @@ export default function MessageBubble({
   alignRight,
   onAttachmentClick,
   internalLabel,
+  quote,
+  onReply,
+  replyLabel = "ตอบกลับ",
 }: {
   message: string;
   isClient: boolean;
@@ -23,6 +26,11 @@ export default function MessageBubble({
   alignRight?: boolean;
   onAttachmentClick?: (attachment: BubbleAttachment) => void;
   internalLabel?: string;
+  /** The earlier message this one replies to. */
+  quote?: { author: string; text: string; onClick?: () => void };
+  /** Shows a reply action under the bubble. */
+  onReply?: () => void;
+  replyLabel?: string;
 }) {
   const shouldAlignRight = alignRight ?? isClient;
 
@@ -39,7 +47,7 @@ export default function MessageBubble({
     : "border-white/30 bg-white/10 text-white hover:bg-white/20";
 
   return (
-    <div className={`flex ${shouldAlignRight ? "justify-end" : "justify-start"}`}>
+    <div className={`flex flex-col ${shouldAlignRight ? "items-end" : "items-start"}`}>
       <div className={`min-w-0 max-w-[85%] md:max-w-[72%] rounded-2xl px-4 py-3 text-sm leading-[1.65] [overflow-wrap:anywhere] ${bubbleClass}`}>
         {isInternal && (
           <p className="mb-1.5 text-[11px] font-bold tracking-[0.06em] text-[#8A6D00]">
@@ -48,6 +56,16 @@ export default function MessageBubble({
         )}
         {authorName ? (
           <p className="mb-1 text-xs font-medium opacity-80">{authorName}</p>
+        ) : null}
+        {quote ? (
+          <button
+            type="button"
+            onClick={quote.onClick}
+            className="mb-2 block w-full rounded-lg border-l-[3px] border-current/40 bg-black/[0.06] px-2.5 py-1.5 text-left text-xs opacity-80 hover:opacity-100"
+          >
+            <span className="block font-semibold">{quote.author}</span>
+            <span className="line-clamp-2 whitespace-pre-wrap">{quote.text}</span>
+          </button>
         ) : null}
         <p className="whitespace-pre-wrap">{linkify(message)}</p>
         {attachments.length > 0 ? (
@@ -82,6 +100,15 @@ export default function MessageBubble({
           </div>
         ) : null}
       </div>
+      {onReply ? (
+        <button
+          type="button"
+          onClick={onReply}
+          className="mt-1 px-1 text-[11px] text-faint-ink hover:text-ink"
+        >
+          ↩ {replyLabel}
+        </button>
+      ) : null}
     </div>
   );
 }

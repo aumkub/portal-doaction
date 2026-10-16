@@ -583,9 +583,9 @@ export function createDB(d1: D1Database) {
     ): Promise<void> {
       await d1
         .prepare(
-          "INSERT INTO ticket_messages (id, ticket_id, user_id, message, is_internal) VALUES (?, ?, ?, ?, ?)"
+          "INSERT INTO ticket_messages (id, ticket_id, user_id, message, is_internal, reply_to_id) VALUES (?, ?, ?, ?, ?, ?)"
         )
-        .bind(msg.id, msg.ticket_id, msg.user_id, msg.message, msg.is_internal)
+        .bind(msg.id, msg.ticket_id, msg.user_id, msg.message, msg.is_internal, msg.reply_to_id ?? null)
         .run();
     },
 

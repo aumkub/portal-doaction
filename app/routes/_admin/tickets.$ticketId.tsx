@@ -40,6 +40,7 @@ const ReplySchema = z.object({
   is_internal: z.string().optional(),
   intent: z.enum(["reply", "status", "delete_message"]).default("reply"),
   message_id: z.string().optional(),
+  reply_to_id: z.string().optional(),
   status: z.string().optional(),
 });
 
@@ -114,7 +115,7 @@ export async function action({ request, context, params }: any) {
     return { errors: parsed.error.flatten().fieldErrors };
   }
 
-  const { intent, message, is_internal, status, message_id } = parsed.data;
+  const { intent, message, is_internal, status, message_id, reply_to_id } = parsed.data;
 
   if (intent === "delete_message") {
     const target = message_id ? await db.getTicketMessage(message_id) : null;
@@ -183,12 +184,14 @@ export async function action({ request, context, params }: any) {
   // Reply
   const isInternal = is_internal === "1" ? 1 : 0;
   const messageId = generateId();
+  const replyTo = reply_to_id ? await db.getTicketMessage(reply_to_id) : null;
   await db.createTicketMessage({
     id: messageId,
     ticket_id: ticket.id,
     user_id: admin.id,
     message,
     is_internal: isInternal,
+    reply_to_id: replyTo?.ticket_id === ticket.id ? replyTo.id : null,
   });
 
   const attachmentsRaw = formData.get("attachments_json");
@@ -311,6 +314,12 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
 
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [composeMode, setComposeMode] = useState<"reply" | "internal">("reply");
+  const [replyTo, setReplyTo] = useState<{ id: string; author: string; text: string } | null>(null);
+  const messagesById = new Map(messages.map((m) => [m.id, m]));
+  const authorOf = (m: TicketMessage) =>
+    usersById[m.user_id]?.name ?? client?.company_name ?? t("rd_ticket_client_label");
+  const jumpToMessage = (id: string) =>
+    document.getElementById(`msg-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const insertQuickReply = (text: string) => {
@@ -346,6 +355,7 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
 
     formRef.current?.reset();
     setUploadedFiles([]);
+    setReplyTo(null);
     setUploadError("");
     isSubmittingReplyRef.current = false;
   }, [navigation.state, errors?.message]);
@@ -493,6 +503,17 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
                     authorName={`${who} · ${formatRelativeTime(msg.created_at, lang)}`}
                     attachments={toBubbleAttachments(msg.id)}
                     onAttachmentClick={(a) => openLightbox(a.id)}
+                    quote={(() => {
+                      if (!msg.reply_to_id) return undefined;
+                      const q = messagesById.get(msg.reply_to_id);
+                      if (!q) return { author: "", text: lang === "en" ? "Message deleted" : "ข้อความถูกลบแล้ว" };
+                      return { author: authorOf(q), text: q.message, onClick: () => jumpToMessage(q.id) };
+                    })()}
+                    replyLabel={lang === "en" ? "Reply" : "ตอบกลับ"}
+                    onReply={() => {
+                      setReplyTo({ id: msg.id, author: who, text: msg.message });
+                      textareaRef.current?.focus();
+                    }}
                   />
                   {msg.user_id === admin.id && (
                     <Form
@@ -552,6 +573,23 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
             ))}
           </div>
           <input type="hidden" name="attachments_json" value={JSON.stringify(uploadedFiles)} />
+          {replyTo && (
+            <div className="flex items-start gap-2 rounded-[12px] border-l-[3px] border-ink/40 bg-paper px-3 py-2 text-xs">
+              <div className="min-w-0 flex-1">
+                <input type="hidden" name="reply_to_id" value={replyTo.id} />
+                <p className="font-semibold text-ink">↩ {replyTo.author}</p>
+                <p className="line-clamp-2 whitespace-pre-wrap text-muted-ink">{replyTo.text}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReplyTo(null)}
+                aria-label={lang === "en" ? "Cancel reply" : "ยกเลิกการตอบกลับ"}
+                className="text-muted-ink hover:text-ink"
+              >
+                ✕
+              </button>
+            </div>
+          )}
           <label htmlFor="admin-ticket-reply" className="sr-only">
             {t("admin_ticket_reply_label")}
           </label>

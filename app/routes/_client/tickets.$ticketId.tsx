@@ -17,7 +17,7 @@ import {
   uploadAttachment,
 } from "~/lib/file-upload.client";
 import { useT } from "~/lib/i18n";
-import type { SupportTicket, TicketAttachment, TicketMessage, User } from "~/types";
+import type { MessageAuthor, SupportTicket, TicketAttachment, TicketMessage, User } from "~/types";
 import StatusBadge from "~/components/tickets/StatusBadge";
 import { StatusStepper } from "~/components/tickets/StatusStepper";
 import PriorityBadge from "~/components/tickets/PriorityBadge";
@@ -27,13 +27,14 @@ import type { LightboxItem } from "~/components/tickets/AttachmentLightbox";
 
 const ReplySchema = z.object({
   message: z.string().min(1, "กรุณาพิมพ์ข้อความ"),
+  reply_to_id: z.string().optional(),
 });
 
 type LoaderData = {
   ticket: SupportTicket;
   messages: TicketMessage[];
   attachments: TicketAttachment[];
-  usersById: Record<string, User>;
+  usersById: Record<string, MessageAuthor>;
   currentUserId: string;
 };
 
@@ -72,16 +73,15 @@ export async function loader({ request, context, params }: any) {
   const [allMessages, allAttachments, admins] = await Promise.all([
     db.listMessagesByTicket(ticket.id),
     db.listAttachmentsByTicket(ticket.id),
-    db.listAdminUsers(),
+    db.listMessageAuthors(ticket.id),
   ]);
   // Internal notes and their files must never leave the server for a client.
   const messages = allMessages.filter((m) => m.is_internal === 0);
   const visibleIds = new Set(messages.map((m) => m.id));
   const attachments = allAttachments.filter((a) => visibleIds.has(a.message_id));
 
-  const usersById: Record<string, User> = {};
-  for (const admin of admins) usersById[admin.id] = admin;
-  usersById[user.id] = user;
+  const usersById: Record<string, MessageAuthor> = {};
+  for (const author of admins) usersById[author.id] = author;
 
   return { ticket, messages, attachments, usersById, currentUserId: user.id };
 }
@@ -143,12 +143,15 @@ export async function action({ request, context, params }: any) {
   }
 
   const messageId = generateId();
+  // Clients can only quote messages they can see.
+  const replyTo = parsed.data.reply_to_id ? await db.getTicketMessage(parsed.data.reply_to_id) : null;
   await db.createTicketMessage({
     id: messageId,
     ticket_id: ticket.id,
     user_id: user.id,
     message: parsed.data.message,
     is_internal: 0,
+    reply_to_id: replyTo?.ticket_id === ticket.id && replyTo.is_internal === 0 ? replyTo.id : null,
   });
 
   const attachmentsRaw = formData.get("attachments_json");
@@ -279,6 +282,17 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
   }));
 
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [replyTo, setReplyTo] = useState<{ id: string; author: string; text: string } | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const messagesById = new Map(messages.map((m) => [m.id, m]));
+  const isTeamAuthor = (userId: string) => {
+    const role = usersById[userId]?.role;
+    return role === "admin" || role === "co-admin";
+  };
+  const authorOf = (userId: string) =>
+    usersById[userId]?.name ?? (lang === "en" ? "You" : "คุณ");
+  const jumpToMessage = (id: string) =>
+    document.getElementById(`msg-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
 
   const openLightbox = (attachmentId: string) => {
     const idx = allLightboxItems.findIndex(i => i.id === attachmentId);
@@ -295,6 +309,7 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
 
     formRef.current?.reset();
     setUploadedFiles([]);
+    setReplyTo(null);
     setUploadError("");
     isSubmittingReplyRef.current = false;
   }, [navigation.state, errors?.message]);
@@ -417,10 +432,11 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
         items={messages
           .filter((msg) => msg.is_internal === 0)
           .map((msg) => ({ key: msg.id, node: (
+            <div id={`msg-${msg.id}`}>
             <MessageBubble
               message={msg.message}
-              isClient={usersById[msg.user_id]?.role !== "admin"}
-              alignRight={usersById[msg.user_id]?.role !== "admin"}
+              isClient={!isTeamAuthor(msg.user_id)}
+              alignRight={!isTeamAuthor(msg.user_id)}
               isInternal={msg.is_internal === 1}
               authorName={usersById[msg.user_id]?.name}
               attachments={(attachmentsByMessage[msg.id] ?? []).map((att) => ({
@@ -430,7 +446,17 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
                 icon: getAttachmentIcon(att.file_name, att.mime_type),
               }))}
               onAttachmentClick={(a) => openLightbox(a.id)}
+              quote={(() => {
+                const q = msg.reply_to_id ? messagesById.get(msg.reply_to_id) : undefined;
+                return q ? { author: authorOf(q.user_id), text: q.message, onClick: () => jumpToMessage(q.id) } : undefined;
+              })()}
+              replyLabel={lang === "en" ? "Reply" : "ตอบกลับ"}
+              onReply={() => {
+                setReplyTo({ id: msg.id, author: authorOf(msg.user_id), text: msg.message });
+                textareaRef.current?.focus();
+              }}
             />
+            </div>
           ) }))}
       />
 
@@ -447,7 +473,25 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
           <label className="block text-sm font-medium text-slate-700">
             {t("ticket_reply_label")}
           </label>
+          {replyTo && (
+            <div className="flex items-start gap-2 rounded-[12px] border-l-[3px] border-ink/40 bg-paper px-3 py-2 text-xs">
+              <div className="min-w-0 flex-1">
+                <input type="hidden" name="reply_to_id" value={replyTo.id} />
+                <p className="font-semibold text-ink">↩ {replyTo.author}</p>
+                <p className="line-clamp-2 whitespace-pre-wrap text-muted-ink">{replyTo.text}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReplyTo(null)}
+                aria-label={lang === "en" ? "Cancel reply" : "ยกเลิกการตอบกลับ"}
+                className="text-muted-ink hover:text-ink"
+              >
+                ✕
+              </button>
+            </div>
+          )}
           <textarea
+            ref={textareaRef}
             name="message"
             rows={2}
             required
