@@ -528,15 +528,10 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
                     reactions={reactionsByMessage[msg.id] ?? []}
                     alignRight={isTeam}
                   />}
-onReply={msg.user_id === admin.id ? undefined : () => {
-                      setReplyTo({ id: msg.id, author: who, text: msg.message });
-                      textareaRef.current?.focus();
-                    }}
-                  />
-                  {(admin.role === "admin" || msg.user_id === admin.id) && (
+trailing={(admin.role === "admin" || msg.user_id === admin.id) && (
                     <Form
                       method="post"
-                      className="mt-1 flex justify-end"
+                      className="inline-flex"
                       onSubmit={(e) => {
                         if (!confirm(lang === "en" ? "Delete this message?" : "ลบข้อความนี้?")) e.preventDefault();
                       }}
@@ -546,12 +541,17 @@ onReply={msg.user_id === admin.id ? undefined : () => {
                       <button
                         type="submit"
                         disabled={navigation.state !== "idle"}
-                        className="text-[11px] text-faint-ink hover:text-rose-600 disabled:opacity-50"
+                        className="inline-flex h-6 items-center px-1 text-[11px] text-faint-ink hover:text-rose-600 disabled:opacity-50"
                       >
                         {lang === "en" ? "Delete" : "ลบ"}
                       </button>
                     </Form>
                   )}
+                    onReply={msg.user_id === admin.id ? undefined : () => {
+                      setReplyTo({ id: msg.id, author: who, text: msg.message });
+                      textareaRef.current?.focus();
+                    }}
+                  />
                 </div>
               </div>
             ) };

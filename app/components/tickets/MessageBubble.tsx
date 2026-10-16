@@ -21,6 +21,7 @@ export default function MessageBubble({
   onReply,
   replyLabel = "ตอบกลับ",
   footer,
+  trailing,
 }: {
   message: string;
   isClient: boolean;
@@ -37,6 +38,8 @@ export default function MessageBubble({
   replyLabel?: string;
   /** Extra actions shown on the same row as reply, e.g. reactions. */
   footer?: React.ReactNode;
+  /** Shown last, at the right end of the action row (e.g. delete). */
+  trailing?: React.ReactNode;
 }) {
   const shouldAlignRight = alignRight ?? isClient;
 
@@ -106,8 +109,8 @@ export default function MessageBubble({
           </div>
         ) : null}
       </div>
-      {onReply || footer ? (
-        <div className={`mt-1 flex flex-wrap items-center gap-1 ${shouldAlignRight ? "flex-row-reverse" : ""}`}>
+      {onReply || footer || trailing ? (
+        <div className="mt-1 flex flex-wrap items-center gap-1">
           {footer}
           {onReply ? (
             <button
@@ -118,6 +121,7 @@ export default function MessageBubble({
               <FaReply aria-hidden className="h-3 w-3" /> {replyLabel}
             </button>
           ) : null}
+          {trailing}
         </div>
       ) : null}
     </div>
