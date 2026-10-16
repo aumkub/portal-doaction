@@ -235,7 +235,7 @@ export async function action({ request, context }: Route.ActionArgs) {
                   db,
                   appUrl: env.APP_URL,
                   notification: {
-                    title: `📧 ส่งอีเมลรายงานให้ ${client.company_name} แล้ว`,
+                    title: `ส่งอีเมลรายงานให้ ${client.company_name} แล้ว`,
                     body: `${clientUser.email} — ${title}`,
                     link: `/admin/reports/${reportId}`,
                   },

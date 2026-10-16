@@ -1,12 +1,6 @@
 import { createDB } from "~/lib/db.server";
 import { sendTelegramNotification } from "~/lib/telegram.server";
 
-const STATUS_EMOJI: Record<string, string> = {
-  open: "🔴",
-  in_progress: "🟡",
-  waiting: "🔵",
-};
-
 const STATUS_LABEL: Record<string, string> = {
   open: "Open",
   in_progress: "In Progress",
@@ -44,7 +38,7 @@ export async function runTicketReminder(env: CloudflareEnv): Promise<void> {
   for (const status of groups) {
     const group = tickets.filter((t) => t.status === status);
     if (group.length === 0) continue;
-    bodyLines.push(`${STATUS_EMOJI[status]} ${STATUS_LABEL[status]} (${group.length})`);
+    bodyLines.push(`${STATUS_LABEL[status]} (${group.length})`);
     const shown = group.slice(0, 10);
     for (const t of shown) {
       bodyLines.push(`  • [${t.company_name}] ${t.title}`);
@@ -58,7 +52,7 @@ export async function runTicketReminder(env: CloudflareEnv): Promise<void> {
     db,
     appUrl: env.APP_URL,
     notification: {
-      title: `🎫 ${tickets.length} ticket${tickets.length > 1 ? "s" : ""} still open`,
+      title: `${tickets.length} ticket${tickets.length > 1 ? "s" : ""} still open`,
       body: bodyLines.join("\n"),
       link: "/admin/tickets",
     },

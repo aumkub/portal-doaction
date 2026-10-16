@@ -90,7 +90,7 @@ export async function notifyReportToClient(params: {
     appUrl: origin,
     clientId: report.client_id,
     notification: {
-      title: `📊 ส่งรายงานให้ลูกค้าแล้ว: ${client.company_name}`,
+      title: `ส่งรายงานให้ลูกค้าแล้ว: ${client.company_name}`,
       body: report.title,
       link: `/admin/reports/${report.id}`,
     },

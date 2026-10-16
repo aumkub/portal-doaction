@@ -3,6 +3,8 @@
  * A client-side interactive form for creating/editing reports with dynamic tasks.
  */
 import { useState, useCallback, useMemo, useEffect, useRef, type ReactNode } from "react";
+import type { IconType } from "react-icons";
+import { FaBolt, FaChartLine, FaCheck, FaPlus, FaLaptopCode, FaLock, FaThumbtack, FaWrench } from "react-icons/fa6";
 import { Form } from "react-router";
 import { Plus, Trash2, Loader2, Search, Check } from "lucide-react";
 import { Button } from "~/components/ui/button";
@@ -23,14 +25,19 @@ import type { Lang } from "~/lib/translations";
 import { getMonthName } from "~/lib/utils";
 import type { TranslationKey } from "~/lib/translations";
 
-const categoryEmoji: Record<TaskCategory, string> = {
-  maintenance: "🔧",
-  development: "💻",
-  security: "🔒",
-  seo: "📈",
-  performance: "⚡",
-  other: "📌",
+const categoryIcon: Record<TaskCategory, IconType> = {
+  maintenance: FaWrench,
+  development: FaLaptopCode,
+  security: FaLock,
+  seo: FaChartLine,
+  performance: FaBolt,
+  other: FaThumbtack,
 };
+
+function CategoryIcon({ category, className }: { category: TaskCategory; className?: string }) {
+  const Icon = categoryIcon[category] ?? FaThumbtack;
+  return <Icon aria-hidden className={className ?? "h-3 w-3 shrink-0 text-muted-ink"} />;
+}
 
 const categoryDot: Record<TaskCategory, string> = {
   maintenance: "bg-[#2F6FED]",
@@ -183,7 +190,7 @@ export default function ReportEditor({
     () =>
       (Object.keys(categoryKey) as TaskCategory[]).map((value) => ({
         value,
-        label: `${categoryEmoji[value]} ${t(categoryKey[value])}`,
+        label: t(categoryKey[value]),
       })),
     [t]
   );
@@ -662,7 +669,7 @@ export default function ReportEditor({
                           : "border border-line bg-white text-ink-soft hover:border-ink/30"
                       }`}
                     >
-                      {alreadyAdded ? "✓ " : "+ "}
+                      {alreadyAdded ? <FaCheck aria-hidden className="mr-1 inline h-3 w-3" /> : <FaPlus aria-hidden className="mr-1 inline h-3 w-3" />}
                       {preset.title}
                     </button>
                   );
@@ -680,6 +687,7 @@ export default function ReportEditor({
                   <div className="flex items-center justify-between gap-2">
                     <p className="flex min-w-0 items-center gap-2 text-[13px] font-semibold text-ink">
                       <span className={`h-2 w-2 shrink-0 rounded-full ${categoryDot[group.value]}`} />
+                      <CategoryIcon category={group.value} />
                       <span className="truncate">{group.label}</span>
                       <span className="rounded-full bg-paper px-2 py-0.5 text-xs font-semibold text-muted-ink tabular-nums">{group.tasks.length}</span>
                     </p>
@@ -739,7 +747,10 @@ export default function ReportEditor({
                           <SelectContent>
                             {categoryOptions.map((o) => (
                               <SelectItem key={o.value} value={o.value} className="text-xs">
-                                {o.label}
+                                <span className="inline-flex items-center gap-1.5">
+                                  <CategoryIcon category={o.value} />
+                                  {o.label}
+                                </span>
                               </SelectItem>
                             ))}
                           </SelectContent>

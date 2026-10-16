@@ -254,7 +254,7 @@ export async function action({ request, params, context }: any) {
       sendTelegramNotificationForClient({
         db, appUrl,
         notification: {
-          title: `📝 Internal Note Added - ${client.company_name}`,
+          title: `Internal Note Added - ${client.company_name}`,
           body: `${currentUser.name} (${currentUser.role}) added a note:\n\n${note.substring(0, 200)}${note.length > 200 ? "..." : ""}`,
           link: `/admin/clients/${client.id}`,
         },

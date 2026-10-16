@@ -172,7 +172,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       id: generateId(),
       user_id: co_admin_id,
       type: "ticket_update" as const,
-      title: "🧪 ทดสอบการแจ้งเตือน",
+      title: "ทดสอบการแจ้งเตือน",
       body: `ทดสอบการส่งการแจ้งเตือนสำหรับลูกค้า: ${client.company_name}${
         assignment?.telegram_group_id
           ? `\nTelegram Group ID: ${assignment.telegram_group_id}`

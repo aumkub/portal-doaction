@@ -1,4 +1,5 @@
 import { Form, redirect, useLoaderData, useActionData, useNavigation } from "react-router";
+import { FaTriangleExclamation } from "react-icons/fa6";
 import { z } from "zod";
 import { requireAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
@@ -267,7 +268,7 @@ export default function WebDAVSettingsPage() {
             </p>
             {errors?.label && (
               <p className="text-xs text-rose-600 flex items-center gap-1">
-                <span>⚠️</span> {errors.label[0]}
+                <FaTriangleExclamation aria-hidden className="h-3.5 w-3.5 shrink-0" /> {errors.label[0]}
               </p>
             )}
           </div>
@@ -291,7 +292,7 @@ export default function WebDAVSettingsPage() {
             </p>
             {errors?.url && (
               <p className="text-xs text-rose-600 flex items-center gap-1">
-                <span>⚠️</span> {errors.url[0]}
+                <FaTriangleExclamation aria-hidden className="h-3.5 w-3.5 shrink-0" /> {errors.url[0]}
               </p>
             )}
           </div>
@@ -312,7 +313,7 @@ export default function WebDAVSettingsPage() {
               />
               {errors?.username && (
                 <p className="text-xs text-rose-600 flex items-center gap-1">
-                  <span>⚠️</span> {errors.username[0]}
+                  <FaTriangleExclamation aria-hidden className="h-3.5 w-3.5 shrink-0" /> {errors.username[0]}
                 </p>
               )}
             </div>
@@ -333,7 +334,7 @@ export default function WebDAVSettingsPage() {
               </p>
               {errors?.password && (
                 <p className="text-xs text-rose-600 flex items-center gap-1">
-                  <span>⚠️</span> {errors.password[0]}
+                  <FaTriangleExclamation aria-hidden className="h-3.5 w-3.5 shrink-0" /> {errors.password[0]}
                 </p>
               )}
             </div>
@@ -358,7 +359,7 @@ export default function WebDAVSettingsPage() {
             </p>
             {errors?.path && (
               <p className="text-xs text-rose-600 flex items-center gap-1">
-                <span>⚠️</span> {errors.path[0]}
+                <FaTriangleExclamation aria-hidden className="h-3.5 w-3.5 shrink-0" /> {errors.path[0]}
               </p>
             )}
           </div>
@@ -380,7 +381,7 @@ export default function WebDAVSettingsPage() {
 
           {errors?.general && (
             <div className="flex items-start gap-2 p-3 bg-rose-50 border border-rose-200 rounded-[14px]">
-              <span className="text-rose-600 mt-0.5">⚠️</span>
+              <FaTriangleExclamation aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
               <p className="text-sm text-rose-800">{errors.general[0]}</p>
             </div>
           )}

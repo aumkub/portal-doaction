@@ -48,7 +48,7 @@ export async function action({ request, context }: any) {
     appUrl,
     clientId: report.client_id,
     notification: {
-      title: `📊 รายงานประจำเดือน: ${client.company_name}`,
+      title: `รายงานประจำเดือน: ${client.company_name}`,
       body: report.title,
       link: reportLink,
     },

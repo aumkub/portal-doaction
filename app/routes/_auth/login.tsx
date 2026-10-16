@@ -7,7 +7,7 @@ import { sendMagicLinkEmail } from "~/lib/email.server";
 import { parseClientCcEmails } from "~/lib/client-cc";
 import { useT } from "~/lib/i18n";
 import { z } from "zod";
-import { FaEnvelope, FaLock, FaArrowRight, FaChevronDown } from "react-icons/fa6";
+import { FaEnvelope, FaLock, FaArrowRight, FaChevronDown, FaBolt } from "react-icons/fa6";
 
 export function meta() {
   return [{ title: "เข้าสู่ระบบ — do action portal" }];
@@ -292,7 +292,7 @@ export default function LoginPage() {
                       disabled={isSubmittingBypass}
                       className="w-full h-10 rounded-full border border-line bg-white text-[13px] font-semibold text-ink hover:bg-paper disabled:opacity-50 transition-colors"
                     >
-                      {isSubmittingBypass ? "กำลัง bypass..." : `⚡ Local bypass → ${LOCAL_ADMIN_EMAIL}`}
+                      {isSubmittingBypass ? "กำลัง bypass..." : <span className="inline-flex items-center gap-1.5"><FaBolt aria-hidden className="h-3 w-3" /> Local bypass → {LOCAL_ADMIN_EMAIL}</span>}
                     </button>
                   </Form>
                 ) : null}
