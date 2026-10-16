@@ -523,15 +523,15 @@ export default function AdminTicketDetailPage({ loaderData, actionData }: any) {
                       return { author: authorOf(q), text: q.message, onClick: () => jumpToMessage(q.id) };
                     })()}
                     replyLabel={lang === "en" ? "Reply" : "ตอบกลับ"}
-                    onReply={msg.user_id === admin.id ? undefined : () => {
-                      setReplyTo({ id: msg.id, author: who, text: msg.message });
-                      textareaRef.current?.focus();
-                    }}
-                  />
-                  <ReactionBar
+                    footer={<ReactionBar
                     messageId={msg.id}
                     reactions={reactionsByMessage[msg.id] ?? []}
                     alignRight={isTeam}
+                  />}
+onReply={msg.user_id === admin.id ? undefined : () => {
+                      setReplyTo({ id: msg.id, author: who, text: msg.message });
+                      textareaRef.current?.focus();
+                    }}
                   />
                   {(admin.role === "admin" || msg.user_id === admin.id) && (
                     <Form

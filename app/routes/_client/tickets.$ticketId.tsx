@@ -469,15 +469,15 @@ export default function TicketDetailPage({ loaderData, actionData }: any) {
                 return q ? { author: authorOf(q.user_id), text: q.message, onClick: () => jumpToMessage(q.id) } : undefined;
               })()}
               replyLabel={lang === "en" ? "Reply" : "ตอบกลับ"}
-              onReply={msg.user_id === currentUserId ? undefined : () => {
-                setReplyTo({ id: msg.id, author: authorOf(msg.user_id), text: msg.message });
-                textareaRef.current?.focus();
-              }}
-            />
-            <ReactionBar
+              footer={<ReactionBar
               messageId={msg.id}
               reactions={reactionsByMessage[msg.id] ?? []}
               alignRight={!isTeamAuthor(msg.user_id)}
+            />}
+onReply={msg.user_id === currentUserId ? undefined : () => {
+                setReplyTo({ id: msg.id, author: authorOf(msg.user_id), text: msg.message });
+                textareaRef.current?.focus();
+              }}
             />
             </div>
           ) }))}

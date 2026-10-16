@@ -64,7 +64,7 @@ export function ReactionBar({
   };
 
   return (
-    <div className={`relative mt-1 flex flex-wrap items-center gap-1 ${alignRight ? "justify-end" : ""}`}>
+    <div className={`relative flex flex-wrap items-center gap-1 ${alignRight ? "flex-row-reverse" : ""}`}>
       {shown.map(({ key, count, mine, names }) => {
         const { Icon, color, label } = ICONS[key];
         return (
