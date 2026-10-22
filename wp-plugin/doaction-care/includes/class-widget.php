@@ -15,7 +15,14 @@ class DoAction_Care_Widget {
 
 	public static function init() {
 		add_action( 'wp_dashboard_setup', array( __CLASS__, 'register' ) );
+		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'assets' ) );
 		add_action( 'admin_post_doaction_care_ticket', array( __CLASS__, 'handle_ticket' ) );
+	}
+
+	public static function assets( $hook ) {
+		if ( 'index.php' === $hook && DoAction_Care_Api_Client::is_paired() ) {
+			wp_enqueue_style( 'doaction-care-admin', plugins_url( 'assets/admin.css', DOACTION_CARE_FILE ), array(), DOACTION_CARE_VERSION );
+		}
 	}
 
 	public static function register() {
@@ -34,40 +41,53 @@ class DoAction_Care_Widget {
 		if ( ! empty( $w['contract_end'] ) ) {
 			$end      = strtotime( (string) $w['contract_end'] . ' 23:59:59' );
 			$expired  = $end && $end < time();
-			$contract = ( $expired ? 'หมดอายุแล้ว ' : 'ถึง ' ) . date_i18n( get_option( 'date_format' ), $end );
+			$contract = $end ? date_i18n( 'j M Y', $end ) : '—';
 		}
 		$age    = DoAction_Care_Runner::latest_backup_age();
-		$backup = null === $age ? 'ไม่พบข้อมูล' : ( $age < 3600 ? 'ไม่ถึง 1 ชม.ที่แล้ว' : round( $age / 3600 ) . ' ชม.ที่แล้ว' );
-		$portal = ! empty( $w['portal_url'] ) ? esc_url( (string) $w['portal_url'] ) : '';
+		$backup = null === $age ? 'ไม่พบ' : ( $age < 3600 ? '< 1 ชม.' : ( $age >= 2 * DAY_IN_SECONDS ? floor( $age / DAY_IN_SECONDS ) . ' วัน' : round( $age / 3600 ) . ' ชม.' ) );
+		$uptime = isset( $w['uptime30'] ) && is_numeric( $w['uptime30'] ) ? number_format( (float) $w['uptime30'], 2 ) . '%' : '—';
+		$portal = ! empty( $w['portal_url'] ) ? (string) $w['portal_url'] : DOACTION_CARE_PORTAL;
 		$notice = isset( $_GET['doaction_care_ticket'] ) ? sanitize_key( wp_unslash( $_GET['doaction_care_ticket'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$stats  = array(
+			array( 'Uptime 30 วัน', $uptime, false ),
+			array( 'อัปเดตเดือนนี้', ( isset( $w['updates_this_month'] ) ? (int) $w['updates_this_month'] : 0 ) . ' รายการ', false ),
+			array( 'Backup ล่าสุด', $backup, null === $age || $age > 36 * HOUR_IN_SECONDS ),
+			array( 'เรื่องที่ดำเนินการ', ( isset( $w['open_tickets'] ) ? (int) $w['open_tickets'] : 0 ) . ' เรื่อง', false ),
+		);
 		?>
-		<?php if ( 'ok' === $notice ) : ?>
-			<div class="notice notice-success inline"><p>ส่งเรื่องถึงทีม do action แล้ว ติดตามได้ในพอร์ทัล</p></div>
-		<?php elseif ( 'error' === $notice ) : ?>
-			<div class="notice notice-error inline"><p>ส่งเรื่องไม่สำเร็จ ลองใหม่ หรือแจ้งทางพอร์ทัล</p></div>
-		<?php endif; ?>
-		<table class="widefat striped" style="border:0">
-			<tbody>
-				<tr><td>สัญญาดูแล</td><td style="<?php echo $expired ? 'color:#b32d2e' : ''; ?>"><?php echo esc_html( $contract ); ?></td></tr>
-				<tr><td>Uptime 30 วัน</td><td><?php echo esc_html( isset( $w['uptime30'] ) && is_numeric( $w['uptime30'] ) ? number_format( (float) $w['uptime30'], 2 ) . '%' : '—' ); ?></td></tr>
-				<tr><td>อัปเดตเดือนนี้</td><td><?php echo esc_html( (string) ( isset( $w['updates_this_month'] ) ? (int) $w['updates_this_month'] : 0 ) ); ?> รายการ</td></tr>
-				<tr><td>เรื่องที่กำลังดำเนินการ</td><td><?php echo esc_html( (string) ( isset( $w['open_tickets'] ) ? (int) $w['open_tickets'] : 0 ) ); ?> เรื่อง</td></tr>
-				<tr><td>Backup ล่าสุด</td><td><?php echo esc_html( $backup ); ?></td></tr>
-			</tbody>
-		</table>
-		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin-top:12px">
-			<input type="hidden" name="action" value="doaction_care_ticket">
-			<?php wp_nonce_field( 'doaction_care_ticket' ); ?>
-			<p><strong>แจ้งปัญหาถึงทีม do action</strong></p>
-			<p><input type="text" name="title" class="widefat" maxlength="200" required placeholder="หัวข้อ"></p>
-			<p><textarea name="description" class="widefat" rows="3" maxlength="5000" required placeholder="รายละเอียด"></textarea></p>
-			<p style="display:flex;gap:8px;align-items:center">
-				<button type="submit" class="button button-primary">ส่งเรื่อง</button>
-				<?php if ( $portal ) : ?>
-					<a href="<?php echo esc_url( $portal ); ?>" target="_blank" rel="noopener">เปิดพอร์ทัล</a>
+		<div class="dac-wrap dac-widget">
+			<div class="dac-whead">
+				<img src="<?php echo esc_url( plugins_url( 'assets/logo.svg', DOACTION_CARE_FILE ) ); ?>" alt="do action">
+				<span class="dac-tag">Care</span>
+				<?php if ( ! empty( $w['contract_end'] ) ) : ?>
+					<span class="dac-wcontract<?php echo $expired ? ' is-bad' : ''; ?>"><?php echo esc_html( ( $expired ? 'สัญญาหมดแล้ว ' : 'ดูแลถึง ' ) . $contract ); ?></span>
 				<?php endif; ?>
-			</p>
-		</form>
+			</div>
+
+			<?php if ( 'ok' === $notice ) : ?>
+				<div class="dac-notice is-success">ส่งเรื่องถึงทีม do action แล้ว ติดตามได้ในพอร์ทัล</div>
+			<?php elseif ( 'error' === $notice ) : ?>
+				<div class="dac-notice is-error">ส่งเรื่องไม่สำเร็จ ลองใหม่ หรือแจ้งผ่านพอร์ทัล</div>
+			<?php endif; ?>
+
+			<div class="dac-stats dac-wstats">
+				<?php foreach ( $stats as $st ) : ?>
+					<div class="dac-stat"><div class="dac-k"><?php echo esc_html( $st[0] ); ?></div><div class="dac-v<?php echo $st[2] ? ' is-bad' : ''; ?>"><?php echo esc_html( $st[1] ); ?></div></div>
+				<?php endforeach; ?>
+			</div>
+
+			<form class="dac-wform" method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+				<input type="hidden" name="action" value="doaction_care_ticket">
+				<?php wp_nonce_field( 'doaction_care_ticket' ); ?>
+				<p class="dac-wtitle">แจ้งปัญหาถึงทีม do action</p>
+				<label class="dac-field"><input type="text" name="title" maxlength="200" required placeholder="หัวข้อ เช่น ฟอร์มติดต่อส่งไม่ได้"></label>
+				<label class="dac-field"><textarea name="description" rows="3" maxlength="5000" required placeholder="รายละเอียด"></textarea></label>
+				<div class="dac-actions">
+					<button type="submit" class="dac-btn is-primary">ส่งเรื่อง</button>
+					<a class="dac-btn is-yellow" href="<?php echo esc_url( $portal ); ?>" target="_blank" rel="noopener">เปิดพอร์ทัล</a>
+				</div>
+			</form>
+		</div>
 		<?php
 	}
 
