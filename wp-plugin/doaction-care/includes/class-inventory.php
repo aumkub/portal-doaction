@@ -90,8 +90,11 @@ class DoAction_Care_Inventory {
 			}
 		}
 
+		// Read from disk: right after a self-update the constant still holds the old version.
+		$self = get_file_data( DOACTION_CARE_FILE, array( 'Version' => 'Version' ) );
+
 		return array(
-			'plugin_version'    => DOACTION_CARE_VERSION,
+			'plugin_version'    => $self['Version'] ? (string) $self['Version'] : DOACTION_CARE_VERSION,
 			'wp_version'        => (string) get_bloginfo( 'version' ),
 			'php_version'       => PHP_VERSION,
 			'mysql_version'     => (string) $wpdb->db_version(),

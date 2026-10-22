@@ -58,6 +58,13 @@ async function readBody(request: Request): Promise<Uint8Array | null> {
 
 const PLUGIN_FILE_RE = /^\/agent\/v1\/plugin\/(doaction-care-\d+\.\d+\.\d+\.zip)$/;
 
+function newerVersion(a: string, b: string): boolean {
+  const pa = a.split(".").map(Number);
+  const pb = b.split(".").map(Number);
+  for (let i = 0; i < 3; i++) if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) > (pb[i] ?? 0);
+  return false;
+}
+
 /** Latest signed plugin release (uploaded by scripts/release-care-plugin.mjs). */
 async function pluginRelease(env: CloudflareEnv, origin: string) {
   const obj = await env.ATTACHMENTS.get("care-plugin/latest.json").catch(() => null);
@@ -201,10 +208,23 @@ async function handleHeartbeat(request: Request, env: CloudflareEnv): Promise<Re
     site_id: siteId, now, json: JSON.stringify(inv), site_url: inv.site_url,
     plugin_version: inv.plugin_version, wp_version: inv.wp_version, php_version: inv.php_version,
   });
+  const release = await pluginRelease(env, new URL(request.url).origin);
+  // Our own agent is kept current without waiting for the team: queue a
+  // self-update (same backup/rollback path) when a newer signed release exists.
+  const alreadyDone = release && (await env.DB
+    .prepare("SELECT 1 FROM site_jobs WHERE site_id = ? AND slug = 'doaction-care/doaction-care.php' AND status = 'succeeded' AND result_version = ? LIMIT 1")
+    .bind(siteId, release.version)
+    .first());
+  if (release && !alreadyDone && newerVersion(release.version, inv.plugin_version) && !(await env.SESSIONPORTAL.get(CARE_PAUSED_KEY))) {
+    await db.queueSiteJobs([{
+      id: generateId(), site_id: siteId, kind: "plugin", slug: "doaction-care/doaction-care.php", name: "do action Care",
+      from_version: inv.plugin_version, to_version: release.version, not_before: 0, created_by: "system", created_at: now,
+    }]);
+  }
   return signedJson(secret, 200, {
     ok: true, server_time: now,
     widget: await widgetData(env, site, now),
-    plugin_release: await pluginRelease(env, new URL(request.url).origin),
+    plugin_release: release,
   });
 }
 

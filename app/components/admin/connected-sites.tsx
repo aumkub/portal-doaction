@@ -65,7 +65,7 @@ function JobList({ jobs }: { jobs: SiteJobView[] }) {
               </span>
             </div>
             <p className="mt-0.5 text-[11px] text-muted-ink">
-              {j.created_by_name ?? "—"} · {fmtDateTime(j.created_at)}
+              {j.created_by_name ?? "อัตโนมัติ"} · {fmtDateTime(j.created_at)}
               {j.status === "queued" && j.not_before > j.created_at && ` · เริ่มได้ ${fmtDateTime(j.not_before)}`}
             </p>
             {openLog === j.id && j.log && (

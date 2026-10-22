@@ -27,6 +27,11 @@ class DoAction_Care_Runner {
 		if ( ! DoAction_Care_Api_Client::is_paired() || get_transient( self::LOCK ) ) {
 			return;
 		}
+		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+		// Share WordPress's own updater lock so its background updates never run alongside ours.
+		if ( ! WP_Upgrader::create_lock( 'auto_updater', 15 * MINUTE_IN_SECONDS ) ) {
+			return;
+		}
 		set_transient( self::LOCK, time(), 10 * MINUTE_IN_SECONDS );
 		ignore_user_abort( true );
 		if ( function_exists( 'set_time_limit' ) ) {
@@ -56,6 +61,7 @@ class DoAction_Care_Runner {
 			}
 		} finally {
 			delete_transient( self::LOCK );
+			WP_Upgrader::release_lock( 'auto_updater' );
 		}
 		if ( $ran > 0 ) {
 			wp_clean_plugins_cache( true );
