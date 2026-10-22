@@ -107,6 +107,22 @@ function BackupLine({ inv }: { inv: NonNullable<ConnectedSite["inventory"]> }) {
   );
 }
 
+function RefreshButton({ siteId }: { siteId: string }) {
+  const fetcher = useFetcher<{ ok?: string; error?: string }>();
+  const msg = fetcher.data?.ok ?? fetcher.data?.error;
+  return (
+    <button
+      type="button"
+      disabled={fetcher.state !== "idle"}
+      title={msg}
+      onClick={() => fetcher.submit({ intent: "site_refresh", site_id: siteId }, { method: "post", action: "/admin/sites" })}
+      className="text-[11px] font-semibold text-muted-ink hover:text-ink disabled:opacity-50"
+    >
+      {fetcher.state !== "idle" ? "กำลังขอข้อมูล…" : fetcher.data?.ok ? "ขอแล้ว ✓" : fetcher.data?.error ? "ติดต่อไม่ได้" : "รีเฟรชข้อมูล"}
+    </button>
+  );
+}
+
 function UpdateForm({ site, paused }: { site: ConnectedSite; paused: boolean }) {
   const fetcher = useFetcher<{ ok?: string; error?: string }>();
   const inv = site.inventory!;
@@ -165,10 +181,12 @@ function UpdateForm({ site, paused }: { site: ConnectedSite; paused: boolean }) 
 
 /** Updates are offered only for sites that checked in recently. */
 function isReachable(site: ConnectedSite) {
-  return site.last_seen_at != null && Math.floor(Date.now() / 1000) - site.last_seen_at < 2 * 3600;
+  return site.last_seen_at != null && Math.floor(Date.now() / 1000) - site.last_seen_at < SILENT_AFTER_S;
 }
 
-export const ONLINE_WINDOW_S = 30 * 60;
+/** Sites send a heartbeat hourly (WP-cron, so later on quiet sites). */
+export const ONLINE_WINDOW_S = 90 * 60;
+export const SILENT_AFTER_S = 3 * 3600;
 
 function fmtDateTime(unix: number | null) {
   if (!unix) return "—";
@@ -219,6 +237,7 @@ export function SiteCard({
           <div className="flex flex-wrap items-center gap-2">
             <p className="truncate text-sm font-semibold text-ink">{site.site_url}</p>
             <Status site={site} />
+            {canUpdate && !site.revoked_at && <RefreshButton siteId={site.id} />}
           </div>
           {client && (
             <Link to={`/admin/clients/${client.id}`} className="mt-0.5 inline-block text-xs font-medium text-ink-soft hover:text-ink hover:underline underline-offset-2">
@@ -269,7 +288,7 @@ export function SiteCard({
 
           {canUpdate && !site.revoked_at && inv.file_mods_allowed && isReachable(site) && <UpdateForm site={site} paused={paused} />}
           {canUpdate && !site.revoked_at && !isReachable(site) && (inv.core_update || pluginUpdates.length > 0 || themeUpdates.length > 0) && (
-            <p className="mt-3 text-xs text-muted-ink">อัปเดตได้เมื่อเว็บกลับมาส่งข้อมูล (ขาดการติดต่อเกิน 2 ชม.)</p>
+            <p className="mt-3 text-xs text-muted-ink">อัปเดตได้เมื่อเว็บกลับมาส่งข้อมูล (ขาดการติดต่อเกิน 3 ชม.)</p>
           )}
           <JobList jobs={jobs} />
 

@@ -143,9 +143,7 @@ class DoAction_Care_Api_Client {
 				'last_error' => '',
 			)
 		);
-		if ( ! wp_next_scheduled( DOACTION_CARE_CRON_HOOK ) ) {
-			wp_schedule_event( time() + 60, 'doaction_care_15min', DOACTION_CARE_CRON_HOOK );
-		}
+		doaction_care_ensure_schedule();
 		return true;
 	}
 

@@ -142,7 +142,7 @@ export async function loader({ request, context }: any) {
        FROM sites s JOIN clients c ON c.id = s.client_id
        WHERE s.revoked_at IS NULL AND c.deleted_at IS NULL`
     )
-    .bind(Math.floor(Date.now() / 1000) - 2 * 3600, Math.floor(Date.now() / 1000) - 7 * 86400)
+    .bind(Math.floor(Date.now() / 1000) - 3 * 3600, Math.floor(Date.now() / 1000) - 7 * 86400)
     .first<{ silent: number | null; failed: number }>()
     .catch(() => null);
 
@@ -474,7 +474,7 @@ export default function AdminOverviewPage({ loaderData }: any) {
         >
           <span className="font-semibold">เว็บไซต์ที่ดูแล: </span>
           {[
-            data.careAlert.silent > 0 && `${data.careAlert.silent} เว็บไม่ได้ส่งข้อมูลเกิน 2 ชม.`,
+            data.careAlert.silent > 0 && `${data.careAlert.silent} เว็บไม่ได้ส่งข้อมูลเกิน 3 ชม.`,
             data.careAlert.failed > 0 && `อัปเดตไม่สำเร็จ ${data.careAlert.failed} รายการใน 7 วัน`,
           ].filter(Boolean).join(" · ")}
           <span className="ml-1 font-semibold underline underline-offset-2">ดูรายละเอียด</span>

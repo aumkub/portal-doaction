@@ -3,7 +3,7 @@
  * Plugin Name:       do action Care
  * Plugin URI:        https://doaction.co.th
  * Description:       Connects this site to the do action client portal: reports versions and available updates, runs updates the do action team starts (with checks and automatic rollback), and shows a care summary on the dashboard.
- * Version:           0.3.3
+ * Version:           0.3.4
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            do action
@@ -16,7 +16,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'DOACTION_CARE_VERSION', '0.3.3' );
+define( 'DOACTION_CARE_VERSION', '0.3.4' );
 define( 'DOACTION_CARE_FILE', __FILE__ );
 if ( ! defined( 'DOACTION_CARE_PORTAL' ) ) {
 	define( 'DOACTION_CARE_PORTAL', 'https://portal.doaction.co.th' );
@@ -37,22 +37,24 @@ require_once __DIR__ . '/includes/class-updater.php';
 
 DoAction_Care_Updater::init();
 
-add_filter(
-	'cron_schedules',
-	static function ( $schedules ) {
-		$schedules['doaction_care_15min'] = array(
-			'interval' => 15 * MINUTE_IN_SECONDS,
-			'display'  => 'Every 15 minutes (do action Care)',
-		);
-		return $schedules;
+define( 'DOACTION_CARE_WAKE_HOOK', 'doaction_care_wake' );
+
+/** Heartbeat runs hourly; sites scheduled by older versions (every 15 min) are moved over. */
+function doaction_care_ensure_schedule() {
+	if ( 'hourly' !== wp_get_schedule( DOACTION_CARE_CRON_HOOK ) ) {
+		wp_clear_scheduled_hook( DOACTION_CARE_CRON_HOOK );
+		wp_schedule_event( time() + 60, 'hourly', DOACTION_CARE_CRON_HOOK );
 	}
-);
+}
+add_action( 'init', 'doaction_care_ensure_schedule' );
 
 add_action( DOACTION_CARE_CRON_HOOK, array( 'DoAction_Care_Api_Client', 'send_heartbeat' ) );
 add_action( DOACTION_CARE_CRON_HOOK, array( 'DoAction_Care_Runner', 'poll' ), 20 );
 add_action( DOACTION_CARE_POLL_HOOK, array( 'DoAction_Care_Runner', 'poll' ) );
+add_action( DOACTION_CARE_WAKE_HOOK, array( 'DoAction_Care_Api_Client', 'send_heartbeat' ) );
+add_action( DOACTION_CARE_WAKE_HOOK, array( 'DoAction_Care_Runner', 'poll' ), 20 );
 
-// The portal's wake call carries no command: it only makes the site pull its jobs now.
+// The portal's wake call carries no command: the site sends fresh data and pulls its jobs now.
 add_action(
 	'rest_api_init',
 	static function () {
@@ -63,8 +65,8 @@ add_action(
 				'methods'             => 'POST',
 				'permission_callback' => array( 'DoAction_Care_Api_Client', 'verify_portal_request' ),
 				'callback'            => static function () {
-					if ( ! wp_next_scheduled( DOACTION_CARE_POLL_HOOK ) ) {
-						wp_schedule_single_event( time(), DOACTION_CARE_POLL_HOOK );
+					if ( ! wp_next_scheduled( DOACTION_CARE_WAKE_HOOK ) ) {
+						wp_schedule_single_event( time(), DOACTION_CARE_WAKE_HOOK );
 					}
 					spawn_cron();
 					return new WP_REST_Response( array( 'ok' => true ), 202 );
@@ -77,9 +79,7 @@ add_action(
 register_activation_hook(
 	__FILE__,
 	static function () {
-		if ( ! wp_next_scheduled( DOACTION_CARE_CRON_HOOK ) ) {
-			wp_schedule_event( time() + 60, 'doaction_care_15min', DOACTION_CARE_CRON_HOOK );
-		}
+		doaction_care_ensure_schedule();
 	}
 );
 
@@ -88,6 +88,7 @@ register_deactivation_hook(
 	static function () {
 		wp_clear_scheduled_hook( DOACTION_CARE_CRON_HOOK );
 		wp_clear_scheduled_hook( DOACTION_CARE_POLL_HOOK );
+		wp_clear_scheduled_hook( DOACTION_CARE_WAKE_HOOK );
 	}
 );
 

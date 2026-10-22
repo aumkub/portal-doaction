@@ -3,7 +3,7 @@ import { Form, Link, useLoaderData } from "react-router";
 import type { Route } from "./+types/sites";
 import { requireCoAdminOrAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
-import { ONLINE_WINDOW_S, SiteCard, type ConnectedSite } from "~/components/admin/connected-sites";
+import { ONLINE_WINDOW_S, SILENT_AFTER_S, SiteCard, type ConnectedSite } from "~/components/admin/connected-sites";
 import { CARE_PAUSED_KEY, nextNightWindow, queueJobs, wakeSite, type JobRequest } from "~/lib/agent/jobs.server";
 import { InventorySchema } from "~/lib/agent/inventory";
 import { ConfirmButton } from "~/components/ui/confirm-button";
@@ -52,13 +52,21 @@ export async function action({ request, context }: Route.ActionArgs) {
     await db.cancelSiteJob(String(form.get("job_id") ?? ""));
     return { ok: "ยกเลิกแล้ว" };
   }
+  if (intent === "site_refresh") {
+    const site = await db.getSiteById(String(form.get("site_id") ?? ""));
+    if (!site || site.revoked_at) return { error: "ไม่พบเว็บไซต์" };
+    const invRow = await env.DB.prepare("SELECT json FROM site_inventory WHERE site_id = ?").bind(site.id).first<{ json: string }>();
+    const home = invRow ? (JSON.parse(invRow.json) as { home_url?: string }).home_url : site.site_url;
+    const ok = await wakeSite(env, site, home ?? site.site_url);
+    return ok ? { ok: "ขอข้อมูลใหม่แล้ว รอสักครู่แล้วรีเฟรชหน้า" } : { error: "ติดต่อเว็บไม่ได้" };
+  }
   if (intent === "jobs_queue") {
     if (await env.SESSIONPORTAL.get(CARE_PAUSED_KEY)) return { error: "ระบบถูกหยุดอยู่ กด “เปิดการอัปเดต” ก่อน" };
     const siteId = String(form.get("site_id") ?? "");
     const site = await db.getSiteById(siteId);
     if (!site || site.revoked_at) return { error: "ไม่พบเว็บไซต์" };
-    if (!site.last_seen_at || Math.floor(Date.now() / 1000) - site.last_seen_at > 2 * 3600) {
-      return { error: "เว็บนี้ขาดการติดต่อเกิน 2 ชม. ยังสั่งอัปเดตไม่ได้" };
+    if (!site.last_seen_at || Math.floor(Date.now() / 1000) - site.last_seen_at > SILENT_AFTER_S) {
+      return { error: "เว็บนี้ขาดการติดต่อเกิน 3 ชม. ยังสั่งอัปเดตไม่ได้" };
     }
     const invRow = await env.DB.prepare("SELECT json FROM site_inventory WHERE site_id = ?").bind(siteId).first<{ json: string }>();
     const inv = invRow ? InventorySchema.safeParse(JSON.parse(invRow.json)) : null;
@@ -97,7 +105,7 @@ export default function AdminSitesPage() {
   const { sites, jobs, paused, now } = useLoaderData<typeof loader>();
   const [filter, setFilter] = useState<Filter>("all");
 
-  const isSilent = (s: ConnectedSite) => !s.last_seen_at || now - s.last_seen_at >= ONLINE_WINDOW_S;
+  const isSilent = (s: ConnectedSite) => !s.last_seen_at || now - s.last_seen_at >= SILENT_AFTER_S;
   const silent = sites.filter(isSilent);
   const needUpdates = sites.filter((s) => pendingUpdates(s) > 0);
   const totalUpdates = sites.reduce((n, s) => n + pendingUpdates(s), 0);
@@ -119,7 +127,7 @@ export default function AdminSitesPage() {
             : `เชื่อมต่อ ${sites.length} เว็บ · รออัปเดต ${totalUpdates} รายการ`}
         </h1>
         {silent.length > 0 && (
-          <p className="mt-1 text-sm text-[#B4541A]">{silent.length} เว็บไม่ได้ส่งข้อมูลเกิน 30 นาที</p>
+          <p className="mt-1 text-sm text-[#B4541A]">{silent.length} เว็บไม่ได้ส่งข้อมูลเกิน 3 ชม.</p>
         )}
       </div>
 
