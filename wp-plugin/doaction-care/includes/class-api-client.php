@@ -258,6 +258,9 @@ class DoAction_Care_Api_Client {
 		if ( is_array( $res['data'] ) && isset( $res['data']['widget'] ) && is_array( $res['data']['widget'] ) ) {
 			$s['widget'] = $res['data']['widget'];
 		}
+		if ( is_array( $res['data'] ) && array_key_exists( 'plugin_release', $res['data'] ) ) {
+			$s['plugin_release'] = is_array( $res['data']['plugin_release'] ) ? $res['data']['plugin_release'] : null;
+		}
 		self::save_settings( $s );
 		return true;
 	}

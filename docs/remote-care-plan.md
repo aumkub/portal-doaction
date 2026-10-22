@@ -77,8 +77,19 @@ report — without storing client admin passwords.
 
 ### Not built yet
 
-- 30-day uptime in the widget and a one-click portal sign-in link (the link
-  would be a login credential inside the client's wp-admin; left out on
-  purpose).
-- P4: vulnerability feed (needs a Patchstack/WPScan API key), signed plugin
-  self-update, before/after screenshots, external security review.
+- One-click portal sign-in link from wp-admin (it would be a login
+  credential inside the client's wp-admin; left out on purpose).
+- P4: vulnerability feed (needs a Patchstack/WPScan API key), before/after
+  screenshots (needs Cloudflare Browser Rendering), external security review.
+
+## Signed plugin self-update (P4)
+
+- Key pair: Ed25519. The private key is only on the release machine at
+  `~/.config/doaction-care/signing.key`; back it up offline. The public key is
+  `DOACTION_CARE_PUBKEY` in the plugin.
+- Release: bump `Version` and `DOACTION_CARE_VERSION`, then
+  `node scripts/release-care-plugin.mjs`. It zips, signs and uploads the zip
+  and `care-plugin/latest.json` to R2.
+- Sites learn of the release from the heartbeat reply, WordPress offers it as
+  a normal update, and `upgrader_pre_download` installs it only if the
+  signature verifies. The team can also push it from the portal as a job.

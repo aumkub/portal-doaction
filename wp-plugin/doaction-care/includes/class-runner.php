@@ -105,6 +105,20 @@ class DoAction_Care_Runner {
 		}
 	}
 
+	/** Adds the upgrader's own error text to the log when it failed. */
+	private function note_skin( $skin, $ok ) {
+		if ( true === $ok ) {
+			return;
+		}
+		$messages = array_filter( array_map( 'wp_strip_all_tags', (array) $skin->get_upgrade_messages() ) );
+		if ( isset( $skin->result ) && is_wp_error( $skin->result ) ) {
+			$messages[] = $skin->result->get_error_message();
+		}
+		if ( $messages ) {
+			$this->note( 'upgrader: ' . implode( ' | ', array_slice( $messages, -5 ) ) );
+		}
+	}
+
 	/** @return array{status:string,version:?string} */
 	private function result( $status, $version = null ) {
 		return array(
@@ -137,8 +151,10 @@ class DoAction_Care_Runner {
 			$target,
 			function () use ( $file ) {
 				$was_active = is_plugin_active( $file );
-				$upgrader   = new Plugin_Upgrader( new Automatic_Upgrader_Skin() );
+				$skin       = new Automatic_Upgrader_Skin();
+				$upgrader   = new Plugin_Upgrader( $skin );
 				$ok         = $upgrader->upgrade( $file );
+				$this->note_skin( $skin, $ok );
 				// Reactivate without loading the new code in this process; the HTTP check loads it.
 				if ( $was_active && ! is_plugin_active( $file ) ) {
 					$active = (array) get_option( 'active_plugins', array() );
@@ -177,8 +193,11 @@ class DoAction_Care_Runner {
 		return $this->guarded_update(
 			$theme->get_stylesheet_directory(),
 			function () use ( $slug ) {
-				$upgrader = new Theme_Upgrader( new Automatic_Upgrader_Skin() );
-				return $upgrader->upgrade( $slug );
+				$skin     = new Automatic_Upgrader_Skin();
+				$upgrader = new Theme_Upgrader( $skin );
+				$ok       = $upgrader->upgrade( $slug );
+				$this->note_skin( $skin, $ok );
+				return $ok;
 			},
 			function () use ( $slug ) {
 				wp_clean_themes_cache( true );
@@ -211,7 +230,11 @@ class DoAction_Care_Runner {
 		}
 		$this->note( 'สำรองไฟล์เดิมไว้แล้ว' );
 
-		$ok = call_user_func( $update );
+		try {
+			$ok = call_user_func( $update );
+		} catch ( Throwable $e ) {
+			$ok = new WP_Error( 'doaction_care_exception', $e->getMessage() );
+		}
 		$this->clear_maintenance();
 		if ( true !== $ok || is_wp_error( $ok ) ) {
 			$this->note( 'อัปเดตไม่สำเร็จ: ' . ( is_wp_error( $ok ) ? $ok->get_error_message() : 'upgrader คืนค่า ' . var_export( $ok, true ) ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export

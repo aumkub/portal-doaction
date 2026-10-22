@@ -3,7 +3,7 @@
  * Plugin Name:       do action Care
  * Plugin URI:        https://doaction.co.th
  * Description:       Connects this site to the do action client portal: reports versions and available updates, runs updates the do action team starts (with checks and automatic rollback), and shows a care summary on the dashboard.
- * Version:           0.2.0
+ * Version:           0.3.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            do action
@@ -16,16 +16,21 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'DOACTION_CARE_VERSION', '0.2.0' );
+define( 'DOACTION_CARE_VERSION', '0.3.0' );
 define( 'DOACTION_CARE_CRON_HOOK', 'doaction_care_heartbeat' );
 define( 'DOACTION_CARE_OPTION', 'doaction_care_settings' );
 define( 'DOACTION_CARE_POLL_HOOK', 'doaction_care_poll' );
+// Ed25519 public key for signed self-updates (private key stays on the release machine).
+define( 'DOACTION_CARE_PUBKEY', 'K24PewIlSU0GbgObclSRej0DQNT/zUhtwRDNDTDnbd4=' );
 
 require_once __DIR__ . '/includes/class-api-client.php';
 require_once __DIR__ . '/includes/class-inventory.php';
 require_once __DIR__ . '/includes/class-admin.php';
 require_once __DIR__ . '/includes/class-runner.php';
 require_once __DIR__ . '/includes/class-widget.php';
+require_once __DIR__ . '/includes/class-updater.php';
+
+DoAction_Care_Updater::init();
 
 add_filter(
 	'cron_schedules',

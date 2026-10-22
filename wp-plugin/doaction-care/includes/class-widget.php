@@ -49,6 +49,7 @@ class DoAction_Care_Widget {
 		<table class="widefat striped" style="border:0">
 			<tbody>
 				<tr><td>สัญญาดูแล</td><td style="<?php echo $expired ? 'color:#b32d2e' : ''; ?>"><?php echo esc_html( $contract ); ?></td></tr>
+				<tr><td>Uptime 30 วัน</td><td><?php echo esc_html( isset( $w['uptime30'] ) && is_numeric( $w['uptime30'] ) ? number_format( (float) $w['uptime30'], 2 ) . '%' : '—' ); ?></td></tr>
 				<tr><td>อัปเดตเดือนนี้</td><td><?php echo esc_html( (string) ( isset( $w['updates_this_month'] ) ? (int) $w['updates_this_month'] : 0 ) ); ?> รายการ</td></tr>
 				<tr><td>เรื่องที่กำลังดำเนินการ</td><td><?php echo esc_html( (string) ( isset( $w['open_tickets'] ) ? (int) $w['open_tickets'] : 0 ) ); ?> เรื่อง</td></tr>
 				<tr><td>Backup ล่าสุด</td><td><?php echo esc_html( $backup ); ?></td></tr>

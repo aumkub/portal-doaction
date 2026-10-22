@@ -16,6 +16,8 @@ import { InventorySchema, JobReportSchema, PairSchema, WidgetTicketSchema } from
 import { CARE_PAUSED_KEY, addJobToDraftReport } from "./jobs.server";
 import type { SiteRow } from "~/lib/db.server";
 import { emailTeamNewTicket } from "~/lib/email-alerts.server";
+import { fetchAllMonitors, hostOf } from "~/lib/uptime.server";
+import { getUptimeRobotKey } from "~/lib/secrets.server";
 
 const MAX_BODY_BYTES = 256 * 1024;
 const HEARTBEAT_MIN_INTERVAL_S = 60;
@@ -54,8 +56,36 @@ async function readBody(request: Request): Promise<Uint8Array | null> {
   return buf.byteLength > MAX_BODY_BYTES ? null : buf;
 }
 
+const PLUGIN_FILE_RE = /^\/agent\/v1\/plugin\/(doaction-care-\d+\.\d+\.\d+\.zip)$/;
+
+/** Latest signed plugin release (uploaded by scripts/release-care-plugin.mjs). */
+async function pluginRelease(env: CloudflareEnv, origin: string) {
+  const obj = await env.ATTACHMENTS.get("care-plugin/latest.json").catch(() => null);
+  if (!obj) return null;
+  try {
+    const m = (await obj.json()) as { version: string; file: string; signature: string; size: number; requires_wp?: string; requires_php?: string };
+    if (!/^\d+\.\d+\.\d+$/.test(m.version) || !PLUGIN_FILE_RE.test(`/agent/v1/plugin/${m.file}`)) return null;
+    return {
+      version: m.version, signature: m.signature, size: m.size,
+      requires_wp: m.requires_wp ?? null, requires_php: m.requires_php ?? null,
+      package: `${origin}/agent/v1/plugin/${m.file}`,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function handleAgentRequest(request: Request, env: CloudflareEnv): Promise<Response> {
   const { pathname } = new URL(request.url);
+  const download = pathname.match(PLUGIN_FILE_RE);
+  if (download && request.method === "GET") {
+    // Public on purpose: the plugin verifies the Ed25519 signature before installing.
+    const obj = await env.ATTACHMENTS.get(`care-plugin/${download[1]}`);
+    if (!obj) return json(404, { error: "not_found" });
+    return new Response(obj.body, {
+      headers: { "Content-Type": "application/zip", "Content-Length": String(obj.size), "Cache-Control": "no-store" },
+    });
+  }
   if (request.method !== "POST") return json(405, { error: "method_not_allowed" });
   if (!(request.headers.get("Content-Type") ?? "").includes("application/json")) {
     return json(415, { error: "json_required" });
@@ -171,7 +201,11 @@ async function handleHeartbeat(request: Request, env: CloudflareEnv): Promise<Re
     site_id: siteId, now, json: JSON.stringify(inv), site_url: inv.site_url,
     plugin_version: inv.plugin_version, wp_version: inv.wp_version, php_version: inv.php_version,
   });
-  return signedJson(secret, 200, { ok: true, server_time: now, widget: await widgetData(env, site, now) });
+  return signedJson(secret, 200, {
+    ok: true, server_time: now,
+    widget: await widgetData(env, site, now),
+    plugin_release: await pluginRelease(env, new URL(request.url).origin),
+  });
 }
 
 /** What the wp-admin dashboard widget shows. Only this client's own data. */
@@ -185,7 +219,11 @@ async function widgetData(env: CloudflareEnv, site: SiteRow, now: number) {
     .bind(site.client_id)
     .first<{ n: number }>()
     .catch(() => null);
+  const host = hostOf(site.site_url);
+  const monitors = await fetchAllMonitors(getUptimeRobotKey(env), env.SESSIONPORTAL).catch(() => null);
+  const monitor = monitors?.find((m) => m.host === host) ?? null;
   return {
+    uptime30: monitor?.uptime30 ?? null,
     company: client?.company_name ?? "",
     contract_end: client?.contract_end ?? null,
     open_tickets: open?.n ?? 0,
