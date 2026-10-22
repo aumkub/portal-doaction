@@ -10,7 +10,7 @@ import { formatRelativeTime } from "~/lib/utils";
 import type { Client } from "~/types";
 import { useT } from "~/lib/i18n";
 import type { TranslationKey } from "~/lib/translations";
-import { FaCirclePlus, FaEye, FaUserSecret, FaMagnifyingGlass, FaUsers, FaClock, FaCloud, FaFileCircleXmark, FaCircleCheck } from "react-icons/fa6";
+import { FaCirclePlus, FaChevronRight, FaUserSecret, FaMagnifyingGlass, FaUsers, FaClock, FaFileCircleXmark, FaCircleCheck } from "react-icons/fa6";
 
 export function meta() {
   return [{ title: "จัดการลูกค้า — Admin" }];
@@ -139,7 +139,7 @@ function CareToggle({
         type="submit"
         title={title}
         aria-pressed={done}
-        className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-xs font-semibold transition-colors ${
+        className={`inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-colors ${
           done
             ? "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20 hover:bg-emerald-100"
             : "border border-dashed border-line bg-white text-muted-ink hover:border-ink/30 hover:text-ink"
@@ -173,26 +173,6 @@ function getInitials(name: string) {
     .toUpperCase();
 }
 
-function BackupConnectedIcon({
-  path,
-  t,
-}: {
-  path: string | null | undefined;
-  t: (key: TranslationKey) => string;
-}) {
-  if (!path?.trim()) {
-    return <span className="text-faint-ink text-xs" aria-hidden="true">—</span>;
-  }
-  return (
-    <span
-      className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700"
-      title={t("admin_col_backup_linked").replace("{path}", path)}
-    >
-      <FaCloud className="text-xs" aria-label={t("admin_col_backup_linked").replace("{path}", path)} />
-    </span>
-  );
-}
-
 function ClientActions({
   client,
   isCoAdmin,
@@ -204,26 +184,20 @@ function ClientActions({
   t: (key: TranslationKey) => string;
   confirmMsg: string;
 }) {
-  const btnCls = "inline-flex items-center gap-1.5 h-9 rounded-full border px-3.5 text-xs font-semibold transition-colors";
+  if (isCoAdmin) return null;
   return (
-    <div className="flex items-center gap-2 flex-wrap">
-      <a
-        href={`/admin/clients/${client.id}`}
-        className={`${btnCls} border-line bg-white text-ink hover:bg-paper`}
+    <Form method="post" action="/api/impersonation/start">
+      <input type="hidden" name="clientId" value={client.id} />
+      <ConfirmButton
+        message={confirmMsg}
+        confirmLabel={t("admin_impersonate")}
+        title={t("admin_impersonate")}
+        aria-label={t("admin_impersonate")}
+        className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-ink hover:bg-paper hover:text-ink transition-colors"
       >
-        <FaEye className="text-[10px]" aria-hidden="true" />
-        {t("admin_view_details")}
-      </a>
-      {!isCoAdmin && (
-        <Form method="post" action="/api/impersonation/start">
-          <input type="hidden" name="clientId" value={client.id} />
-          <ConfirmButton message={confirmMsg} confirmLabel={t("admin_impersonate")} className={`${btnCls} border-ink bg-ink text-white hover:bg-black`}>
-            <FaUserSecret className="text-[10px]" aria-hidden="true" />
-            {t("admin_impersonate")}
-          </ConfirmButton>
-        </Form>
-      )}
-    </div>
+        <FaUserSecret className="text-[13px]" aria-hidden="true" />
+      </ConfirmButton>
+    </Form>
   );
 }
 
@@ -433,41 +407,29 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
                         )}
                       </span>
                     </span>
-                    <span className="flex shrink-0 flex-col items-end gap-1">
-                      {client.contract_expired ? (
-                        <span className="rounded-full bg-paper px-2.5 py-0.5 text-xs font-semibold text-muted-ink whitespace-nowrap">
-                          {L("หมดอายุ", "Expired")}
-                        </span>
-                      ) : !client.has_monthly_report ? (
+                    <span className="hidden shrink-0 items-center gap-1.5 sm:flex">
+                      {!client.contract_expired && !client.has_monthly_report && (
                         <span
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-[#FDE7DA] text-[#B4541A]"
-                          title={`${currentMonth}/${currentYear} - ยังไม่มี Report`}
+                          className="inline-flex items-center gap-1 rounded-full bg-[#FDE7DA] px-2 py-0.5 text-[11px] font-semibold text-[#B4541A] whitespace-nowrap"
+                          title={`${currentMonth}/${currentYear}`}
                         >
-                          <FaFileCircleXmark className="text-xs" aria-label="ยังไม่มี Report" />
-                        </span>
-                      ) : (
-                        <span className="inline-flex h-7 w-7 items-center justify-center" aria-label="มี Report แล้ว">
-                          <FaCircleCheck className="text-emerald-500" />
+                          <FaFileCircleXmark className="text-[10px]" aria-hidden="true" />
+                          {L("ยังไม่มี Report", "No report")}
                         </span>
                       )}
-                      {client.first_login_at ? (
-                        <span
-                          className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 whitespace-nowrap"
-                          title={formatRelativeTime(client.first_login_at, lang)}
-                        >
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />{t("admin_login_status_activated")}
-                        </span>
-                      ) : (
+                      {!client.first_login_at && (
                         <span className="inline-flex items-center gap-1 rounded-full bg-[#FFF6C2] px-2 py-0.5 text-[11px] font-semibold text-[#6B5B00] whitespace-nowrap">
                           <span className="h-1.5 w-1.5 rounded-full bg-[#B89B00]" />{t("admin_login_status_pending")}
                         </span>
                       )}
                     </span>
                   </a>
-                  <div className="flex shrink-0 items-center gap-2 pl-[54px] sm:pl-0">
-                    {!isCoAdmin && <CareToggle clientId={client.id} mark={care[client.id]} lang={lang} />}
-                    {!isCoAdmin && <BackupConnectedIcon path={client.backup_path} t={t} />}
+                  <div className="flex shrink-0 items-center gap-1.5 pl-[54px] sm:pl-0">
+                    {!isCoAdmin && !client.contract_expired && <CareToggle clientId={client.id} mark={care[client.id]} lang={lang} />}
                     <ClientActions client={client} isCoAdmin={isCoAdmin} t={t} confirmMsg={`${t("admin_impersonate_confirm")} ${client.company_name}?`} />
+                    <a href={`/admin/clients/${client.id}`} aria-label={t("admin_view_details")} className="inline-flex h-8 w-8 items-center justify-center rounded-full text-faint-ink hover:bg-paper hover:text-ink transition-colors">
+                      <FaChevronRight className="text-[11px]" aria-hidden="true" />
+                    </a>
                   </div>
                 </li>
               );
