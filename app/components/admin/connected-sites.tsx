@@ -1,6 +1,7 @@
 import { Form, Link, useFetcher } from "react-router";
 import { useEffect, useState } from "react";
 import { ConfirmButton } from "~/components/ui/confirm-button";
+import { NativeSelect } from "~/components/ui/native-select";
 import type { SiteInventory } from "~/lib/agent/inventory";
 
 export type ConnectedSite = {
@@ -153,10 +154,10 @@ function UpdateForm({ site, paused }: { site: ConnectedSite; paused: boolean }) 
         ))}
       </ul>
       <div className="flex flex-wrap items-center gap-3 border-t border-line-soft px-3.5 py-2.5">
-        <select name="window" defaultValue="now" className="h-8 rounded-full border border-line bg-white px-3 text-[12px] text-ink">
+        <NativeSelect name="window" defaultValue="now" size="sm" wrapperClassName="w-auto" className="rounded-full">
           <option value="now">เริ่มทันที</option>
           <option value="night">ตอนกลางคืน (01:00–05:00)</option>
-        </select>
+        </NativeSelect>
         <ConfirmButton
           disabled={busy || paused || selected.size === 0}
           message={

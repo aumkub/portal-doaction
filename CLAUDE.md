@@ -67,3 +67,6 @@ Routes are defined explicitly (not file-based) in `app/routes.ts`. Three layout 
 - `generateId()` in `app/lib/utils.ts` uses Web Crypto for URL-safe random IDs
 - Env bindings are accessed via `context.cloudflare.env` in loaders/actions
 - Do not add `.claude/worktrees/` paths to git — they are gitignored and will break deploys if committed as gitlinks
+
+### UI conventions
+- Design rules live in `DESIGN.md`. Every dropdown uses `NativeSelect` (`app/components/ui/native-select.tsx`), which hides the browser arrow, draws its own chevron-down and sets its own padding (`pl-3.5 pr-9`). Never ship a bare `<select>`.

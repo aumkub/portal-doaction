@@ -231,6 +231,14 @@ The system runs predominantly flat with strategic depth on hero mockups.
 **`filter-dropdown`** — Pill-shaped filter dropdown ("Company use" / "Industry" / "Use case").
 - Background `{colors.canvas}`, text `{colors.ink}`, typography `{typography.body-sm-medium}`, rounded `{rounded.full}`, padding `{spacing.xs} {spacing.md}`, border `1px solid {colors.hairline-strong}`.
 
+**`select`** — Every dropdown (forms, filters, inline pickers).
+- Always use `NativeSelect` (`app/components/ui/native-select.tsx`); never a bare `<select>`.
+- The browser arrow is removed (`appearance-none`) and the component draws the only arrow: a 12px chevron-down (`M2.5 4.5 6 8 9.5 4.5`, 1.5px stroke, `{colors.muted}`), absolutely placed `right 12px`, vertically centred, `pointer-events: none`.
+- Padding is set by the component, not the browser: left 14px (`pl-3.5`), right 36px (`pr-9`) so text never runs under the arrow.
+- Sizes: default height 40px / `text-sm`; `size="sm"` height 32px / `text-xs`. Pill filters add `rounded-full` via `className`.
+- Background `{colors.canvas}`, border `1px solid {colors.hairline}`, focus ring `ring-2 ring-ink/10` + `border-ink/40`; disabled uses `{colors.surface}` background and muted text.
+- A new kind of select (different size, inside a dark surface, etc.) extends `NativeSelect` with a prop; it keeps the drawn chevron and the right padding.
+
 ### Tabs
 
 **`pill-tab`** + **`pill-tab-active`** — Pill-style tab nav.
@@ -328,6 +336,7 @@ The system runs predominantly flat with strategic depth on hero mockups.
 - Apply `{rounded.xxxl}` (28px) to pastel feature cards
 - Use real Miro-board mockups as feature illustrations
 - Maintain Roobert PRO across every UI surface
+- Render every dropdown with `NativeSelect`: one drawn chevron-down, its own left/right padding
 
 ### Don't
 - Don't use `{colors.brand-yellow}` on standard CTAs or large background surfaces
@@ -336,6 +345,7 @@ The system runs predominantly flat with strategic depth on hero mockups.
 - Don't reduce hero leading below 1.05
 - Don't apply heavy shadows on flat documentation cards; reserve elevation for whiteboard mockups
 - Don't use stock photography — show the live product board UI
+- Don't ship a bare `<select>`: the browser arrow and padding differ per OS and clash with the drawn one
 
 ## Responsive Behavior
 
