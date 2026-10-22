@@ -56,8 +56,6 @@ export interface Client {
   contract_start: string | null;
   contract_end: string | null;
   notes: string | null;
-  /** Folder name on backup server (admin maps per client) */
-  backup_path: string | null;
   /** "internal" = our own / sister website: admin-only, no client login, emails or reports. */
   kind: ClientKind;
   deleted_at?: number | null;

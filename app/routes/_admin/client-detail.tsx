@@ -6,7 +6,6 @@ import { generatePairCode, sha256hex } from "~/lib/agent/crypto";
 import { z } from "zod";
 import { useState } from "react";
 import { requireCoAdminOrAdmin, startImpersonation, generateMagicToken, evictUserCache } from "~/lib/auth.server";
-import { getBackupList } from "~/lib/backup.server";
 import { createDB } from "~/lib/db.server";
 import { generateId } from "~/lib/utils";
 import { useT } from "~/lib/i18n";
@@ -25,7 +24,6 @@ import {
   FaUserSecret,
   FaPaperPlane,
   FaCircleCheck,
-  FaDatabase,
   FaUser,
 } from "react-icons/fa6";
 import {
@@ -75,36 +73,6 @@ export async function loader({ request, params, context }: any) {
     db.listCustomerNotes(client.id),
   ]);
 
-  let backupSites: string[] = [];
-  const backupPathUsage: Record<string, string> = {};
-  if (currentUser.role === "admin") {
-    const allClients = await db.listClients();
-    for (const c of allClients) {
-      if (c.backup_path) backupPathUsage[c.backup_path] = c.company_name;
-    }
-    
-    // Read WebDAV settings from database
-    const webdavEnabled = (await db.getAppSetting("webdav_enabled")) !== "0";
-    let webdavConfig = null;
-    let backup = { ok: false as const, error: "WebDAV backup is disabled in settings" };
-    
-    if (webdavEnabled) {
-      const url = await db.getAppSetting("webdav_url");
-      const username = await db.getAppSetting("webdav_username");
-      const password = await db.getAppSetting("webdav_password");
-      const path = await db.getAppSetting("webdav_path");
-      
-      if (!url || !username || !password) {
-        backup = { ok: false, error: "WebDAV credentials not configured. Please configure in Settings." };
-      } else {
-        webdavConfig = { url, username, password, path: path || "/home/Backup" };
-        backup = await getBackupList(webdavConfig, env.SESSIONPORTAL);
-      }
-    }
-    
-    if (backup.ok) backupSites = backup.entries.map((e) => e.name);
-  }
-
   const siteRows = await db.listSitesWithInventoryByClient(client.id);
   const sites: ConnectedSite[] = siteRows.map(({ secret_enc: _s, inventory_json, inventory_updated_at: _u, client_id: _c, ...row }) => {
     let inventory = null;
@@ -127,8 +95,6 @@ export async function loader({ request, params, context }: any) {
     notes,
     currentUser,
     canImpersonate,
-    backupSites,
-    backupPathUsage,
   };
 }
 
@@ -332,15 +298,6 @@ export async function action({ request, params, context }: any) {
     return { success: { note_added: true } };
   }
 
-  if (intent === "update_backup_path") {
-    if (currentUser.role !== "admin") {
-      throw new Response("Forbidden", { status: 403 });
-    }
-    const backup_path = String(formData.get("backup_path") ?? "").trim() || null;
-    await db.updateClient(client.id, { backup_path });
-    return { success: { backup_path_updated: true } };
-  }
-
   if (intent === "delete_note") {
     const noteId = String(formData.get("note_id") ?? "");
     const note = await db.getCustomerNoteById(noteId);
@@ -370,8 +327,7 @@ type ActionData = {
     | { magic_link: true; email: string }
     | { email_changed: true; email: string }
     | { note_added: true }
-    | { note_deleted: true }
-    | { backup_path_updated: true };
+    | { note_deleted: true };
 };
 
 const packageStyles: Record<string, { badge: string; dot: string; label: string }> = {
@@ -468,8 +424,6 @@ export default function AdminClientDetailPage({ loaderData }: any) {
     notes,
     currentUser,
     canImpersonate,
-    backupSites = [],
-    backupPathUsage = {},
     sites = [],
     siteJobs = [],
     carePaused = false,
@@ -482,7 +436,6 @@ export default function AdminClientDetailPage({ loaderData }: any) {
   const activeTab = client.kind === "internal" && requestedTab === "access" ? "details" : requestedTab;
   const isViewOnly = currentUser.role === "co-admin";
   const isAdmin = currentUser.role === "admin";
-  const backupPathUpdated = actionData?.success && "backup_path_updated" in actionData.success;
   const { lang } = useT();
 
   const v = actionData?.values ?? {
@@ -731,54 +684,6 @@ export default function AdminClientDetailPage({ loaderData }: any) {
               </div>
             </SectionCard>
           </Form>
-          )}
-
-          {/* Backup folder mapping — admin only */}
-          {isAdmin && (
-            <SectionCard
-              title={t("admin_client_backup_title")}
-              subtitle={t("admin_client_backup_subtitle")}
-            >
-              {backupPathUpdated && (
-                <p className="flex items-center gap-2 text-xs font-medium text-emerald-700 bg-emerald-50 rounded-xl px-3 py-2 mb-4">
-                  <FaCircleCheck />
-                  {t("admin_client_backup_saved")}
-                </p>
-              )}
-              <Form method="post" className="space-y-3">
-                <input type="hidden" name="intent" value="update_backup_path" />
-                <div className="space-y-1.5">
-                  <Label htmlFor="backup_path">{t("admin_client_backup_folder")}</Label>
-                  <NativeSelect
-                    id="backup_path"
-                    name="backup_path"
-                    defaultValue={client.backup_path ?? ""}
-                  >
-                    <option value="">{t("admin_client_backup_none")}</option>
-                    {backupSites.map((site) => {
-                      const usedBy = backupPathUsage[site];
-                      const isOther = usedBy && usedBy !== client.company_name;
-                      return (
-                        <option key={site} value={site} disabled={!!isOther}>
-                          {site}
-                          {isOther ? ` (${t("admin_client_backup_used_by").replace("{name}", usedBy)})` : ""}
-                        </option>
-                      );
-                    })}
-                  </NativeSelect>
-                  <p className="text-xs text-muted-ink">{t("admin_client_backup_hint")}</p>
-                </div>
-                <Button type="submit">
-                  <FaDatabase className="text-[10px]" />
-                  {t("admin_client_backup_save")}
-                </Button>
-              </Form>
-              {client.backup_path && (
-                <p className="mt-3 text-xs text-ink-soft bg-paper rounded-xl px-3.5 py-2.5">
-                  {t("admin_client_backup_linked").replace("{path}", client.backup_path)}
-                </p>
-              )}
-            </SectionCard>
           )}
 
           <ConnectedSitesSection

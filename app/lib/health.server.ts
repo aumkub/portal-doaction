@@ -1,5 +1,4 @@
 import { createDB } from "~/lib/db.server";
-import { readWebDAVConfig } from "~/lib/backup.server";
 import { getUptimeRobotKey } from "~/lib/secrets.server";
 
 /**
@@ -15,8 +14,7 @@ export type HealthCheckId =
   | "email"
   | "session_secret"
   | "uptimerobot"
-  | "telegram"
-  | "webdav";
+  | "telegram";
 
 export interface HealthResult {
   id: HealthCheckId;
@@ -109,17 +107,6 @@ const CHECKS: Record<HealthCheckId, (env: CloudflareEnv) => Promise<Outcome>> = 
       : { status: "fail", detail: data?.description ?? `HTTP ${res.status}` };
   },
 
-  async webdav(env) {
-    const cfg = await readWebDAVConfig(createDB(env.DB));
-    if (!cfg) return { status: "warn", detail: "ปิดอยู่หรือยังตั้งค่าไม่ครบ" };
-    const res = await withTimeout(cfg.url, {
-      method: "PROPFIND",
-      headers: { Authorization: `Basic ${btoa(`${cfg.username}:${cfg.password}`)}`, Depth: "0" },
-    });
-    return res.ok || res.status === 207
-      ? { status: "ok", detail: "เชื่อมต่อเซิร์ฟเวอร์ Backup ได้" }
-      : { status: "fail", detail: `HTTP ${res.status} ${res.statusText}`.trim() };
-  },
 };
 
 export const HEALTH_CHECK_IDS = Object.keys(CHECKS) as HealthCheckId[];

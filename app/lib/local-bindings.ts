@@ -117,9 +117,5 @@ export const localBindings = {
   SEND_EMAIL: new LocalSendEmail() as SendEmail,
   APP_URL: "http://localhost:5173",
   SESSION_SECRET: "y8N4vQ2mK7pLx3Rz9tW6cJ1hF5uD0sBa",
-  WEBDAV_HOST: "cloud.aumwp.com",
-  WEBDAV_USER: "aum",
-  WEBDAV_PATH: "/home/Backup",
-  WEBDAV_PASS: "test-password",
   VALUE_FROM_CLOUDFLARE: "Hello from Cloudflare",
 };

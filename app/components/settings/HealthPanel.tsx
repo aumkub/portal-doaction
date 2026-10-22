@@ -4,7 +4,6 @@ import type { IconType } from "react-icons";
 import {
   FaArrowsRotate,
   FaBell,
-  FaCloud,
   FaDatabase,
   FaEnvelope,
   FaHardDrive,
@@ -30,7 +29,6 @@ const CHECKS: { id: string; label: string; hint: string; icon: IconType }[] = [
   { id: "session_secret", label: "Session Secret", hint: "ลิงก์รายงานให้ลูกค้า", icon: FaKey },
   { id: "uptimerobot", label: "UptimeRobot", hint: "สถานะเว็บลูกค้า", icon: FaHeartPulse },
   { id: "telegram", label: "Telegram", hint: "แจ้งเตือนทีม", icon: FaTelegram },
-  { id: "webdav", label: "Backup (WebDAV)", hint: "ไฟล์สำรองเว็บลูกค้า", icon: FaCloud },
 ];
 
 const TONE: Record<Status, { dot: string; pill: string; label: string }> = {

@@ -21,9 +21,6 @@ crons = ["*/15 * * * *"]
 
 [vars]
 APP_URL = "https://portal.doaction.co.th"
-WEBDAV_HOST = "cloud.aumwp.com"
-WEBDAV_USER = "aum"
-WEBDAV_PATH = "/home/Backup"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # ขั้นตอน deploy (Cloudflare Pages)

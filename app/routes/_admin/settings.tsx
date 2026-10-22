@@ -59,19 +59,6 @@ const EmailDigestSchema = z.object({
   hour: z.coerce.number().int().min(0).max(23).default(8),
 });
 
-const WebDAVSchema = z.object({
-  intent: z.literal("webdav"),
-  enabled: z.string().optional().default("0"),
-  url: z.string().optional().default(""),
-  username: z.string().optional().default(""),
-  password: z.string().optional().default(""),
-  path: z.string().optional().default(""),
-});
-
-const WebDAVTestSchema = z.object({
-  intent: z.literal("webdav_test"),
-});
-
 export async function loader({ request, context }: any) {
   const env = context.cloudflare.env;
   const admin = await requireAdmin(request, env.DB, env.SESSIONPORTAL);
@@ -91,11 +78,6 @@ export async function loader({ request, context }: any) {
       "email_digest_enabled",
       "email_digest_hour",
       "email_digest_last_date",
-      "webdav_enabled",
-      "webdav_url",
-      "webdav_username",
-      "webdav_path",
-      "webdav_password",
     ]),
   ]);
   // Only what the team list renders — never hashes or 2FA secrets.
@@ -117,18 +99,12 @@ export async function loader({ request, context }: any) {
   const emailDigestEnabled = s.email_digest_enabled !== "0";
   const emailDigestHour = Number(s.email_digest_hour ?? "8");
   const emailDigestLastDate = s.email_digest_last_date ?? null;
-  const webdavEnabled = s.webdav_enabled !== "0";
-  const webdavUrl = s.webdav_url ?? "";
-  const webdavUsername = s.webdav_username ?? "";
-  const webdavPath = s.webdav_path ?? "";
-  const webdavHasPassword = !!s.webdav_password;
   return {
     admin, adminUsers, uptimeKey, twoFactor,
     telegramBotToken, telegramDefaultGroupId,
     contractWarningFirstDays, contractWarningSecondDays, contractWarningThirdDays,
     ticketReminderEnabled, ticketReminderDays, ticketReminderHour,
     emailDigestEnabled, emailDigestHour, emailDigestLastDate,
-    webdavEnabled, webdavUrl, webdavUsername, webdavPath, webdavHasPassword,
   };
 }
 
@@ -202,50 +178,6 @@ export async function action({ request, context }: any) {
     return { success: { telegram: true } };
   }
 
-  if (intent === "webdav") {
-    const parsed = WebDAVSchema.safeParse(raw);
-    if (!parsed.success) return { errors: parsed.error.flatten().fieldErrors };
-    await db.setAppSetting("webdav_enabled", parsed.data.enabled === "1" ? "1" : "0");
-    const url = parsed.data.url.trim();
-    if (url) await db.setAppSetting("webdav_url", url);
-    else await db.deleteAppSetting("webdav_url");
-    const username = parsed.data.username.trim();
-    if (username) await db.setAppSetting("webdav_username", username);
-    else await db.deleteAppSetting("webdav_username");
-    const password = parsed.data.password.trim();
-    if (password) await db.setAppSetting("webdav_password", password);
-    const path = parsed.data.path.trim();
-    if (path) await db.setAppSetting("webdav_path", path);
-    else await db.deleteAppSetting("webdav_path");
-    return { success: { webdav: true } };
-  }
-
-  if (intent === "webdav_test") {
-    const url = await db.getAppSetting("webdav_url");
-    const username = await db.getAppSetting("webdav_username");
-    const password = await db.getAppSetting("webdav_password");
-    if (!url || !username || !password) {
-      return { errors: { webdav: ["Please configure WebDAV settings first"] } };
-    }
-    try {
-      const webdavUrl = new URL(url);
-      const response = await fetch(webdavUrl.toString(), {
-        method: "PROPFIND",
-        headers: {
-          "Authorization": `Basic ${btoa(`${username}:${password}`)}`,
-          "Depth": "0",
-        },
-      });
-      if (response.ok) {
-        return { success: { webdav_test: true } };
-      } else {
-        return { errors: { webdav: [`Connection failed: ${response.status} ${response.statusText}`] } };
-      }
-    } catch (e: any) {
-      return { errors: { webdav: [e.message || "Connection failed"] } };
-    }
-  }
-
   const parsed = ProfileSchema.safeParse(raw);
   if (!parsed.success) return { errors: parsed.error.flatten().fieldErrors };
   await db.updateUser(admin.id, { name: parsed.data.name });
@@ -283,7 +215,6 @@ export default function AdminSettingsPage({ loaderData, actionData }: any) {
     contractWarningFirstDays, contractWarningSecondDays, contractWarningThirdDays,
     ticketReminderEnabled, ticketReminderDays, ticketReminderHour,
     emailDigestEnabled, emailDigestHour, emailDigestLastDate,
-    webdavEnabled, webdavUrl, webdavUsername, webdavPath, webdavHasPassword,
   } = loaderData;
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = searchParams.get("tab") ?? "account";
@@ -293,8 +224,6 @@ export default function AdminSettingsPage({ loaderData, actionData }: any) {
   const emailDigestSaved = Boolean(actionData?.success?.email_digest);
   const emailDigestTestTo: string | undefined = actionData?.success?.email_digest_test;
   const emailDigestEmpty = Boolean(actionData?.success?.email_digest_empty);
-  const webdavSaved = Boolean(actionData?.success?.webdav);
-  const webdavTestSuccess = Boolean(actionData?.success?.webdav_test);
   const { t, lang } = useT();
 
   const tabs = [
@@ -489,117 +418,6 @@ export default function AdminSettingsPage({ loaderData, actionData }: any) {
                     >
                       <FaPaperPlane className="text-xs" />
                       {t("admin_settings_telegram_test")}
-                    </button>
-                  </Form>
-                  <button
-                    type="submit"
-                    className="inline-flex h-10 items-center rounded-full bg-ink px-5 text-[13px] font-semibold text-white hover:bg-black transition-colors"
-                  >
-                    {t("save")}
-                  </button>
-                </div>
-              </Form>
-
-              {/* WebDAV Backup */}
-              <Form method="post" className="rounded-[14px] border border-line-soft bg-paper p-4 space-y-4">
-                <input type="hidden" name="intent" value="webdav" />
-                <div className="flex items-center gap-2">
-                  <FaCloud className="text-sky-500 shrink-0" />
-                  <p className="text-sm font-medium text-ink">{t("admin_webdav_title")}</p>
-                  {webdavEnabled && (
-                    <span className="ml-auto text-xs text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md font-medium ring-1 ring-inset ring-emerald-600/20">
-                      {t("admin_settings_connected")}
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-muted-ink">{t("admin_webdav_desc")}</p>
-
-                <label className="flex items-center gap-3 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    name="enabled"
-                    value="1"
-                    defaultChecked={webdavEnabled}
-                    className="h-4 w-4 rounded border-line accent-[#111]"
-                  />
-                  <span className="text-sm text-ink-soft">{t("admin_webdav_enabled")}</span>
-                </label>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-ink-soft">{t("admin_webdav_url")}</label>
-                  <input
-                    name="url"
-                    type="url"
-                    defaultValue={webdavUrl ?? ""}
-                    placeholder={t("admin_webdav_url_placeholder")}
-                    className={fieldCls("font-mono")}
-                  />
-                  {errors?.url && <p className="text-xs text-rose-600">{errors.url[0]}</p>}
-                </div>
-
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-ink-soft">{t("admin_webdav_username")}</label>
-                    <input
-                      name="username"
-                      type="text"
-                      defaultValue={webdavUsername ?? ""}
-                      className={fieldCls()}
-                    />
-                    {errors?.username && <p className="text-xs text-rose-600">{errors.username[0]}</p>}
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-ink-soft">{t("admin_webdav_password")}</label>
-                    <input
-                      name="password"
-                      type="password"
-                      placeholder={webdavHasPassword ? "•••••••••" : ""}
-                      className={fieldCls()}
-                    />
-                    <p className="text-xs text-muted-ink">{t("admin_webdav_password_hint")}</p>
-                    {errors?.password && <p className="text-xs text-rose-600">{errors.password[0]}</p>}
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-ink-soft">{t("admin_webdav_path")}</label>
-                  <input
-                    name="path"
-                    type="text"
-                    defaultValue={webdavPath ?? ""}
-                    placeholder={t("admin_webdav_path_placeholder")}
-                    className={fieldCls("font-mono")}
-                  />
-                  {errors?.path && <p className="text-xs text-rose-600">{errors.path[0]}</p>}
-                </div>
-
-                {webdavSaved && (
-                  <p className="flex items-center gap-2 text-xs text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-[14px] px-3 py-2">
-                    <FaCircleCheck /> {t("admin_webdav_saved")}
-                  </p>
-                )}
-
-                {webdavTestSuccess && (
-                  <p className="flex items-center gap-2 text-xs text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-[14px] px-3 py-2">
-                    <FaCircleCheck /> {t("admin_webdav_test_success")}
-                  </p>
-                )}
-
-                {errors?.webdav && (
-                  <p className="flex items-center gap-2 text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-[14px] px-3 py-2">
-                    {errors.webdav[0]}
-                  </p>
-                )}
-
-                <div className="flex justify-end gap-2 pt-1">
-                  <Form method="post">
-                    <input type="hidden" name="intent" value="webdav_test" />
-                    <button
-                      type="submit"
-                      className="inline-flex items-center gap-1.5 h-10 rounded-full border border-line bg-white px-5 text-[13px] font-semibold text-ink hover:bg-paper transition-colors"
-                    >
-                      <FaPaperPlane className="text-xs" />
-                      {t("admin_webdav_test")}
                     </button>
                   </Form>
                   <button

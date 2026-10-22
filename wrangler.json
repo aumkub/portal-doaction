@@ -26,10 +26,7 @@
   },
   "vars": {
     "VALUE_FROM_CLOUDFLARE": "Hello from Cloudflare",
-    "APP_URL": "https://portal.doaction.co.th",
-    "WEBDAV_HOST": "cloud.aumwp.com",
-    "WEBDAV_USER": "aum",
-    "WEBDAV_PATH": "/home/Backup"
+    "APP_URL": "https://portal.doaction.co.th"
   },
   "d1_databases": [
     {

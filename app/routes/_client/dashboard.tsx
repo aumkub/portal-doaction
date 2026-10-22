@@ -1,6 +1,5 @@
 import { Plus } from "lucide-react";
 import { getUptimeRobotKey } from "~/lib/secrets.server";
-import { getClientBackupFromCache, parseBackupTimestamp, type BackupEntry } from "~/lib/backup";
 import type { Route } from "./+types/dashboard";
 import { requireUser } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
@@ -60,7 +59,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const user = await requireUser(request, env.DB, env.SESSIONPORTAL);
   const db = createDB(env.DB);
   const client = await db.getClientByUserId(user.id);
-  if (!client) return { stats: null, client: null, latestReport: null, categoryCounts: [], recentTasks: [], inProgress: [], clientBackup: null };
+  if (!client) return { stats: null, client: null, latestReport: null, categoryCounts: [], recentTasks: [], inProgress: [], latestBackupAt: null };
 
   const apiKey = getUptimeRobotKey(env);
 
@@ -80,7 +79,17 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const tasks = latestReport ? await db.listTasksByReport(latestReport.id) : [];
   const openTickets = tickets.filter((t) => ["open", "in_progress", "waiting"].includes(t.status));
 
-  const clientBackup = await getClientBackupFromCache(env.SESSIONPORTAL, client.backup_path);
+  // Newest backup any connected site reported through the do action Care plugin.
+  const backupRow = await env.DB
+    .prepare(
+      `SELECT MAX(json_extract(i.json, '$.backup.last_at')) AS at FROM sites s
+       JOIN site_inventory i ON i.site_id = s.id
+       WHERE s.client_id = ? AND s.revoked_at IS NULL`
+    )
+    .bind(client.id)
+    .first<{ at: number | null }>()
+    .catch(() => null);
+  const latestBackupAt = backupRow?.at ?? null;
 
   const categoryOrder: ReportTask["category"][] = ["maintenance", "security", "seo", "performance", "development", "other"];
   const categoryCounts = categoryOrder
@@ -107,23 +116,18 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     categoryCounts,
     recentTasks: tasks.slice(0, 3).map((t) => ({ id: t.id, title: t.title, category: t.category })),
     inProgress,
-    clientBackup,
+    latestBackupAt,
   };
 }
 
-function backupEntryTime(entry: BackupEntry): number {
-  return entry.lastModified || parseBackupTimestamp(entry.name) || 0;
-}
-
-function formatBackupWhen(entry: BackupEntry, locale: "th" | "en"): string {
-  const ts = backupEntryTime(entry);
-  if (!ts) return entry.name;
+function formatBackupWhen(ts: number, locale: "th" | "en"): string {
   return new Date(ts * 1000).toLocaleDateString(locale === "en" ? "en-US" : "th-TH", {
     day: "numeric",
     month: "short",
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: "Asia/Bangkok",
   });
 }
 
@@ -137,7 +141,7 @@ const CATEGORY_KEY: Record<ReportTask["category"], TranslationKey> = {
 };
 
 export default function DashboardPage({ loaderData }: Route.ComponentProps) {
-  const { stats, client, latestReport, categoryCounts, recentTasks, inProgress, clientBackup } = loaderData;
+  const { stats, client, latestReport, categoryCounts, recentTasks, inProgress, latestBackupAt } = loaderData;
   const { t, lang } = useT();
   const isOnline = stats?.isUp ?? null;
   const host = client?.website_url?.replace(/^https?:\/\//, "").replace(/\/$/, "") ?? null;
@@ -146,7 +150,6 @@ export default function DashboardPage({ loaderData }: Route.ComponentProps) {
     ? new Date(latestReport.year, latestReport.month - 1, 1).toLocaleDateString(lang === "en" ? "en-US" : "th-TH", { month: "long", year: "numeric" })
     : null;
   const greeting = isOnline === true ? t("rd_client_greeting_ok") : isOnline === false ? t("rd_client_greeting_down") : t("rd_client_greeting_neutral");
-  const latestBackup = clientBackup && clientBackup.ok !== false ? clientBackup.latest : null;
 
   return (
     <div className="space-y-5 md:space-y-6">
@@ -199,10 +202,10 @@ export default function DashboardPage({ loaderData }: Route.ComponentProps) {
             </p>
             <p className="mt-2 text-sm text-white/60">Uptime</p>
           </div>
-          {latestBackup ? (
+          {latestBackupAt ? (
             <div className="mt-7 border-t border-white/10 pt-5">
               <p className="text-xs text-white/50">{t("dash_backup_latest")}</p>
-              <p className="mt-1 text-[15px] font-semibold">{formatBackupWhen(latestBackup, lang)}</p>
+              <p className="mt-1 text-[15px] font-semibold">{formatBackupWhen(latestBackupAt, lang)}</p>
             </div>
           ) : null}
         </div>

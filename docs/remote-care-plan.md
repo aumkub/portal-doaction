@@ -40,8 +40,8 @@ report — without storing client admin passwords.
   - For core/major updates, P2 checks the age of the latest Drive backup
     (reported by the plugin from the backup tool in use, e.g. UpdraftPlus)
     and blocks or warns when it is older than 24 h.
-  - The portal's WebDAV backup screens should later be replaced by Google
-    Drive backup status.
+  - The WebDAV backup screens were removed (migration 0021); backup status
+    now comes only from the plugin (UpdraftPlus / All-in-One WP Migration).
 - **Updates are always started by the team** (no automatic updates). P3's
   "policies" become saved selections + update windows, still launched by a
   person.
