@@ -78,6 +78,35 @@ function JobList({ jobs }: { jobs: SiteJobView[] }) {
   );
 }
 
+const BACKUP_TOOL: Record<string, string> = { updraftplus: "UpdraftPlus", ai1wm: "All-in-One WP Migration" };
+
+function BackupLine({ inv }: { inv: NonNullable<ConnectedSite["inventory"]> }) {
+  const b = inv.backup;
+  const now = Math.floor(Date.now() / 1000);
+  if (!b || b.sources.length === 0) {
+    return <span className="rounded-full bg-[#FFF7EE] px-2.5 py-1 font-medium text-[#B4541A]">ไม่พบปลั๊กอิน backup</span>;
+  }
+  const age = b.last_at ? now - b.last_at : null;
+  const stale = age == null || age > 36 * 3600;
+  const src = b.sources.reduce((a, c) => (c.last_at > a.last_at ? c : a));
+  const hours = age == null ? null : Math.floor(age / 3600);
+  const failedEvent = b.sources.flatMap((x) => x.events).find((e) => e.enabled && e.last_status === "Failed");
+  const onDrive = src.remote.includes("googledrive");
+  return (
+    <>
+      <span className={`rounded-full px-2.5 py-1 font-medium ${stale || src.ok === false ? "bg-[#FFF7EE] text-[#B4541A]" : "bg-white text-ink-soft"}`}>
+        Backup {hours == null ? "—" : hours < 1 ? "< 1 ชม." : `${hours} ชม.`}ที่แล้ว · {BACKUP_TOOL[src.tool] ?? src.tool}
+        {onDrive ? " · Google Drive" : " · ไม่พบการส่งขึ้น Drive"}
+      </span>
+      {failedEvent && (
+        <span className="rounded-full bg-[#FFF7EE] px-2.5 py-1 font-medium text-[#B4541A]" title={failedEvent.last_error ?? ""}>
+          ตั้งเวลา “{failedEvent.title}” ล้มล่าสุด{failedEvent.last_error ? `: ${failedEvent.last_error.slice(0, 60)}` : ""}
+        </span>
+      )}
+    </>
+  );
+}
+
 function UpdateForm({ site, paused }: { site: ConnectedSite; paused: boolean }) {
   const fetcher = useFetcher<{ ok?: string; error?: string }>();
   const inv = site.inventory!;
@@ -230,6 +259,7 @@ export function SiteCard({
             <span className={`rounded-full px-2.5 py-1 font-medium ${themeUpdates.length ? "bg-[#FFF7EE] text-[#B4541A]" : "bg-white text-ink-soft"}`}>
               ธีมรออัปเดต {themeUpdates.length}/{inv.themes.length}
             </span>
+            <BackupLine inv={inv} />
             {inv.site_health && (
               <span className="rounded-full bg-white px-2.5 py-1 font-medium text-ink-soft">
                 Site Health: วิกฤต {inv.site_health.critical} · แนะนำ {inv.site_health.recommended}

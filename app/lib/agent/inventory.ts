@@ -16,6 +16,20 @@ export const ThemeItem = z.object({
   update_version: ver.nullable().default(null),
 });
 
+const BackupSource = z.object({
+  tool: z.enum(["updraftplus", "ai1wm"]),
+  last_at: z.number().int().nonnegative(),
+  ok: z.boolean().nullable(),
+  remote: z.array(str(40)).max(10),
+  files: z.array(z.object({ name: str(200), size: z.number().int().nonnegative(), at: z.number().int() })).max(5),
+  events: z.array(z.object({
+    title: str(200), storage: str(40), enabled: z.boolean(), interval: str(40), last_status: str(20),
+    last_success_at: z.number().int().nullable(), last_failed_at: z.number().int().nullable(),
+    last_error: z.string().max(400).nullable(),
+  })).max(10).default([]),
+  drive_linked: z.boolean().default(false),
+});
+
 export const InventorySchema = z.object({
   plugin_version: ver,
   wp_version: ver,
@@ -34,6 +48,10 @@ export const InventorySchema = z.object({
     good: z.number().int().nonnegative(),
     recommended: z.number().int().nonnegative(),
     critical: z.number().int().nonnegative(),
+  }).nullable().default(null),
+  backup: z.object({
+    last_at: z.number().int().nullable(),
+    sources: z.array(BackupSource).max(5),
   }).nullable().default(null),
 });
 

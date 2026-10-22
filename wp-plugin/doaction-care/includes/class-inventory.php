@@ -108,6 +108,7 @@ class DoAction_Care_Inventory {
 			'db_size_mb'        => $db_size,
 			'file_mods_allowed' => $file_mods,
 			'site_health'       => $health,
+			'backup'            => DoAction_Care_Backup::status(),
 		);
 	}
 }

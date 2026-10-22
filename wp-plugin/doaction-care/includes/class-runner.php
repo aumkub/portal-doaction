@@ -282,7 +282,7 @@ class DoAction_Care_Runner {
 	private function update_core() {
 		$age = self::latest_backup_age();
 		if ( null === $age ) {
-			$this->note( 'ไม่พบข้อมูล backup (UpdraftPlus) — ไม่อัปเดต core เพื่อความปลอดภัย' );
+			$this->note( 'ไม่พบข้อมูล backup (UpdraftPlus / All-in-One WP Migration) — ไม่อัปเดต core เพื่อความปลอดภัย' );
 			return $this->result( 'failed' );
 		}
 		if ( $age > self::BACKUP_MAX_AGE ) {
@@ -318,13 +318,9 @@ class DoAction_Care_Runner {
 		return $this->result( 'failed' );
 	}
 
-	/** Seconds since the newest UpdraftPlus backup, or null when unknown. */
+	/** Seconds since the newest backup any supported tool recorded, or null. */
 	public static function latest_backup_age() {
-		$last = get_option( 'updraft_last_backup' );
-		if ( is_array( $last ) && ! empty( $last['backup_time'] ) ) {
-			return max( 0, time() - (int) $last['backup_time'] );
-		}
-		return null;
+		return DoAction_Care_Backup::latest_age();
 	}
 
 	// ── Checks ────────────────────────────────────────────────────────────────
