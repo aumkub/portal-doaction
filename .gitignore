@@ -207,3 +207,4 @@ dist
 .claude/worktrees/
 # Editor local history (contains copies of config/secrets)
 .history/
+doaction-care-*.zip
