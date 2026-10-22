@@ -1,4 +1,4 @@
-import { Form } from "react-router";
+import { Form, Link } from "react-router";
 import { useEffect, useState } from "react";
 import { ConfirmButton } from "~/components/ui/confirm-button";
 import type { SiteInventory } from "~/lib/agent/inventory";
@@ -15,11 +15,11 @@ export type ConnectedSite = {
   inventory: SiteInventory | null;
 };
 
-const ONLINE_WINDOW_S = 30 * 60;
+export const ONLINE_WINDOW_S = 30 * 60;
 
 function fmtDateTime(unix: number | null) {
   if (!unix) return "—";
-  return new Date(unix * 1000).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" });
+  return new Date(unix * 1000).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Bangkok" });
 }
 
 function Countdown({ expiresAt }: { expiresAt: number }) {
@@ -48,7 +48,7 @@ function Status({ site }: { site: ConnectedSite }) {
   return <span className="rounded-full bg-[#FFF7EE] px-2.5 py-0.5 text-[11px] font-semibold text-[#B4541A]">เงียบไป {hours} ชม.</span>;
 }
 
-function SiteCard({ site, canManage }: { site: ConnectedSite; canManage: boolean }) {
+export function SiteCard({ site, canManage, client }: { site: ConnectedSite; canManage: boolean; client?: { id: string; name: string } }) {
   const [open, setOpen] = useState(false);
   const inv = site.inventory;
   const pluginUpdates = inv?.plugins.filter((p) => p.update_version) ?? [];
@@ -62,6 +62,11 @@ function SiteCard({ site, canManage }: { site: ConnectedSite; canManage: boolean
             <p className="truncate text-sm font-semibold text-ink">{site.site_url}</p>
             <Status site={site} />
           </div>
+          {client && (
+            <Link to={`/admin/clients/${client.id}`} className="mt-0.5 inline-block text-xs font-medium text-ink-soft hover:text-ink hover:underline underline-offset-2">
+              {client.name}
+            </Link>
+          )}
           <p className="mt-1 text-xs text-muted-ink">
             WP {site.wp_version ?? "—"} · PHP {site.php_version ?? "—"} · ปลั๊กอิน {site.plugin_version ?? "—"} · ล่าสุด {fmtDateTime(site.last_seen_at)}
           </p>

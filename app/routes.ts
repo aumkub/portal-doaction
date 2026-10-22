@@ -39,6 +39,7 @@ export default [
       route("clients", "routes/_admin/clients.tsx"),
       route("clients/new", "routes/_admin/clients-new.tsx"),
       route("clients/:clientId", "routes/_admin/client-detail.tsx"),
+      route("sites", "routes/_admin/sites.tsx"),
       route("co-admins", "routes/_admin/co-admins.tsx"),
       route("tickets", "routes/_admin/tickets.tsx"),
       route("tickets/trash", "routes/_admin/tickets-trash.tsx"),

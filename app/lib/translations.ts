@@ -45,6 +45,7 @@ const th = {
   nav_admin_reports: "รายงาน",
   nav_all_tickets: "Tickets",
   nav_attachments: "ไฟล์แนบ",
+  nav_sites: "เว็บไซต์",
   nav_email_logs: "อีเมลล็อก",
   nav_logout: "ออกจากระบบ",
 
@@ -572,6 +573,7 @@ const en: Record<keyof typeof th, string> = {
   nav_reports: "Monthly Reports",
   nav_tickets: "Support Tickets",
   nav_attachments: "Attachments",
+  nav_sites: "Websites",
   nav_email_logs: "Email logs",
   nav_logout: "Logout",
 

@@ -13,6 +13,7 @@ import {
   FaEnvelope,
   FaFileLines,
   FaGear,
+  FaGlobe,
   FaHeadset,
   FaHouse,
   FaPaperclip,
@@ -35,6 +36,7 @@ const clientNav: NavItem[] = [
 const adminNav: NavItem[] = [
   { labelKey: "nav_overview", href: "/admin", icon: FaHouse, end: true },
   { labelKey: "nav_clients", href: "/admin/clients", icon: FaUsers },
+  { labelKey: "nav_sites", href: "/admin/sites", icon: FaGlobe },
   { labelKey: "nav_co_admins", href: "/admin/co-admins", icon: FaUserSecret },
   { labelKey: "nav_admin_reports", href: "/admin/reports", icon: FaFileLines },
   { labelKey: "nav_all_tickets", href: "/admin/tickets", icon: FaTicket },
@@ -46,6 +48,7 @@ const adminNav: NavItem[] = [
 const coAdminNav: NavItem[] = [
   { labelKey: "nav_overview", href: "/admin", icon: FaHouse, end: true },
   { labelKey: "nav_clients", href: "/admin/clients", icon: FaUsers },
+  { labelKey: "nav_sites", href: "/admin/sites", icon: FaGlobe },
   { labelKey: "nav_admin_reports", href: "/admin/reports", icon: FaFileLines },
   { labelKey: "nav_all_tickets", href: "/admin/tickets", icon: FaTicket },
 ];
