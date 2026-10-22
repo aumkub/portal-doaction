@@ -12,7 +12,8 @@ import { generateId } from "~/lib/utils";
 import {
   decryptSecret, encryptSecret, normalizePairCode, randomHex, sha256hex, signPayload, verifySignature,
 } from "./crypto";
-import { InventorySchema, JobReportSchema, PairSchema, WidgetTicketSchema } from "./inventory";
+import { InventorySchema, JobReportSchema, PairSchema, SsoRequestSchema, WidgetTicketSchema } from "./inventory";
+import { parseClientCcEmails } from "~/lib/client-cc";
 import { CARE_PAUSED_KEY, addJobToDraftReport } from "./jobs.server";
 import type { SiteRow } from "~/lib/db.server";
 import { emailTeamNewTicket } from "~/lib/email-alerts.server";
@@ -104,6 +105,7 @@ export async function handleAgentRequest(request: Request, env: CloudflareEnv): 
     if (pathname === "/agent/v1/jobs/next") return await handleJobsNext(request, env);
     if (pathname === "/agent/v1/jobs/report") return await handleJobReport(request, env);
     if (pathname === "/agent/v1/ticket") return await handleWidgetTicket(request, env);
+    if (pathname === "/agent/v1/sso") return await handleSso(request, env);
     return json(404, { error: "not_found" });
   } catch (err) {
     console.error("agent error", err);
@@ -311,4 +313,54 @@ async function handleWidgetTicket(request: Request, env: CloudflareEnv): Promise
     console.error("[agent ticket] team email failed", e);
   }
   return signedJson(auth.secret, 200, { ok: true, ticket_id: ticketId });
+}
+
+export const SSO_TOKEN_TTL_S = 60;
+const SSO_PER_SITE_PER_HOUR = 10;
+
+/**
+ * One-click sign-in from the client's wp-admin. The site (signed) asks for a
+ * single-use, 60-second token for the WordPress user's email; it is issued
+ * only when that email is the client's account email or one of its CC
+ * addresses. The browser then POSTs the token to /sso.
+ */
+async function handleSso(request: Request, env: CloudflareEnv): Promise<Response> {
+  const auth = await authenticate(request, env);
+  if (auth instanceof Response) return auth;
+  const parsed = SsoRequestSchema.safeParse(parseBody(auth.raw));
+  if (!parsed.success) return signedJson(auth.secret, 400, { error: "invalid_payload" });
+
+  const db = createDB(env.DB);
+  const now = Math.floor(Date.now() / 1000);
+  const client = await db.getClientById(auth.site.client_id);
+  const ip = request.headers.get("CF-Connecting-IP");
+  const log = (outcome: string) =>
+    env.DB.prepare("INSERT INTO sso_logins (id, client_id, site_id, wp_email, outcome, ip, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .bind(generateId(), auth.site.client_id, auth.site.id, parsed.data.email, outcome, ip, now)
+      .run();
+  const refuse = async (reason: string) => {
+    await log(reason);
+    return signedJson(auth.secret, 200, { ok: false, reason });
+  };
+
+  if (!client || client.deleted_at || client.kind !== "client") return refuse("not_client");
+  if (!client.sso_enabled) return refuse("disabled");
+
+  const rlKey = `sso-rl:${auth.site.id}`;
+  const used = Number((await env.SESSIONPORTAL.get(rlKey)) ?? "0");
+  if (used >= SSO_PER_SITE_PER_HOUR) return refuse("rate_limited");
+  await env.SESSIONPORTAL.put(rlKey, String(used + 1), { expirationTtl: 3600 });
+
+  const user = await db.getUserById(client.user_id);
+  const allowed = new Set([user?.email?.toLowerCase(), ...parseClientCcEmails(client.cc_emails).map((e) => e.toLowerCase())]);
+  if (!user || user.role !== "client" || !allowed.has(parsed.data.email)) return refuse("email_mismatch");
+
+  const token = randomHex(32);
+  await env.SESSIONPORTAL.put(
+    `sso:${await sha256hex(token)}`,
+    JSON.stringify({ user_id: user.id, client_id: client.id, site_id: auth.site.id, email: parsed.data.email }),
+    { expirationTtl: SSO_TOKEN_TTL_S },
+  );
+  await log("issued");
+  return signedJson(auth.secret, 200, { ok: true, token, url: `${new URL(request.url).origin}/sso` });
 }

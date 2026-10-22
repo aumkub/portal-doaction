@@ -58,6 +58,8 @@ export interface Client {
   notes: string | null;
   /** "internal" = our own / sister website: admin-only, no client login, emails or reports. */
   kind: ClientKind;
+  /** 1 = the client may sign in from their wp-admin with one click (email must match). */
+  sso_enabled: number;
   deleted_at?: number | null;
   created_at: number;
 }

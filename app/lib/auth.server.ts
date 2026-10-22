@@ -10,6 +10,8 @@ import type { TwoFactorMethod, User, UserLanguage, UserRole } from "~/types";
 interface KVSessionData {
   userId: string;
   expiresAt: number; // unix ms
+  /** Sessions opened from a site's wp-admin (SSO) never roll past this. */
+  hardExpiresAt?: number; // unix ms
 }
 
 interface ImpersonationData {
@@ -200,6 +202,7 @@ function createKVAdapter(kv: KVNamespace, db: ReturnType<typeof createDB>) {
       // writing each time makes concurrent requests queue behind each other.
       // Persisting only a meaningful bump keeps the session rolling at a
       // fraction of the writes.
+      if (raw.hardExpiresAt) return;
       if (expiresAt.getTime() - raw.expiresAt < SESSION_EXTENSION_MIN_MS) return;
       const ttlSeconds = Math.max(
         1,
@@ -265,6 +268,24 @@ export function createAuth(d1: D1Database, kv: KVNamespace) {
 export type Auth = ReturnType<typeof createAuth>;
 
 // ─── Magic Link ───────────────────────────────────────────────────────────────
+
+/**
+ * A client session with a fixed lifetime (no rolling renewal), used when a
+ * client arrives from their own wp-admin. Returns the Set-Cookie value.
+ */
+export async function createCappedClientSession(env: CloudflareEnv, userId: string, lifetimeSeconds: number): Promise<string> {
+  const { lucia } = createAuth(env.DB, env.SESSIONPORTAL);
+  const session = await lucia.createSession(userId, {});
+  const hardExpiresAt = Date.now() + lifetimeSeconds * 1000;
+  await env.SESSIONPORTAL.put(
+    `session:${session.id}`,
+    JSON.stringify({ userId, expiresAt: hardExpiresAt, hardExpiresAt } satisfies KVSessionData),
+    { expirationTtl: lifetimeSeconds }
+  );
+  const cookie = lucia.createSessionCookie(session.id);
+  cookie.attributes.maxAge = lifetimeSeconds;
+  return cookie.serialize();
+}
 
 export function generateMagicToken() {
   return {

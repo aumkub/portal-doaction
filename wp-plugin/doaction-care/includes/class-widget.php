@@ -17,6 +17,7 @@ class DoAction_Care_Widget {
 		add_action( 'wp_dashboard_setup', array( __CLASS__, 'register' ) );
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'assets' ) );
 		add_action( 'admin_post_doaction_care_ticket', array( __CLASS__, 'handle_ticket' ) );
+		add_action( 'admin_post_doaction_care_sso', array( __CLASS__, 'handle_sso' ) );
 	}
 
 	public static function assets( $hook ) {
@@ -70,6 +71,17 @@ class DoAction_Care_Widget {
 				<div class="dac-notice is-error">ส่งเรื่องไม่สำเร็จ ลองใหม่ หรือแจ้งผ่านพอร์ทัล</div>
 			<?php endif; ?>
 
+			<form class="dac-wsso" method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+				<input type="hidden" name="action" value="doaction_care_sso">
+				<?php wp_nonce_field( 'doaction_care_sso' ); ?>
+				<button type="submit" class="dac-btn is-yellow dac-wide">เข้าพอร์ทัลและเปิด ticket</button>
+			</form>
+			<?php if ( 'mismatch' === $notice ) : ?>
+				<div class="dac-notice is-error">อีเมลของบัญชี WordPress นี้ไม่ตรงกับบัญชีลูกค้าในพอร์ทัล — เข้าสู่ระบบด้วยอีเมลตามปกติ หรือส่งเรื่องจากฟอร์มด้านล่าง</div>
+			<?php elseif ( 'sso_error' === $notice ) : ?>
+				<div class="dac-notice is-error">เปิดพอร์ทัลอัตโนมัติไม่ได้ในตอนนี้ ลองใหม่ หรือเข้าสู่ระบบตามปกติ</div>
+			<?php endif; ?>
+
 			<div class="dac-stats dac-wstats">
 				<?php foreach ( $stats as $st ) : ?>
 					<div class="dac-stat"><div class="dac-k"><?php echo esc_html( $st[0] ); ?></div><div class="dac-v<?php echo $st[2] ? ' is-bad' : ''; ?>"><?php echo esc_html( $st[1] ); ?></div></div>
@@ -84,11 +96,62 @@ class DoAction_Care_Widget {
 				<label class="dac-field"><textarea name="description" rows="3" maxlength="5000" required placeholder="รายละเอียด"></textarea></label>
 				<div class="dac-actions">
 					<button type="submit" class="dac-btn is-primary">ส่งเรื่อง</button>
-					<a class="dac-btn is-yellow" href="<?php echo esc_url( $portal ); ?>" target="_blank" rel="noopener">เปิดพอร์ทัล</a>
 				</div>
 			</form>
 		</div>
 		<?php
+	}
+
+	/**
+	 * One click into the portal. The portal issues a single-use 60-second
+	 * token only if this WordPress user's email is the client's account or
+	 * CC email; the token goes to the portal in a POST body, never a URL.
+	 */
+	public static function handle_sso() {
+		if ( ! current_user_can( self::CAP ) ) {
+			wp_die( 'forbidden', 403 );
+		}
+		check_admin_referer( 'doaction_care_sso' );
+		$user = wp_get_current_user();
+		$res  = DoAction_Care_Api_Client::signed_post(
+			'sso',
+			array(
+				'email'   => (string) $user->user_email,
+				'wp_user' => (string) $user->user_login,
+			)
+		);
+		$back = admin_url( 'index.php' );
+		if ( is_wp_error( $res ) || 200 !== $res['status'] || ! is_array( $res['data'] ) ) {
+			wp_safe_redirect( add_query_arg( 'doaction_care_ticket', 'sso_error', $back ) );
+			exit;
+		}
+		$data = $res['data'];
+		if ( empty( $data['ok'] ) || empty( $data['token'] ) || empty( $data['url'] ) ) {
+			$reason = isset( $data['reason'] ) && 'email_mismatch' === $data['reason'] ? 'mismatch' : 'sso_error';
+			wp_safe_redirect( add_query_arg( 'doaction_care_ticket', $reason, $back ) );
+			exit;
+		}
+		$url = (string) $data['url'];
+		if ( 0 !== strpos( $url, untrailingslashit( DOACTION_CARE_PORTAL ) . '/' ) || ! preg_match( '/^[0-9a-f]{64}$/', (string) $data['token'] ) ) {
+			wp_safe_redirect( add_query_arg( 'doaction_care_ticket', 'sso_error', $back ) );
+			exit;
+		}
+		nocache_headers();
+		header( 'Referrer-Policy: no-referrer' );
+		header( 'Content-Type: text/html; charset=utf-8' );
+		?>
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="robots" content="noindex"><title>do action Portal</title></head>
+<body style="font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f6f5f1;color:#111">
+<form id="dac-sso" method="post" action="<?php echo esc_url( $url ); ?>">
+	<input type="hidden" name="token" value="<?php echo esc_attr( (string) $data['token'] ); ?>">
+	<p>กำลังเปิดพอร์ทัล…</p>
+	<noscript><button type="submit">ไปที่พอร์ทัล</button></noscript>
+</form>
+<script>document.getElementById('dac-sso').submit();</script>
+</body></html>
+		<?php
+		exit;
 	}
 
 	public static function handle_ticket() {

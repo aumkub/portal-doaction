@@ -76,3 +76,8 @@ export const WidgetTicketSchema = z.object({
   description: z.string().trim().min(1).max(5000),
   reporter: str(200).nullable().default(null),
 });
+
+export const SsoRequestSchema = z.object({
+  email: z.string().trim().toLowerCase().email().max(200),
+  wp_user: str(200).nullable().default(null),
+});

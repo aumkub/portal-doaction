@@ -83,7 +83,14 @@ export async function loader({ request, params, context }: any) {
   const siteJobs = await db.listSiteJobs({ site_ids: sites.map((x) => x.id), since: Math.floor(Date.now() / 1000) - 30 * 86400 });
   const carePaused = Boolean(await context.cloudflare.env.SESSIONPORTAL.get(CARE_PAUSED_KEY));
 
+  const ssoLog = (
+    await env.DB.prepare(
+      "SELECT l.wp_email, l.outcome, l.created_at, s.site_url FROM sso_logins l JOIN sites s ON s.id = l.site_id WHERE l.client_id = ? ORDER BY l.created_at DESC LIMIT 8"
+    ).bind(client.id).all<{ wp_email: string; outcome: string; created_at: number; site_url: string }>()
+  ).results;
+
   return {
+    ssoLog,
     sites,
     siteJobs,
     carePaused,
@@ -141,6 +148,11 @@ export async function action({ request, params, context }: any) {
       notes: String(formData.get("notes") ?? "").trim() || null,
     });
     await db.updateUser(client.user_id, { name: company_name });
+    return redirect(`/admin/clients/${params.clientId}`);
+  }
+
+  if (intent === "set_sso") {
+    await env.DB.prepare("UPDATE clients SET sso_enabled = ? WHERE id = ?").bind(formData.get("enabled") === "1" ? 1 : 0, client.id).run();
     return redirect(`/admin/clients/${params.clientId}`);
   }
 
@@ -340,6 +352,48 @@ function getInitials(name: string) {
   return name.split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 }
 
+const SSO_OUTCOME: Record<string, string> = {
+  issued: "ออกตั๋วแล้ว",
+  used: "เข้าสู่ระบบสำเร็จ",
+  email_mismatch: "อีเมลไม่ตรง — ปฏิเสธ",
+  disabled: "ปิดอยู่ — ปฏิเสธ",
+  not_client: "ไม่ใช่ลูกค้า — ปฏิเสธ",
+  rate_limited: "ขอถี่เกิน — ปฏิเสธ",
+};
+
+function SsoCard({ enabled, log }: { enabled: boolean; log: Array<{ wp_email: string; outcome: string; created_at: number; site_url: string }> }) {
+  return (
+    <SectionCard
+      title="เข้าสู่ระบบจาก wp-admin"
+      subtitle="ลูกค้ากดปุ่มใน widget ของเว็บตัวเองแล้วเข้า portal ได้ทันที เฉพาะผู้ใช้ WordPress ที่อีเมลตรงกับบัญชีลูกค้าหรือ CC · session อยู่ได้ 8 ชม."
+      action={
+        <Form method="post">
+          <input type="hidden" name="intent" value="set_sso" />
+          <input type="hidden" name="enabled" value={enabled ? "0" : "1"} />
+          <button type="submit" className={`inline-flex h-8 items-center rounded-full px-3.5 text-xs font-semibold transition-colors ${enabled ? "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20" : "border border-line bg-white text-muted-ink hover:text-ink"}`}>
+            {enabled ? "เปิดอยู่ · กดเพื่อปิด" : "ปิดอยู่ · กดเพื่อเปิด"}
+          </button>
+        </Form>
+      }
+    >
+      {log.length === 0 ? (
+        <p className="text-xs text-muted-ink">ยังไม่มีการใช้งาน</p>
+      ) : (
+        <ul className="divide-y divide-line-soft text-xs">
+          {log.map((l, i) => (
+            <li key={i} className="flex flex-wrap items-center justify-between gap-2 py-2">
+              <span className="min-w-0 truncate text-ink">{l.wp_email} <span className="text-muted-ink">· {new URL(l.site_url).host}</span></span>
+              <span className={l.outcome === "used" || l.outcome === "issued" ? "text-emerald-700" : "text-[#B4541A]"}>
+                {SSO_OUTCOME[l.outcome] ?? l.outcome} · {new Date(l.created_at * 1000).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Bangkok" })}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </SectionCard>
+  );
+}
+
 function KindSwitch({ internal, error }: { internal: boolean; error?: string }) {
   const [open, setOpen] = useState(Boolean(error));
   return (
@@ -426,6 +480,7 @@ export default function AdminClientDetailPage({ loaderData }: any) {
     canImpersonate,
     sites = [],
     siteJobs = [],
+    ssoLog = [],
     carePaused = false,
     appUrl,
   } = loaderData;
@@ -694,6 +749,8 @@ export default function AdminClientDetailPage({ loaderData }: any) {
             jobs={siteJobs}
             paused={carePaused}
           />
+
+          {isAdmin && !internal && <SsoCard enabled={Boolean(client.sso_enabled)} log={ssoLog} />}
 
           {isAdmin && <KindSwitch internal={internal} error={(errors as any)?.kind_email?.[0]} />}
 
