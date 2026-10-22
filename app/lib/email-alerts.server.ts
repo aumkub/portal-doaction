@@ -2,6 +2,8 @@ import { createDB, type DB } from "~/lib/db.server";
 import { sendEmail } from "~/lib/email.server";
 import { parseClientCcEmails } from "~/lib/client-cc";
 import { bangkokToday, isContractExpired, isInternal, needsMonthlyReport } from "~/lib/contract";
+import { listBackupProblems } from "~/lib/agent/jobs.server";
+import { BACKUP_ISSUE_LABEL } from "~/lib/agent/backup-health";
 import { generateId } from "~/lib/utils";
 
 /**
@@ -307,6 +309,11 @@ async function sendTeamDigest(
   );
   add(`รายงานที่เผยแพร่แล้วแต่ยังไม่ส่งอีเมล`, unsent.map((r) => `${r.company_name} — ${r.title}`));
   if (showMissing) add(`ยังไม่สร้างรายงานเดือนนี้ (${missing.length} ราย)`, missing.map((c) => c.company_name));
+  const backupProblems = await listBackupProblems(env, now).catch(() => []);
+  add(
+    `Backup มีปัญหา (${backupProblems.length} เว็บ)`,
+    backupProblems.map((p) => `${p.company_name} (${p.host}) — ${p.issues.map((i) => BACKUP_ISSUE_LABEL[i]).join(", ")}`)
+  );
   add(`สัญญาจะหมดใน 30 วัน`, expiring.sort((a, b) => a.days - b.days).map((e) => `${e.name} — ${e.end} (อีก ${e.days} วัน)`));
 
   if (sections.length === 0) return false; // nothing worth an email today

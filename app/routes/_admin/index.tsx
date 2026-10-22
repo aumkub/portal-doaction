@@ -1,4 +1,5 @@
 import { requireCoAdminOrAdmin } from "~/lib/auth.server";
+import { listBackupProblems } from "~/lib/agent/jobs.server";
 import { isContractExpired, isInternal, needsMonthlyReport } from "~/lib/contract";
 import { createDB } from "~/lib/db.server";
 import { useT } from "~/lib/i18n";
@@ -146,8 +147,10 @@ export async function loader({ request, context }: any) {
     .first<{ silent: number | null; failed: number }>()
     .catch(() => null);
 
+  const backupProblems = await listBackupProblems(context.cloudflare.env).catch(() => []);
+
   return {
-    careAlert: { silent: careAlert?.silent ?? 0, failed: careAlert?.failed ?? 0 },
+    careAlert: { silent: careAlert?.silent ?? 0, failed: careAlert?.failed ?? 0, backup: backupProblems.length },
     uptime,
     totalClients: clients.length,
     unresolvedCount: unresolved.length,
@@ -467,15 +470,16 @@ export default function AdminOverviewPage({ loaderData }: any) {
         </div>
       </section>
 
-      {(data.careAlert.silent > 0 || data.careAlert.failed > 0) && (
+      {(data.careAlert.silent > 0 || data.careAlert.failed > 0 || data.careAlert.backup > 0) && (
         <a
-          href="/admin/sites"
+          href={data.careAlert.backup > 0 ? "/admin/sites?filter=backup" : "/admin/sites"}
           className="block rounded-[20px] border border-[#F6D3B0] bg-[#FFF7EE] px-5 py-4 text-sm text-[#7A3410] hover:bg-[#FFEFDD] transition-colors"
         >
           <span className="font-semibold">เว็บไซต์ที่ดูแล: </span>
           {[
             data.careAlert.silent > 0 && `${data.careAlert.silent} เว็บไม่ได้ส่งข้อมูลเกิน 3 ชม.`,
             data.careAlert.failed > 0 && `อัปเดตไม่สำเร็จ ${data.careAlert.failed} รายการใน 7 วัน`,
+            data.careAlert.backup > 0 && `backup มีปัญหา ${data.careAlert.backup} เว็บ`,
           ].filter(Boolean).join(" · ")}
           <span className="ml-1 font-semibold underline underline-offset-2">ดูรายละเอียด</span>
         </a>

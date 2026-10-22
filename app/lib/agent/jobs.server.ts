@@ -6,7 +6,8 @@
 import { createDB, type SiteJobKind } from "~/lib/db.server";
 import { generateId } from "~/lib/utils";
 import { decryptSecret, randomHex, signPayload } from "./crypto";
-import type { SiteInventory } from "./inventory";
+import { InventorySchema, type SiteInventory } from "./inventory";
+import { backupIssues, type BackupIssue } from "./backup-health";
 
 export const CARE_PAUSED_KEY = "care:paused";
 /** A running job with no report after this long is marked failed. */
@@ -126,4 +127,25 @@ export async function addJobToDraftReport(env: CloudflareEnv, clientId: string, 
   if (report && report.status === "draft") {
     await appendSiteUpdatesToReport(db, { clientId, reportId: report.id, year, month });
   }
+}
+
+/** Connected sites (clients and in-house) whose backups need attention. */
+export async function listBackupProblems(env: CloudflareEnv, now = Math.floor(Date.now() / 1000)) {
+  const { results } = await env.DB
+    .prepare(
+      `SELECT s.id, s.site_url, c.company_name, i.json FROM sites s
+       JOIN clients c ON c.id = s.client_id
+       JOIN site_inventory i ON i.site_id = s.id
+       WHERE s.revoked_at IS NULL AND c.deleted_at IS NULL`
+    )
+    .all<{ id: string; site_url: string; company_name: string; json: string }>();
+  const out: Array<{ site_id: string; host: string; company_name: string; issues: BackupIssue[] }> = [];
+  for (const r of results) {
+    let inv;
+    try { inv = InventorySchema.safeParse(JSON.parse(r.json)); } catch { continue; }
+    if (!inv.success) continue;
+    const issues = backupIssues(inv.data, now);
+    if (issues.length) out.push({ site_id: r.id, host: new URL(r.site_url).host, company_name: r.company_name, issues });
+  }
+  return out;
 }

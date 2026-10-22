@@ -95,7 +95,7 @@ function BackupLine({ inv }: { inv: NonNullable<ConnectedSite["inventory"]> }) {
   return (
     <>
       <span className={`rounded-full px-2.5 py-1 font-medium ${stale || src.ok === false ? "bg-[#FFF7EE] text-[#B4541A]" : "bg-white text-ink-soft"}`}>
-        Backup {hours == null ? "—" : hours < 1 ? "< 1 ชม." : `${hours} ชม.`}ที่แล้ว · {BACKUP_TOOL[src.tool] ?? src.tool}
+        Backup {hours == null ? "ยังไม่เคยมี" : `${hours < 1 ? "< 1 ชม." : hours >= 48 ? `${Math.floor(hours / 24)} วัน` : `${hours} ชม.`}ที่แล้ว`} · {BACKUP_TOOL[src.tool] ?? src.tool}
         {onDrive ? " · Google Drive" : " · ไม่พบการส่งขึ้น Drive"}
       </span>
       {failedEvent && (

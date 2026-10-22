@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Form, Link, useLoaderData } from "react-router";
+import { Form, Link, useLoaderData, useSearchParams } from "react-router";
+import { backupIssues } from "~/lib/agent/backup-health";
 import type { Route } from "./+types/sites";
 import { requireCoAdminOrAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
@@ -89,7 +90,8 @@ export async function action({ request, context }: Route.ActionArgs) {
   return { error: "unknown intent" };
 }
 
-type Filter = "all" | "updates" | "silent" | "internal";
+type Filter = "all" | "updates" | "silent" | "backup" | "internal";
+const FILTERS: Filter[] = ["all", "updates", "silent", "backup", "internal"];
 
 function pendingUpdates(site: ConnectedSite) {
   const inv = site.inventory;
@@ -103,18 +105,22 @@ function pendingUpdates(site: ConnectedSite) {
 
 export default function AdminSitesPage() {
   const { sites, jobs, paused, now } = useLoaderData<typeof loader>();
-  const [filter, setFilter] = useState<Filter>("all");
+  const [searchParams] = useSearchParams();
+  const initial = searchParams.get("filter") as Filter | null;
+  const [filter, setFilter] = useState<Filter>(initial && FILTERS.includes(initial) ? initial : "all");
 
   const isSilent = (s: ConnectedSite) => !s.last_seen_at || now - s.last_seen_at >= SILENT_AFTER_S;
   const silent = sites.filter(isSilent);
   const needUpdates = sites.filter((s) => pendingUpdates(s) > 0);
   const totalUpdates = sites.reduce((n, s) => n + pendingUpdates(s), 0);
-  const shown = filter === "updates" ? needUpdates : filter === "silent" ? silent : filter === "internal" ? sites.filter((x) => x.internal) : sites;
+  const backupBad = sites.filter((x) => backupIssues(x.inventory, now).length > 0);
+  const shown = filter === "backup" ? backupBad : filter === "updates" ? needUpdates : filter === "silent" ? silent : filter === "internal" ? sites.filter((x) => x.internal) : sites;
 
   const chips: { key: Filter; label: string; count: number }[] = [
     { key: "all", label: "ทั้งหมด", count: sites.length },
     { key: "updates", label: "รออัปเดต", count: needUpdates.length },
     { key: "silent", label: "ขาดการติดต่อ", count: silent.length },
+    { key: "backup", label: "backup มีปัญหา", count: backupBad.length },
     { key: "internal", label: "เว็บในเครือ", count: sites.filter((x) => x.internal).length },
   ];
 
