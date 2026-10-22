@@ -1,7 +1,7 @@
 import { Lucia, TimeSpan } from "lucia";
 import { generateId } from "~/lib/utils";
 import { createDB } from "~/lib/db.server";
-import type { User, UserLanguage, UserRole } from "~/types";
+import type { TwoFactorMethod, User, UserLanguage, UserRole } from "~/types";
 
 // ─── KV-based Lucia Adapter ──────────────────────────────────────────────────
 // Sessions are stored in Cloudflare KV (fast reads, auto-TTL).
@@ -162,6 +162,7 @@ function createKVAdapter(kv: KVNamespace, db: ReturnType<typeof createDB>) {
             avatar_url: user.avatar_url,
             language: user.language ?? "th",
             totp_enabled_at: user.totp_enabled_at ?? null,
+            two_factor_method: user.two_factor_method ?? null,
             created_at: user.created_at,
             updated_at: user.updated_at,
           },
@@ -249,6 +250,9 @@ export function createAuth(d1: D1Database, kv: KVNamespace) {
         avatar_url: attrs.avatar_url as string | null,
         language: attrs.language as UserLanguage,
         totp_enabled_at: (attrs.totp_enabled_at as number | null | undefined) ?? null,
+        two_factor_method: (attrs.two_factor_method as TwoFactorMethod | null | undefined) ?? null,
+        // totp_enabled_at fallback covers user rows cached before migration 0018.
+        two_factor_enabled: Boolean(attrs.two_factor_method || attrs.totp_enabled_at),
         created_at: attrs.created_at as number,
         updated_at: attrs.updated_at as number,
       };
@@ -340,7 +344,7 @@ const TWO_FACTOR_EXEMPT_PATHS = [TWO_FACTOR_SETUP_PATH, "/logout", "/api/imperso
  * portal as someone else (impersonation) is not asked to enrol for them.
  */
 async function enforceStaffTwoFactor(request: Request, kv: KVNamespace, user: User): Promise<void> {
-  if (user.totp_enabled_at) return;
+  if (user.two_factor_enabled) return;
   const pathname = new URL(request.url).pathname.replace(/\.data$/, "");
   if (TWO_FACTOR_EXEMPT_PATHS.includes(pathname)) return;
   const sessionId = (request.headers.get("Cookie") ?? "").match(/doaction_session=([^;]+)/)?.[1];

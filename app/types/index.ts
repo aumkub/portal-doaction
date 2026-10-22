@@ -19,6 +19,9 @@ export interface User {
   totp_secret?: string | null;
   totp_enabled_at?: number | null;
   totp_recovery?: string | null;
+  two_factor_method?: TwoFactorMethod | null;
+  /** Session attribute: true when the user has any second factor set up. */
+  two_factor_enabled?: boolean;
   created_at: number;
   updated_at: number;
 }
@@ -211,3 +214,16 @@ export interface EmailLog {
 
 // Canonical env type — also declared globally in app/types/cloudflare.d.ts
 export type { } // keep module
+
+export type TwoFactorMethod = "totp" | "passkey";
+
+export interface UserPasskey {
+  id: string;
+  user_id: string;
+  public_key: string;
+  counter: number;
+  transports: string | null;
+  name: string | null;
+  created_at: number;
+  last_used_at: number | null;
+}

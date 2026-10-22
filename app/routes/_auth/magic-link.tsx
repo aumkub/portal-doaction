@@ -21,7 +21,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   await db.markMagicLinkUsed(record.id);
 
   const user = await db.getUserById(record.user_id);
-  if (user && (user.role === "admin" || user.role === "co-admin") && user.totp_enabled_at) {
+  if (user && (user.role === "admin" || user.role === "co-admin") && (user.two_factor_method || user.totp_enabled_at)) {
     return completeLogin({ request, env, user, redirectTo: "/admin/clients" });
   }
 

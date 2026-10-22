@@ -11,7 +11,14 @@ import {
   hashRecoveryCode,
   verifyTotp,
 } from "~/lib/totp.server";
-import type { User } from "~/types";
+import {
+  finishPasskeyRegistration,
+  listPasskeys,
+  startPasskeyAuthentication,
+  startPasskeyRegistration,
+  verifyPasskeyAssertion,
+} from "~/lib/passkey.server";
+import type { TwoFactorMethod, User } from "~/types";
 
 const CHALLENGE_TTL = 300;
 const SETUP_TTL = 600;
@@ -22,13 +29,17 @@ interface TotpRow {
   totp_secret: string | null;
   totp_enabled_at: number | null;
   totp_recovery: string | null;
+  two_factor_method: TwoFactorMethod | null;
 }
 
 interface Challenge {
   userId: string;
   redirect: string;
   attempts: number;
+  method: TwoFactorMethod;
 }
+
+export type ChallengeMethod = "totp" | "recovery" | "passkey";
 
 export function safeRedirect(dest: string | null | undefined, fallback: string): string {
   if (!dest || !dest.startsWith("/") || dest.startsWith("//") || dest.startsWith("/\\")) {
@@ -39,7 +50,7 @@ export function safeRedirect(dest: string | null | undefined, fallback: string):
 
 export async function getTotpRow(d1: D1Database, userId: string): Promise<TotpRow | null> {
   return d1
-    .prepare("SELECT totp_secret, totp_enabled_at, totp_recovery FROM users WHERE id = ?")
+    .prepare("SELECT totp_secret, totp_enabled_at, totp_recovery, two_factor_method FROM users WHERE id = ?")
     .bind(userId)
     .first<TotpRow>();
 }
@@ -75,11 +86,12 @@ export async function completeLogin(opts: {
 }): Promise<Response> {
   const { request, env, user, redirectTo } = opts;
   const row = await getTotpRow(env.DB, user.id);
-  if (row?.totp_enabled_at && row.totp_secret) {
+  const method = activeMethod(row);
+  if (method) {
     const token = generateId(32);
     await env.SESSIONPORTAL.put(
       `2fa:${token}`,
-      JSON.stringify({ userId: user.id, redirect: redirectTo, attempts: 0 } satisfies Challenge),
+      JSON.stringify({ userId: user.id, redirect: redirectTo, attempts: 0, method } satisfies Challenge),
       { expirationTtl: CHALLENGE_TTL }
     );
     return redirect("/login/2fa", {
@@ -104,22 +116,28 @@ function clearCookieHeader(request: Request) {
   return challengeCookie(request, "", 0);
 }
 
-/** Verifies a TOTP or recovery code against the user's stored factors. */
-async function checkSecondFactor(
-  env: CloudflareEnv,
-  userId: string,
-  code: string,
-  useRecovery: boolean
-): Promise<boolean> {
-  const row = await getTotpRow(env.DB, userId);
-  if (!row?.totp_enabled_at || !row.totp_secret) return false;
-  if (!useRecovery) {
-    const secret = await decryptSecret(row.totp_secret, env.SESSION_SECRET);
-    return verifyTotp(secret, code);
-  }
+/** The user's configured second factor; rows enabled before 0018 count as TOTP. */
+function activeMethod(row: TotpRow | null): TwoFactorMethod | null {
+  if (!row) return null;
+  if (row.two_factor_method === "passkey") return "passkey";
+  if (row.totp_enabled_at && row.totp_secret) return "totp";
+  return null;
+}
+
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+/** Spends one recovery code. Works for either method. */
+async function consumeRecoveryCode(env: CloudflareEnv, userId: string, row: TotpRow, code: string) {
   const hashes: string[] = row.totp_recovery ? JSON.parse(row.totp_recovery) : [];
   const hash = await hashRecoveryCode(code);
-  if (!hashes.includes(hash)) return false;
+  let match = false;
+  for (const h of hashes) if (timingSafeEqual(h, hash)) match = true;
+  if (!match) return false;
   const remaining = hashes.filter((h) => h !== hash);
   // Conditional update so a code cannot be spent twice by racing requests.
   const res = await env.DB.prepare(
@@ -132,13 +150,41 @@ async function checkSecondFactor(
   return true;
 }
 
+/** Verifies a TOTP code, passkey assertion or recovery code against the user's factor. */
+async function checkSecondFactor(
+  request: Request,
+  env: CloudflareEnv,
+  userId: string,
+  kind: ChallengeMethod,
+  code: string,
+  passkeyChallengeKey: string
+): Promise<boolean> {
+  const row = await getTotpRow(env.DB, userId);
+  const method = activeMethod(row);
+  if (!row || !method) return false;
+  if (kind === "recovery") return consumeRecoveryCode(env, userId, row, code);
+  if (kind !== method) return false;
+  if (method === "totp") {
+    const secret = await decryptSecret(row.totp_secret!, env.SESSION_SECRET);
+    return verifyTotp(secret, code);
+  }
+  return verifyPasskeyAssertion(request, env, userId, passkeyChallengeKey, code);
+}
+
+/** Passkey request options for the pending login challenge. */
+export async function loginPasskeyOptions(request: Request, env: CloudflareEnv) {
+  const challenge = await getChallenge(env, request);
+  if (!challenge || challenge.data.method !== "passkey") return null;
+  return startPasskeyAuthentication(request, env, challenge.data.userId, `2fa-pk:${challenge.token}`);
+}
+
 export async function verifyChallenge(opts: {
   request: Request;
   env: CloudflareEnv;
   code: string;
-  useRecovery: boolean;
+  kind: ChallengeMethod;
 }): Promise<Response | { error: string }> {
-  const { request, env, code, useRecovery } = opts;
+  const { request, env, code, kind } = opts;
   const challenge = await getChallenge(env, request);
   if (!challenge) {
     return redirect("/login?error=2fa_expired", {
@@ -146,7 +192,7 @@ export async function verifyChallenge(opts: {
     });
   }
   const { token, data } = challenge;
-  const ok = await checkSecondFactor(env, data.userId, code, useRecovery);
+  const ok = await checkSecondFactor(request, env, data.userId, kind, code, `2fa-pk:${token}`);
   if (!ok) {
     const attempts = data.attempts + 1;
     if (attempts >= MAX_ATTEMPTS) {
@@ -158,7 +204,7 @@ export async function verifyChallenge(opts: {
     await env.SESSIONPORTAL.put(`2fa:${token}`, JSON.stringify({ ...data, attempts }), {
       expirationTtl: CHALLENGE_TTL,
     });
-    return { error: "รหัสไม่ถูกต้อง กรุณาลองอีกครั้ง" };
+    return { error: kind === "passkey" ? "ยืนยันด้วย passkey ไม่สำเร็จ กรุณาลองอีกครั้ง" : "รหัสไม่ถูกต้อง กรุณาลองอีกครั้ง" };
   }
   await env.SESSIONPORTAL.delete(`2fa:${token}`);
   const { lucia } = createAuth(env.DB, env.SESSIONPORTAL);
@@ -173,9 +219,11 @@ export async function verifyChallenge(opts: {
 
 export interface TwoFactorState {
   enabled: boolean;
+  method: TwoFactorMethod | null;
   enabledAt: number | null;
   recoveryRemaining: number;
   setup: { secret: string; qrSvg: string } | null;
+  passkeys: { id: string; name: string | null; createdAt: number; lastUsedAt: number | null }[];
 }
 
 export async function loadTwoFactorState(
@@ -183,9 +231,9 @@ export async function loadTwoFactorState(
   user: Pick<User, "id" | "email">
 ): Promise<TwoFactorState> {
   const row = await getTotpRow(env.DB, user.id);
-  const enabled = Boolean(row?.totp_enabled_at && row.totp_secret);
+  const method = activeMethod(row);
   let setup: TwoFactorState["setup"] = null;
-  if (!enabled) {
+  if (!method) {
     const pending = await env.SESSIONPORTAL.get(`2fa-setup:${user.id}`);
     if (pending) {
       const secret = await decryptSecret(pending, env.SESSION_SECRET);
@@ -196,17 +244,31 @@ export async function loadTwoFactorState(
     }
   }
   const recovery: string[] = row?.totp_recovery ? JSON.parse(row.totp_recovery) : [];
+  const passkeys = method === "passkey" ? await listPasskeys(env.DB, user.id) : [];
   return {
-    enabled,
-    enabledAt: row?.totp_enabled_at ?? null,
-    recoveryRemaining: enabled ? recovery.length : 0,
+    enabled: Boolean(method),
+    method,
+    enabledAt: method === "totp" ? (row?.totp_enabled_at ?? null) : null,
+    recoveryRemaining: method ? recovery.length : 0,
     setup,
+    passkeys: passkeys.map((pk) => ({
+      id: pk.id,
+      name: pk.name,
+      createdAt: pk.created_at,
+      lastUsedAt: pk.last_used_at,
+    })),
   };
 }
 
-export type TwoFactorActionResult =
-  | { twoFactor: { error?: string; recoveryCodes?: string[]; message?: string } }
-  | null;
+export type TwoFactorActionResult = {
+  twoFactor: {
+    error?: string;
+    recoveryCodes?: string[];
+    message?: string;
+    passkeyOptions?: unknown;
+    passkeyAuthOptions?: unknown;
+  };
+} | null;
 
 async function newRecoveryHashes() {
   const codes = generateRecoveryCodes();
@@ -214,19 +276,23 @@ async function newRecoveryHashes() {
   return { codes, hashes };
 }
 
-/** Handles `2fa_*` intents; returns null for any other intent. */
+/** Handles `2fa_*` / `pk_*` intents; returns null for any other intent. */
 export async function handleTwoFactorIntent(
+  request: Request,
   env: CloudflareEnv,
-  user: Pick<User, "id" | "email">,
+  user: Pick<User, "id" | "email" | "name">,
   intent: string,
   formData: FormData
 ): Promise<TwoFactorActionResult> {
-  if (!intent.startsWith("2fa_")) return null;
+  if (!intent.startsWith("2fa_") && !intent.startsWith("pk_")) return null;
   const code = String(formData.get("code") ?? "").trim();
   const invalid = { twoFactor: { error: "รหัสไม่ถูกต้อง กรุณาลองอีกครั้ง" } };
   const setupKey = `2fa-setup:${user.id}`;
+  const row = await getTotpRow(env.DB, user.id);
+  const method = activeMethod(row);
 
   if (intent === "2fa_start") {
+    if (method) return { twoFactor: { error: "เปิดใช้ 2FA อยู่แล้ว" } };
     const encrypted = await encryptSecret(generateTotpSecret(), env.SESSION_SECRET);
     await env.SESSIONPORTAL.put(setupKey, encrypted, { expirationTtl: SETUP_TTL });
     return { twoFactor: {} };
@@ -238,13 +304,14 @@ export async function handleTwoFactorIntent(
   }
 
   if (intent === "2fa_confirm") {
+    if (method) return { twoFactor: { error: "เปิดใช้ 2FA อยู่แล้ว" } };
     const pending = await env.SESSIONPORTAL.get(setupKey);
     if (!pending) return { twoFactor: { error: "หมดเวลาตั้งค่า กรุณาเริ่มใหม่" } };
     const secret = await decryptSecret(pending, env.SESSION_SECRET);
     if (!(await verifyTotp(secret, code))) return invalid;
     const { codes, hashes } = await newRecoveryHashes();
     await env.DB.prepare(
-      "UPDATE users SET totp_secret = ?, totp_enabled_at = unixepoch(), totp_recovery = ?, updated_at = unixepoch() WHERE id = ?"
+      "UPDATE users SET totp_secret = ?, totp_enabled_at = unixepoch(), totp_recovery = ?, two_factor_method = 'totp', updated_at = unixepoch() WHERE id = ?"
     )
       .bind(pending, JSON.stringify(hashes), user.id)
       .run();
@@ -253,17 +320,73 @@ export async function handleTwoFactorIntent(
     return { twoFactor: { recoveryCodes: codes, message: "เปิดใช้ 2FA แล้ว" } };
   }
 
-  const row = await getTotpRow(env.DB, user.id);
-  if (!row?.totp_enabled_at || !row.totp_secret) return { twoFactor: { error: "ยังไม่ได้เปิดใช้ 2FA" } };
-  const secret = await decryptSecret(row.totp_secret, env.SESSION_SECRET);
-  if (!(await verifyTotp(secret, code))) return invalid;
+  // ─── Passkey enrolment ────────────────────────────────────────────────────
+  if (intent === "pk_reg_options") {
+    if (method === "totp") return { twoFactor: { error: "ปิด 2FA แบบแอปก่อนเปลี่ยนเป็น passkey" } };
+    return { twoFactor: { passkeyOptions: await startPasskeyRegistration(request, env, user) } };
+  }
+
+  if (intent === "pk_reg_verify") {
+    if (method === "totp") return { twoFactor: { error: "ปิด 2FA แบบแอปก่อนเปลี่ยนเป็น passkey" } };
+    const name = String(formData.get("name") ?? "").trim();
+    const ok = await finishPasskeyRegistration(
+      request, env, user.id, String(formData.get("response") ?? ""), name
+    );
+    if (!ok) return { twoFactor: { error: "บันทึก passkey ไม่สำเร็จ กรุณาลองอีกครั้ง" } };
+    if (method === "passkey") return { twoFactor: { message: "เพิ่ม passkey แล้ว" } };
+    const { codes, hashes } = await newRecoveryHashes();
+    await env.DB.prepare(
+      "UPDATE users SET two_factor_method = 'passkey', totp_secret = NULL, totp_enabled_at = NULL, totp_recovery = ?, updated_at = unixepoch() WHERE id = ?"
+    )
+      .bind(JSON.stringify(hashes), user.id)
+      .run();
+    await env.SESSIONPORTAL.delete(setupKey);
+    await evictUserCache(env.SESSIONPORTAL, user.id);
+    return { twoFactor: { recoveryCodes: codes, message: "เปิดใช้ 2FA ด้วย passkey แล้ว" } };
+  }
+
+  if (!row || !method) return { twoFactor: { error: "ยังไม่ได้เปิดใช้ 2FA" } };
+
+  if (intent === "pk_auth_options") {
+    if (method !== "passkey") return { twoFactor: { error: "คำขอไม่ถูกต้อง" } };
+    const options = await startPasskeyAuthentication(request, env, user.id, `pk-auth:${user.id}`);
+    if (!options) return { twoFactor: { error: "ไม่พบ passkey" } };
+    return { twoFactor: { passkeyAuthOptions: options } };
+  }
+
+  if (intent === "pk_remove") {
+    if (method !== "passkey") return { twoFactor: { error: "คำขอไม่ถูกต้อง" } };
+    const passkeys = await listPasskeys(env.DB, user.id);
+    if (passkeys.length <= 1) {
+      return { twoFactor: { error: "ลบ passkey สุดท้ายไม่ได้ — ใช้ “ปิด 2FA / เปลี่ยนวิธี” แทน" } };
+    }
+    const res = await env.DB.prepare("DELETE FROM user_passkeys WHERE id = ? AND user_id = ?")
+      .bind(String(formData.get("passkey_id") ?? ""), user.id)
+      .run();
+    if (!res.meta.changes) return { twoFactor: { error: "ไม่พบ passkey" } };
+    return { twoFactor: { message: "ลบ passkey แล้ว" } };
+  }
+
+  // Remaining intents need proof of the current factor (or a recovery code).
+  const recovery = String(formData.get("recovery") ?? "").trim();
+  const assertion = String(formData.get("assertion") ?? "");
+  let verified = false;
+  if (recovery) {
+    verified = await consumeRecoveryCode(env, user.id, row, recovery);
+  } else if (method === "totp" && code) {
+    verified = await verifyTotp(await decryptSecret(row.totp_secret!, env.SESSION_SECRET), code);
+  } else if (method === "passkey" && assertion) {
+    verified = await verifyPasskeyAssertion(request, env, user.id, `pk-auth:${user.id}`, assertion);
+  }
+  if (!verified) return { twoFactor: { error: "ยืนยันตัวตนไม่สำเร็จ กรุณาลองอีกครั้ง" } };
 
   if (intent === "2fa_disable") {
-    await env.DB.prepare(
-      "UPDATE users SET totp_secret = NULL, totp_enabled_at = NULL, totp_recovery = NULL, updated_at = unixepoch() WHERE id = ?"
-    )
-      .bind(user.id)
-      .run();
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE users SET totp_secret = NULL, totp_enabled_at = NULL, totp_recovery = NULL, two_factor_method = NULL, updated_at = unixepoch() WHERE id = ?"
+      ).bind(user.id),
+      env.DB.prepare("DELETE FROM user_passkeys WHERE user_id = ?").bind(user.id),
+    ]);
     await evictUserCache(env.SESSIONPORTAL, user.id);
     return { twoFactor: { message: "ปิด 2FA แล้ว" } };
   }

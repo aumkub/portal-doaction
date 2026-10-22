@@ -140,7 +140,7 @@ export async function action({ request, context }: any) {
   const raw = Object.fromEntries(formData);
   const intent = formData.get("intent");
 
-  const twoFactorResult = await handleTwoFactorIntent(env, admin, String(intent ?? ""), formData);
+  const twoFactorResult = await handleTwoFactorIntent(request, env, admin, String(intent ?? ""), formData);
   if (twoFactorResult) return twoFactorResult;
 
   if (intent === "telegram") {

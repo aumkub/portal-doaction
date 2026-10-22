@@ -11,7 +11,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const env = context.cloudflare.env;
   const user = await requireCoAdminOrAdmin(request, env.DB, env.SESSIONPORTAL);
   const required = new URL(request.url).searchParams.get("required") === "1";
-  return { twoFactor: await loadTwoFactorState(env, user), required, enabled: Boolean(user.totp_enabled_at) };
+  return { twoFactor: await loadTwoFactorState(env, user), required, enabled: Boolean(user.two_factor_enabled) };
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -19,7 +19,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   const user = await requireCoAdminOrAdmin(request, env.DB, env.SESSIONPORTAL);
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "");
-  return (await handleTwoFactorIntent(env, user, intent, formData)) ?? {
+  return (await handleTwoFactorIntent(request, env, user, intent, formData)) ?? {
     twoFactor: { error: "คำขอไม่ถูกต้อง" },
   };
 }
@@ -36,7 +36,7 @@ export default function SecurityPage({ loaderData, actionData }: Route.Component
           <p className="font-semibold">ต้องเปิดการยืนยันตัวตนสองขั้นก่อนใช้งาน portal</p>
           <p className="mt-1">
             บัญชีทีมงานทุกบัญชีต้องเปิด 2FA เพราะ portal เข้าถึงข้อมูลและเว็บไซต์ของลูกค้าได้ ใช้เวลาประมาณ 1 นาที
-            ด้วยแอป Google Authenticator, Microsoft Authenticator หรือ 1Password
+            เลือกได้ว่าจะใช้ passkey (Face ID / Touch ID / Windows Hello) หรือแอป Authenticator เช่น Google Authenticator, 1Password
           </p>
         </div>
       )}
