@@ -212,7 +212,13 @@ export default function Topbar({
     .toUpperCase();
 
   const settingsHref =
-    role === "admin" ? "/admin/settings" : role === "client" ? "/settings" : null;
+    role === "admin"
+      ? "/admin/settings"
+      : role === "client"
+        ? "/settings"
+        : role === "co-admin"
+          ? "/admin/security"
+          : null;
 
   return (
     <header className="h-16 bg-white border-b border-line shrink-0 sticky top-0 z-20">

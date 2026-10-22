@@ -15,6 +15,7 @@ export default [
   // ── Auth routes ─────────────────────────────────────────────────────────────
   layout("routes/_auth/layout.tsx", [
     route("login", "routes/_auth/login.tsx"),
+    route("login/2fa", "routes/_auth/login.2fa.tsx"),
     route("magic-link", "routes/_auth/magic-link.tsx"),
   ]),
 
@@ -52,6 +53,7 @@ export default [
       route("settings", "routes/_admin/settings.tsx"),
       route("settings/webdav", "routes/_admin/settings.webdav.tsx"),
       route("settings/mcp", "routes/_admin/settings.mcp.tsx"),
+      route("security", "routes/_admin/security.tsx"),
     ]),
   ]),
 

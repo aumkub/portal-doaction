@@ -16,6 +16,9 @@ export interface User {
   avatar_url: string | null;
   language?: UserLanguage | null;
   first_login_at?: number | null;
+  totp_secret?: string | null;
+  totp_enabled_at?: number | null;
+  totp_recovery?: string | null;
   created_at: number;
   updated_at: number;
 }

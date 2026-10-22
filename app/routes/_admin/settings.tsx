@@ -8,6 +8,8 @@ import { createDB } from "~/lib/db.server";
 import { useT } from "~/lib/i18n";
 import { sendTelegramNotification } from "~/lib/telegram.server";
 import { NativeSelect } from "~/components/ui/native-select";
+import { TwoFactorCard } from "~/components/settings/TwoFactorCard";
+import { handleTwoFactorIntent, loadTwoFactorState } from "~/lib/two-factor.server";
 import {
   FaCircleCheck,
   FaPaperPlane,
@@ -74,8 +76,9 @@ export async function loader({ request, context }: any) {
   const env = context.cloudflare.env;
   const admin = await requireAdmin(request, env.DB, env.SESSIONPORTAL);
   const db = createDB(env.DB);
-  const [adminUsers, s] = await Promise.all([
+  const [adminUsersRaw, twoFactor, s] = await Promise.all([
     db.listAdminUsers(),
+    loadTwoFactorState(env, admin),
     db.getAppSettings([
       "telegram_bot_token",
       "telegram_default_group_id",
@@ -95,6 +98,8 @@ export async function loader({ request, context }: any) {
       "webdav_password",
     ]),
   ]);
+  // Only what the team list renders — never hashes or 2FA secrets.
+  const adminUsers = adminUsersRaw.map((u) => ({ id: u.id, name: u.name, email: u.email }));
   const telegramBotToken = s.telegram_bot_token;
   const telegramDefaultGroupId = s.telegram_default_group_id;
   const contractWarningFirstDays = Number(s.contract_warning_first_days ?? "14");
@@ -118,7 +123,7 @@ export async function loader({ request, context }: any) {
   const webdavPath = s.webdav_path ?? "";
   const webdavHasPassword = !!s.webdav_password;
   return {
-    admin, adminUsers, uptimeKey,
+    admin, adminUsers, uptimeKey, twoFactor,
     telegramBotToken, telegramDefaultGroupId,
     contractWarningFirstDays, contractWarningSecondDays, contractWarningThirdDays,
     ticketReminderEnabled, ticketReminderDays, ticketReminderHour,
@@ -134,6 +139,9 @@ export async function action({ request, context }: any) {
   const formData = await request.formData();
   const raw = Object.fromEntries(formData);
   const intent = formData.get("intent");
+
+  const twoFactorResult = await handleTwoFactorIntent(env, admin, String(intent ?? ""), formData);
+  if (twoFactorResult) return twoFactorResult;
 
   if (intent === "telegram") {
     const parsed = TelegramSchema.safeParse(raw);
@@ -270,7 +278,7 @@ function fieldCls(extra = "") {
 
 export default function AdminSettingsPage({ loaderData, actionData }: any) {
   const {
-    admin, adminUsers, uptimeKey,
+    admin, adminUsers, uptimeKey, twoFactor,
     telegramBotToken, telegramDefaultGroupId,
     contractWarningFirstDays, contractWarningSecondDays, contractWarningThirdDays,
     ticketReminderEnabled, ticketReminderDays, ticketReminderHour,
@@ -362,6 +370,8 @@ export default function AdminSettingsPage({ loaderData, actionData }: any) {
               </div>
             </Form>
           </SectionCard>
+
+          <TwoFactorCard state={twoFactor} result={actionData?.twoFactor} />
 
           {/* ── Admin Team ── */}
           <SectionCard

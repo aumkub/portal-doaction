@@ -1,8 +1,9 @@
-import { Form, useActionData, useNavigation, redirect } from "react-router";
+import { Form, useActionData, useNavigation, useSearchParams, redirect } from "react-router";
 import { useState } from "react";
 import type { Route } from "./+types/login";
 import { createDB } from "~/lib/db.server";
 import { verifyPassword, createAuth, generateMagicToken } from "~/lib/auth.server";
+import { completeLogin, safeRedirect } from "~/lib/two-factor.server";
 import { sendMagicLinkEmail } from "~/lib/email.server";
 import { parseClientCcEmails } from "~/lib/client-cc";
 import { useT } from "~/lib/i18n";
@@ -80,13 +81,11 @@ export async function action({ request, context }: Route.ActionArgs) {
     if (!storedHash || !(await verifyPassword(password, storedHash))) {
       return { errors: { email: ["อีเมลหรือรหัสผ่านไม่ถูกต้อง"] }, sent: false };
     }
-    const { lucia } = createAuth(env.DB, env.SESSIONPORTAL);
-    const session = await lucia.createSession(user.id, {});
-    const cookie = lucia.createSessionCookie(session.id);
-    const dest =
-      new URL(request.url).searchParams.get("redirect") ??
-      (user.role === "co-admin" ? "/admin" : "/admin/clients");
-    return redirect(dest, { headers: { "Set-Cookie": cookie.serialize() } });
+    const dest = safeRedirect(
+      new URL(request.url).searchParams.get("redirect"),
+      user.role === "co-admin" ? "/admin" : "/admin/clients"
+    );
+    return completeLogin({ request, env, user, redirectTo: dest });
   }
 
   if (user && user.role === "co-admin") {
@@ -137,7 +136,14 @@ export default function LoginPage() {
   const isSubmittingAdmin = isSubmitting && submittingMode === "password";
   const isSubmittingBypass = isSubmitting && submittingMode === "local_admin_bypass";
   const showLocalBypass = import.meta.env.DEV;
-  const [showAdminForm, setShowAdminForm] = useState(false);
+  const [searchParams] = useSearchParams();
+  const twoFactorError =
+    searchParams.get("error") === "2fa_locked"
+      ? "ยืนยันตัวตนไม่สำเร็จหลายครั้ง กรุณาเข้าสู่ระบบใหม่"
+      : searchParams.get("error") === "2fa_expired"
+        ? "หมดเวลายืนยันตัวตน กรุณาเข้าสู่ระบบใหม่"
+        : null;
+  const [showAdminForm, setShowAdminForm] = useState(Boolean(twoFactorError));
 
   /* ── Sent confirmation screen ─────────────────────────────────── */
   if (actionData?.sent) {
@@ -273,6 +279,9 @@ export default function LoginPage() {
 
                   {actionData?.errors?.email && (
                     <p className="text-xs text-[#B4541A]">{actionData.errors.email[0]}</p>
+                  )}
+                  {!actionData && twoFactorError && (
+                    <p className="text-xs text-[#B4541A]">{twoFactorError}</p>
                   )}
 
                   <button
