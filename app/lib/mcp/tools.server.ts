@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isContractExpired } from "~/lib/contract";
+import { isContractExpired, isInternal } from "~/lib/contract";
 import type { DB } from "~/lib/db.server";
 import type { User, SupportTicket, TaskCategory } from "~/types";
 import { generateId, getThaiMonth } from "~/lib/utils";
@@ -111,7 +111,7 @@ export const tools = [
     readOnly: true,
     async run(_args, { db }) {
       const [allClients, open] = await Promise.all([db.listClients(), db.listAllOpenTickets()]);
-      const clients = allClients.filter((c) => !isContractExpired(c.contract_end));
+      const clients = allClients.filter((c) => !isInternal(c) && !isContractExpired(c.contract_end));
       const { year, month } = bangkokYearMonth();
       const missing = await db.listClientsWithoutReportForMonth(year, month);
       const count = (key: "status" | "priority") =>
@@ -158,6 +158,7 @@ export const tools = [
           company_name: c.company_name,
           website_url: c.website_url,
           package: c.package,
+          kind: c.kind,
           contract_start: c.contract_start,
           contract_end: c.contract_end,
         }));

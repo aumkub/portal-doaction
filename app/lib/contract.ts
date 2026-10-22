@@ -8,12 +8,14 @@ export function bangkokToday(): string {
  * an open-ended contract. Expired clients drop out of report work and the
  * default client list.
  */
-/** Our own company is a client in the portal for testing; it gets no monthly report. */
-export const OWN_COMPANY_NAME = "บริษัท ดู แอคชั่น จำกัด";
+/** Our own and sister websites: looked after by the team, never treated as a paying client. */
+export function isInternal(client: { kind?: string | null }): boolean {
+  return client.kind === "internal";
+}
 
 /** Whether a client is expected to receive a monthly report. */
-export function needsMonthlyReport(client: { company_name: string; contract_end: string | null }): boolean {
-  return client.company_name !== OWN_COMPANY_NAME && !isContractExpired(client.contract_end);
+export function needsMonthlyReport(client: { kind?: string | null; contract_end: string | null }): boolean {
+  return !isInternal(client) && !isContractExpired(client.contract_end);
 }
 
 export function isContractExpired(contractEnd: string | null | undefined): boolean {

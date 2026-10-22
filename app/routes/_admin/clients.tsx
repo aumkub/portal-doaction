@@ -1,6 +1,6 @@
 import { Form, useFetcher } from "react-router";
 import { ConfirmButton } from "~/components/ui/confirm-button";
-import { bangkokYearMonth, isContractExpired, OWN_COMPANY_NAME } from "~/lib/contract";
+import { bangkokYearMonth, isContractExpired, isInternal } from "~/lib/contract";
 import { useState, useMemo, type FormEvent } from "react";
 import type { Route } from "./+types/clients";
 import Pagination from "~/components/ui/Pagination";
@@ -10,7 +10,7 @@ import { formatRelativeTime } from "~/lib/utils";
 import type { Client } from "~/types";
 import { useT } from "~/lib/i18n";
 import type { TranslationKey } from "~/lib/translations";
-import { FaCirclePlus, FaChevronRight, FaUserSecret, FaMagnifyingGlass, FaUsers, FaClock, FaFileCircleXmark, FaCircleCheck } from "react-icons/fa6";
+import { FaCirclePlus, FaChevronRight, FaGlobe, FaUserSecret, FaMagnifyingGlass, FaUsers, FaClock, FaFileCircleXmark, FaCircleCheck } from "react-icons/fa6";
 
 export function meta() {
   return [{ title: "จัดการลูกค้า — Admin" }];
@@ -34,8 +34,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const allClientsWithStatus = await Promise.all(
     clients.map(async (client) => {
       const u = await db.getUserById(client.user_id);
-      // Hardcode: บริษัท ดู แอคชั่น จำกัด doesn't need monthly reports (testing account)
-      const skipReportCheck = client.company_name === OWN_COMPANY_NAME;
+      const skipReportCheck = isInternal(client);
       // Expired contracts get no monthly report, so there is nothing to check.
       const contractExpired = isContractExpired(client.contract_end);
       let has_monthly_report = false;
@@ -61,12 +60,15 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   // string compare against today's Bangkok date is enough.
   const contractParam = url.searchParams.get("contract");
   const contractFilter: ContractFilter =
-    contractParam === "expired" || contractParam === "all" ? contractParam : "active";
+    contractParam === "expired" || contractParam === "all" || contractParam === "internal" ? contractParam : "active";
   const isExpired = (c: { contract_end: string | null }) => isContractExpired(c.contract_end);
-  const expiredCount = allClientsWithStatus.filter(isExpired).length;
-  const contractScoped = allClientsWithStatus.filter((c) =>
-    contractFilter === "all" ? true : contractFilter === "expired" ? isExpired(c) : !isExpired(c)
-  );
+  const paying = allClientsWithStatus.filter((c) => !isInternal(c));
+  const internalCount = allClientsWithStatus.length - paying.length;
+  const expiredCount = paying.filter(isExpired).length;
+  const contractScoped =
+    contractFilter === "internal"
+      ? allClientsWithStatus.filter(isInternal)
+      : paying.filter((c) => (contractFilter === "all" ? true : contractFilter === "expired" ? isExpired(c) : !isExpired(c)));
   const total = contractScoped.length;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -84,7 +86,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   return {
     care,
     // Of the active clients, how many are marked this month.
-    careCount: allClientsWithStatus.filter((c) => !isExpired(c) && care[c.id]).length,
+    careCount: paying.filter((c) => !isExpired(c) && care[c.id]).length,
     clients: clientsWithStatus,
     userRole: user.role,
     page: safePage,
@@ -94,11 +96,12 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     currentYear,
     contractFilter,
     expiredCount,
-    activeCount: allClientsWithStatus.length - expiredCount,
+    internalCount,
+    activeCount: paying.length - expiredCount,
   };
 }
 
-type ContractFilter = "active" | "expired" | "all";
+type ContractFilter = "active" | "expired" | "all" | "internal";
 
 /** Toggle this month's "looked after" mark for a client. Admin only. */
 export async function action({ request, context }: Route.ActionArgs) {
@@ -209,7 +212,7 @@ function daysUntil(end: string | null): number | null {
 }
 
 export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
-  const { care, careCount, clients, userRole, page, totalPages, total, currentMonth, currentYear, contractFilter, expiredCount, activeCount } = loaderData as {
+  const { care, careCount, clients, userRole, page, totalPages, total, currentMonth, currentYear, contractFilter, expiredCount, activeCount, internalCount } = loaderData as {
     care: Record<string, { at: number; by: string }>;
     careCount: number;
     clients: Array<Client & { first_login_at: number | null; has_monthly_report: boolean; skip_report_check?: boolean; contract_expired: boolean }>;
@@ -222,6 +225,7 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
     contractFilter: ContractFilter;
     expiredCount: number;
     activeCount: number;
+    internalCount: number;
   };
   const { t, lang } = useT();
   const L = (th: string, en: string) => (lang === "en" ? en : th);
@@ -253,7 +257,8 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
   const contractCards = [
     { value: "active" as const, label: L("ใช้งานอยู่", "Active"), count: activeCount, chip: "bg-emerald-50 text-emerald-700", icon: FaCircleCheck },
     { value: "expired" as const, label: L("หมดอายุ", "Expired"), count: expiredCount, chip: "bg-[#FDE7DA] text-[#B4541A]", icon: FaClock },
-    { value: "all" as const, label: L("ทั้งหมด", "All"), count: activeCount + expiredCount, chip: "bg-paper text-ink-soft", icon: FaUsers },
+    { value: "all" as const, label: L("ลูกค้าทั้งหมด", "All clients"), count: activeCount + expiredCount, chip: "bg-paper text-ink-soft", icon: FaUsers },
+    { value: "internal" as const, label: L("เว็บในเครือ", "In-house"), count: internalCount, chip: "bg-brand-yellow/40 text-ink", icon: FaGlobe },
   ];
 
   const segBtn = (on: boolean) =>
@@ -270,7 +275,9 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
             {isCoAdmin ? "ลูกค้าที่ดูแล" : t("admin_clients_title")}
           </p>
           <h1 className="mt-1.5 text-[28px] md:text-[32px] font-bold tracking-[-0.02em] text-ink">
-            {t("rd_admin_clients_headline").replace("{n}", String(total))}
+            {contractFilter === "internal"
+              ? L(`เว็บในเครือ ${total} เว็บ`, `${total} in-house websites`)
+              : t("rd_admin_clients_headline").replace("{n}", String(total))}
           </h1>
           {!isCoAdmin && (
             <p className="mt-1.5 flex items-center gap-1.5 text-sm text-muted-ink">
@@ -284,7 +291,7 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
         </div>
         {!isCoAdmin && (
           <a
-            href="/admin/clients/new"
+            href={contractFilter === "internal" ? "/admin/clients/new?kind=internal" : "/admin/clients/new"}
             className="inline-flex h-10 items-center gap-2 rounded-full bg-ink px-5 text-[13px] font-semibold text-white hover:bg-black"
           >
             <FaCirclePlus aria-hidden="true" />
@@ -294,7 +301,7 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
       </div>
 
       {/* ── Contract filter cards ── */}
-      <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0 sm:pb-0">
+      <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-4 sm:overflow-visible sm:px-0 sm:pb-0">
         {contractCards.map((c) => {
           const active = contractFilter === c.value;
           return (
@@ -331,6 +338,7 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
               className="w-full h-10 rounded-full border border-line bg-white pl-9 pr-3.5 text-sm text-ink placeholder:text-faint-ink focus:outline-none focus:ring-2 focus:ring-ink/10 focus:border-ink/40 transition"
             />
           </div>
+          {contractFilter !== "internal" && (
           <div className="flex flex-wrap items-center gap-2">
             <div className="inline-flex max-w-full overflow-x-auto rounded-full bg-paper p-[3px]">
               {([
@@ -355,6 +363,7 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
               ))}
             </div>
           </div>
+          )}
         </div>
 
         {filtered.length === 0 ? (
@@ -388,6 +397,11 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
                             <span aria-hidden="true">·</span>
                           </>
                         )}
+                        {isInternal(client) ? (
+                          <span className="shrink-0 rounded-full bg-brand-yellow/40 px-2 py-0.5 text-[11px] font-semibold text-ink">
+                            {L("เว็บในเครือ", "In-house")}
+                          </span>
+                        ) : (<>
                         <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${styles.badge}`}>
                           <span className={`h-1.5 w-1.5 rounded-full ${styles.dot}`} />
                           {t(packageKeys[client.package])}
@@ -405,6 +419,7 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
                         ) : (
                           <span className="shrink-0">{t("settings_contract_no_expiry")}</span>
                         )}
+                        </>)}
                       </span>
                     </span>
                     <span className="hidden shrink-0 items-center gap-1.5 sm:flex">
@@ -417,7 +432,7 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
                           {L("ยังไม่มี Report", "No report")}
                         </span>
                       )}
-                      {!client.first_login_at && (
+                      {!client.first_login_at && !isInternal(client) && (
                         <span className="inline-flex items-center gap-1 rounded-full bg-[#FFF6C2] px-2 py-0.5 text-[11px] font-semibold text-[#6B5B00] whitespace-nowrap">
                           <span className="h-1.5 w-1.5 rounded-full bg-[#B89B00]" />{t("admin_login_status_pending")}
                         </span>
@@ -425,8 +440,8 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
                     </span>
                   </a>
                   <div className="flex shrink-0 items-center gap-1.5 pl-[54px] sm:pl-0">
-                    {!isCoAdmin && !client.contract_expired && <CareToggle clientId={client.id} mark={care[client.id]} lang={lang} />}
-                    <ClientActions client={client} isCoAdmin={isCoAdmin} t={t} confirmMsg={`${t("admin_impersonate_confirm")} ${client.company_name}?`} />
+                    {!isCoAdmin && !client.contract_expired && !isInternal(client) && <CareToggle clientId={client.id} mark={care[client.id]} lang={lang} />}
+                    {!isInternal(client) && <ClientActions client={client} isCoAdmin={isCoAdmin} t={t} confirmMsg={`${t("admin_impersonate_confirm")} ${client.company_name}?`} />}
                     <a href={`/admin/clients/${client.id}`} aria-label={t("admin_view_details")} className="inline-flex h-8 w-8 items-center justify-center rounded-full text-faint-ink hover:bg-paper hover:text-ink transition-colors">
                       <FaChevronRight className="text-[11px]" aria-hidden="true" />
                     </a>

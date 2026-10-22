@@ -1,7 +1,7 @@
 import { createDB, type DB } from "~/lib/db.server";
 import { sendEmail } from "~/lib/email.server";
 import { parseClientCcEmails } from "~/lib/client-cc";
-import { bangkokToday, isContractExpired, needsMonthlyReport } from "~/lib/contract";
+import { bangkokToday, isContractExpired, isInternal, needsMonthlyReport } from "~/lib/contract";
 import { generateId } from "~/lib/utils";
 
 /**
@@ -196,7 +196,7 @@ export async function runDailyEmailAlerts(env: CloudflareEnv): Promise<void> {
     { stage: "third" as const, days: Number(s.contract_warning_third_days ?? "1") },
   ].filter((w) => Number.isFinite(w.days) && w.days > 0);
 
-  const clients = (await db.listClients()).filter((c) => !isContractExpired(c.contract_end));
+  const clients = (await db.listClients()).filter((c) => !isInternal(c) && !isContractExpired(c.contract_end));
   const expiring: Array<{ name: string; end: string; days: number }> = [];
   for (const client of clients) {
     if (!client.contract_end) continue;
@@ -229,7 +229,7 @@ export async function sendDigestPreview(
   if (!env.SEND_EMAIL) return false;
   const db = createDB(env.DB);
   const today = bangkokToday();
-  const clients = (await db.listClients()).filter((c) => !isContractExpired(c.contract_end));
+  const clients = (await db.listClients()).filter((c) => !isInternal(c) && !isContractExpired(c.contract_end));
   const expiring = clients
     .filter((c) => c.contract_end && daysUntil(c.contract_end, today) <= 30)
     .map((c) => ({ name: c.company_name, end: c.contract_end!, days: daysUntil(c.contract_end!, today) }));

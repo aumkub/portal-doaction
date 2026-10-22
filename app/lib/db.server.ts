@@ -183,8 +183,8 @@ export function createDB(d1: D1Database) {
     ): Promise<void> {
       await d1
         .prepare(
-          `INSERT INTO clients (id, user_id, company_name, website_url, cc_emails, package, contract_start, contract_end, notes)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO clients (id, user_id, company_name, website_url, cc_emails, package, contract_start, contract_end, notes, kind)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .bind(
           client.id,
@@ -195,9 +195,14 @@ export function createDB(d1: D1Database) {
           client.package,
           client.contract_start,
           client.contract_end,
-          client.notes
+          client.notes,
+          client.kind
         )
         .run();
+    },
+
+    async setClientKind(id: string, kind: Client["kind"]): Promise<void> {
+      await d1.prepare("UPDATE clients SET kind = ? WHERE id = ?").bind(kind, id).run();
     },
 
     async updateClient(
@@ -330,11 +335,11 @@ export function createDB(d1: D1Database) {
           FROM clients c
           JOIN users u ON u.id = c.user_id
           WHERE c.deleted_at IS NULL
-            -- Expired contracts and our own company get no monthly report
+            -- Expired contracts and internal websites get no monthly report
             -- (keep in sync with needsMonthlyReport in app/lib/contract.ts)
             AND (c.contract_end IS NULL OR c.contract_end = ''
                  OR c.contract_end >= date('now', '+7 hours'))
-            AND c.company_name != 'บริษัท ดู แอคชั่น จำกัด'
+            AND c.kind = 'client'
             AND c.id NOT IN (
               SELECT client_id FROM monthly_reports
               WHERE year = ? AND month = ?
@@ -1131,14 +1136,14 @@ export function createDB(d1: D1Database) {
     async listAllSitesWithInventory() {
       const { results } = await d1
         .prepare(
-          `SELECT s.*, i.json AS inventory_json, c.company_name AS client_company
+          `SELECT s.*, i.json AS inventory_json, c.company_name AS client_company, c.kind AS client_kind
            FROM sites s
            LEFT JOIN site_inventory i ON i.site_id = s.id
            JOIN clients c ON c.id = s.client_id
            WHERE s.revoked_at IS NULL AND c.deleted_at IS NULL
            ORDER BY s.last_seen_at IS NULL, s.site_url`
         )
-        .all<SiteRow & { inventory_json: string | null; client_company: string }>();
+        .all<SiteRow & { inventory_json: string | null; client_company: string; client_kind: "client" | "internal" }>();
       return results;
     },
 

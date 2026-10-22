@@ -1,4 +1,4 @@
-import { redirect, Form } from "react-router";
+import { redirect, Form, useSearchParams } from "react-router";
 import { z } from "zod";
 import type { Route } from "./+types/clients-new";
 import { generateId } from "~/lib/utils";
@@ -17,6 +17,12 @@ import { useState } from "react";
 export function meta() {
   return [{ title: "เพิ่มลูกค้าใหม่ — Admin" }];
 }
+
+const InternalSchema = z.object({
+  company_name: z.string().trim().min(1, "กรุณาระบุชื่อ"),
+  website_url:  z.string().url("URL ไม่ถูกต้อง").optional().or(z.literal("")),
+  notes:        z.string().optional(),
+});
 
 const Schema = z.object({
   name:            z.string().min(1, "กรุณาระบุชื่อ"),
@@ -42,6 +48,21 @@ export async function action({ request, context }: Route.ActionArgs) {
   const db = createDB(env.DB);
 
   const formData = await request.formData();
+  if (formData.get("kind") === "internal") {
+    const parsedInternal = InternalSchema.safeParse(Object.fromEntries(formData));
+    if (!parsedInternal.success) return { errors: parsedInternal.error.flatten().fieldErrors };
+    const { company_name, website_url, notes } = parsedInternal.data;
+    const clientId = generateId();
+    const userId = generateId();
+    // clients.user_id is required; internal sites get a placeholder user that
+    // has no reachable email, so nobody can request a sign-in link for it.
+    await db.createUser({ id: userId, email: `internal-${clientId}@internal.invalid`, name: company_name, role: "client", avatar_url: null });
+    await db.createClient({
+      id: clientId, user_id: userId, company_name, website_url: website_url || null, cc_emails: null,
+      package: "basic", contract_start: null, contract_end: null, notes: notes || null, kind: "internal",
+    });
+    return redirect(`/admin/clients/${clientId}`);
+  }
   const parsed = Schema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
     return { errors: parsed.error.flatten().fieldErrors };
@@ -73,6 +94,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     contract_start: contract_start || null,
     contract_end: noContractEnd ? null : (contract_end || null),
     notes: notes || null,
+    kind: "client",
   });
 
   // Send magic-link invite email
@@ -105,11 +127,14 @@ export default function AdminClientsNewPage({ actionData }: Route.ComponentProps
   const errors = (actionData as { errors?: Record<string, string[]> })?.errors;
   const { t } = useT();
   const [noContractEnd, setNoContractEnd] = useState(false);
+  const [searchParams] = useSearchParams();
+  const [kind, setKind] = useState<"client" | "internal">(searchParams.get("kind") === "internal" ? "internal" : "client");
+  const internal = kind === "internal";
 
   return (
     <div className="space-y-6 max-w-2xl">
       <PageHeader
-        title={t("admin_client_new_title")}
+        title={internal ? "เพิ่มเว็บในเครือ" : t("admin_client_new_title")}
         breadcrumbs={[
           { label: t("admin_breadcrumb_admin"), href: "/admin/clients" },
           { label: t("admin_breadcrumb_clients"), href: "/admin/clients" },
@@ -118,6 +143,29 @@ export default function AdminClientsNewPage({ actionData }: Route.ComponentProps
       />
 
       <Form method="post" className="space-y-6">
+        <input type="hidden" name="kind" value={kind} />
+        <div className="grid grid-cols-2 gap-3" role="radiogroup" aria-label="ประเภท">
+          {([
+            { v: "client" as const, title: "ลูกค้า", desc: "มีบัญชีเข้า portal, สัญญา, รายงานประจำเดือน" },
+            { v: "internal" as const, title: "เว็บในเครือ", desc: "แอดมินดูแลคนเดียว ไม่มีอีเมล สัญญา หรือรายงาน" },
+          ]).map((o) => (
+            <button
+              key={o.v}
+              type="button"
+              role="radio"
+              aria-checked={kind === o.v}
+              onClick={() => setKind(o.v)}
+              className={`rounded-[18px] border bg-white p-4 text-left transition-colors ${
+                kind === o.v ? "border-ink ring-1 ring-ink" : "border-line hover:border-ink/30"
+              }`}
+            >
+              <span className="block text-sm font-semibold text-ink">{o.title}</span>
+              <span className="mt-1 block text-xs text-muted-ink">{o.desc}</span>
+            </button>
+          ))}
+        </div>
+
+        {!internal && (
         <section className="rounded-[20px] border border-line bg-white p-5 sm:p-6 space-y-4">
           <h2 className="text-[16px] font-semibold text-ink">
             {t("admin_client_new_contact")}
@@ -135,15 +183,16 @@ export default function AdminClientsNewPage({ actionData }: Route.ComponentProps
             </div>
           </div>
         </section>
+        )}
 
         <section className="rounded-[20px] border border-line bg-white p-5 sm:p-6 space-y-4">
           <h2 className="text-[16px] font-semibold text-ink">
-            {t("admin_client_new_company")}
+            {internal ? "ข้อมูลเว็บในเครือ" : t("admin_client_new_company")}
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="company_name">{t("admin_client_new_company_name")}</Label>
-              <Input id="company_name" name="company_name" placeholder="บริษัท ตัวอย่าง จำกัด" required />
+              <Label htmlFor="company_name">{internal ? "ชื่อเว็บ / แบรนด์" : t("admin_client_new_company_name")}</Label>
+              <Input id="company_name" name="company_name" placeholder={internal ? "เช่น do action Blog" : "บริษัท ตัวอย่าง จำกัด"} required />
               {errors?.company_name && <p className="text-[#B4541A] text-xs">{errors.company_name[0]}</p>}
             </div>
             <div className="space-y-1.5 sm:col-span-2">
@@ -151,6 +200,7 @@ export default function AdminClientsNewPage({ actionData }: Route.ComponentProps
               <Input id="website_url" name="website_url" type="url" placeholder="https://example.com" />
               {errors?.website_url && <p className="text-[#B4541A] text-xs">{errors.website_url[0]}</p>}
             </div>
+            {!internal && (<>
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="cc_emails">CC Email (สูงสุด 5)</Label>
               <textarea
@@ -195,6 +245,7 @@ export default function AdminClientsNewPage({ actionData }: Route.ComponentProps
                 {t("admin_client_new_monthly_no_end")}
               </label>
             </div>
+            </>)}
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="notes">{t("admin_client_new_notes")}</Label>
               <textarea id="notes" name="notes" rows={2}
@@ -203,6 +254,7 @@ export default function AdminClientsNewPage({ actionData }: Route.ComponentProps
           </div>
         </section>
 
+        {!internal && (
         <div className="flex items-center gap-3 rounded-[20px] border border-line bg-white px-5 py-4 min-h-[56px]">
           <input id="send_invite" name="send_invite" type="checkbox" defaultChecked
             className="rounded accent-ink h-4 w-4" />
@@ -210,6 +262,7 @@ export default function AdminClientsNewPage({ actionData }: Route.ComponentProps
             {t("admin_client_new_invite")}
           </label>
         </div>
+        )}
 
         <div className="flex flex-wrap justify-end gap-3">
           <a href="/admin/clients"
@@ -217,7 +270,7 @@ export default function AdminClientsNewPage({ actionData }: Route.ComponentProps
             {t("cancel")}
           </a>
           <Button type="submit">
-            {t("admin_client_new_submit")}
+            {internal ? "เพิ่มเว็บในเครือ" : t("admin_client_new_submit")}
           </Button>
         </div>
       </Form>

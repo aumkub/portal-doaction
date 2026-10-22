@@ -1,5 +1,5 @@
 import { requireCoAdminOrAdmin } from "~/lib/auth.server";
-import { isContractExpired, needsMonthlyReport } from "~/lib/contract";
+import { isContractExpired, isInternal, needsMonthlyReport } from "~/lib/contract";
 import { createDB } from "~/lib/db.server";
 import { useT } from "~/lib/i18n";
 import { formatRelativeTime, getMonthName } from "~/lib/utils";
@@ -65,7 +65,7 @@ export async function loader({ request, context }: any) {
     db.listClientsWithoutReportForMonth(year, month),
   ]);
   // Expired contracts are out of scope for day-to-day and report work.
-  const clients = allClients.filter((c) => inScope(c.id) && !isContractExpired(c.contract_end));
+  const clients = allClients.filter((c) => inScope(c.id) && !isInternal(c) && !isContractExpired(c.contract_end));
   // Report progress also leaves out our own company.
   const activeIds = new Set(clients.filter(needsMonthlyReport).map((c) => c.id));
 

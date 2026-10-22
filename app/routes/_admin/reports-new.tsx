@@ -1,6 +1,6 @@
 import { appendSiteUpdatesToReport } from "~/lib/agent/jobs.server";
 import { redirect } from "react-router";
-import { isContractExpired } from "~/lib/contract";
+import { isContractExpired, isInternal } from "~/lib/contract";
 import { getReportLinkSecret, getUptimeRobotKey } from "~/lib/secrets.server";
 import { z } from "zod";
 import type { Route } from "./+types/reports-new";
@@ -48,7 +48,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const env = context.cloudflare.env;
   await requireAdmin(request, env.DB, env.SESSIONPORTAL);
   const db = createDB(env.DB);
-  const clients = (await db.listClients()).filter((c) => !isContractExpired(c.contract_end));
+  const clients = (await db.listClients()).filter((c) => !isInternal(c) && !isContractExpired(c.contract_end));
   const recent = await db.listRecentReportsWithClient(24, clients.map((c) => c.id));
   const existingReportKeys = recent.map((r) => `${r.client_id}-${r.year}-${r.month}`);
   return { clients, existingReportKeys };

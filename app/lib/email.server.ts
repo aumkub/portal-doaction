@@ -42,6 +42,8 @@ export async function sendEmail({
   }
 
   const mainRecipient = to.trim().toLowerCase();
+  // Placeholder users of in-house websites (see clients-new) must never be mailed.
+  if (mainRecipient.endsWith(".invalid")) return;
   const normalizedCc = (cc ?? [])
     .map((recipient) => ({
       email: recipient.email.trim().toLowerCase(),

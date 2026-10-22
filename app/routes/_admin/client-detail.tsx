@@ -164,6 +164,38 @@ export async function action({ request, params, context }: any) {
     return { success: { site_revoked: true } };
   }
 
+  if (intent === "update_internal") {
+    const company_name = String(formData.get("company_name") ?? "").trim();
+    const website_url = String(formData.get("website_url") ?? "").trim();
+    if (!company_name) return { errors: { company_name: ["กรุณาระบุชื่อ"] } };
+    if (website_url && !/^https?:\/\/\S+$/.test(website_url)) return { errors: { website_url: ["URL ไม่ถูกต้อง"] } };
+    await db.updateClient(client.id, {
+      company_name,
+      website_url: website_url || null,
+      notes: String(formData.get("notes") ?? "").trim() || null,
+    });
+    await db.updateUser(client.user_id, { name: company_name });
+    return redirect(`/admin/clients/${params.clientId}`);
+  }
+
+  if (intent === "set_kind") {
+    const kind = formData.get("kind") === "internal" ? "internal" : "client";
+    if (kind === "client") {
+      // Becoming a client needs a real contact who can sign in.
+      const email = String(formData.get("email") ?? "").trim().toLowerCase();
+      const name = String(formData.get("name") ?? "").trim();
+      if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return { errors: { kind_email: ["กรุณาระบุชื่อผู้ติดต่อและอีเมลที่ถูกต้อง"] } };
+      }
+      const existing = await db.getUserByEmail(email);
+      if (existing && existing.id !== client.user_id) return { errors: { kind_email: ["อีเมลนี้มีในระบบแล้ว"] } };
+      await db.updateUser(client.user_id, { email, name });
+      await evictUserCache(env.SESSIONPORTAL, client.user_id);
+    }
+    await db.setClientKind(client.id, kind);
+    return redirect(`/admin/clients/${params.clientId}`);
+  }
+
   if (intent === "update_client") {
     const parsed = UpdateSchema.safeParse(Object.fromEntries(formData));
     const noContractEnd = formData.get("no_contract_end") === "1";
@@ -352,6 +384,60 @@ function getInitials(name: string) {
   return name.split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 }
 
+function KindSwitch({ internal, error }: { internal: boolean; error?: string }) {
+  const [open, setOpen] = useState(Boolean(error));
+  return (
+    <SectionCard
+      title="ประเภท"
+      subtitle={internal
+        ? "เว็บในเครือ: แอดมินดูแลคนเดียว ไม่มีอีเมล บัญชีลูกค้า สัญญา หรือรายงานประจำเดือน"
+        : "ลูกค้า: มีบัญชีเข้า portal สัญญา และรายงานประจำเดือน"}
+    >
+      {internal ? (
+        open ? (
+          <Form method="post" className="space-y-3">
+            <input type="hidden" name="intent" value="set_kind" />
+            <input type="hidden" name="kind" value="client" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="kind_name">ชื่อผู้ติดต่อ</Label>
+                <Input id="kind_name" name="name" required />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="kind_email">อีเมลผู้ติดต่อ</Label>
+                <Input id="kind_email" name="email" type="email" required />
+              </div>
+            </div>
+            {error && <p className="text-[#B4541A] text-xs">{error}</p>}
+            <p className="text-xs text-muted-ink">หลังเปลี่ยน ตั้งค่าแพ็กเกจ สัญญา และส่งลิงก์เข้าระบบได้ในหน้านี้ ระบบยังไม่ส่งอีเมลใด ๆ ทันที</p>
+            <div className="flex gap-2">
+              <Button type="submit" size="sm">เปลี่ยนเป็นลูกค้า</Button>
+              <button type="button" onClick={() => setOpen(false)} className="text-xs font-semibold text-muted-ink hover:text-ink px-2">ยกเลิก</button>
+            </div>
+          </Form>
+        ) : (
+          <button type="button" onClick={() => setOpen(true)}
+            className="inline-flex h-9 items-center rounded-full border border-line bg-white px-4 text-[13px] font-semibold text-ink hover:bg-paper transition-colors">
+            เปลี่ยนเป็นลูกค้า
+          </button>
+        )
+      ) : (
+        <Form method="post">
+          <input type="hidden" name="intent" value="set_kind" />
+          <input type="hidden" name="kind" value="internal" />
+          <ConfirmButton
+            message="เปลี่ยนเป็นเว็บในเครือ? จะไม่นับเป็นลูกค้า ไม่ต้องทำรายงานประจำเดือน และไม่ส่งอีเมลแจ้งเตือนสัญญา บัญชีผู้ใช้เดิมยังอยู่ (เปลี่ยนกลับได้)"
+            confirmLabel="เปลี่ยนเป็นเว็บในเครือ"
+            className="inline-flex h-9 items-center rounded-full border border-line bg-white px-4 text-[13px] font-semibold text-ink hover:bg-paper transition-colors"
+          >
+            เปลี่ยนเป็นเว็บในเครือ
+          </ConfirmButton>
+        </Form>
+      )}
+    </SectionCard>
+  );
+}
+
 function SectionCard({ title, subtitle, children, action }: {
   title: string; subtitle?: string; children: React.ReactNode; action?: React.ReactNode;
 }) {
@@ -392,7 +478,8 @@ export default function AdminClientDetailPage({ loaderData }: any) {
   const { t } = useT();
   const actionData = useActionData() as ActionData | undefined;
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = searchParams.get("tab") ?? "details";
+  const requestedTab = searchParams.get("tab") ?? "details";
+  const activeTab = client.kind === "internal" && requestedTab === "access" ? "details" : requestedTab;
   const isViewOnly = currentUser.role === "co-admin";
   const isAdmin = currentUser.role === "admin";
   const backupPathUpdated = actionData?.success && "backup_path_updated" in actionData.success;
@@ -423,9 +510,10 @@ export default function AdminClientDetailPage({ loaderData }: any) {
   const pkg = packageStyles[client.package] ?? packageStyles.standard;
   const initials = getInitials(client.company_name);
 
+  const internal = client.kind === "internal";
   const tabs = [
     { id: "details", label: lang === "th" ? "รายละเอียด" : "Details", icon: <FaUser className="text-[10px]" /> },
-    { id: "access", label: lang === "th" ? "การเข้าถึง" : "Access", icon: <FaUserSecret className="text-[10px]" /> },
+    ...(internal ? [] : [{ id: "access", label: lang === "th" ? "การเข้าถึง" : "Access", icon: <FaUserSecret className="text-[10px]" /> }]),
     { id: "notes", label: lang === "th" ? "บันทึก" : "Notes", icon: <FaFileLines className="text-[10px]" /> },
   ];
 
@@ -452,10 +540,14 @@ export default function AdminClientDetailPage({ loaderData }: any) {
               <div className="min-w-0">
                 <div className="flex items-center gap-2.5 flex-wrap">
                   <h1 className="text-[24px] md:text-[30px] font-bold tracking-[-0.02em] text-white leading-tight">{client.company_name}</h1>
+                  {internal ? (
+                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-brand-yellow text-ink">เว็บในเครือ</span>
+                  ) : (
                   <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full ${pkg.badge}`}>
                     <span className={`h-1.5 w-1.5 rounded-full ${pkg.dot}`} />
                     {t(`admin_pkg_${client.package}` as any)}
                   </span>
+                  )}
                   {isViewOnly && (
                     <span className="text-xs font-semibold text-[#6B5B00] bg-[#FFF6C2] px-2.5 py-0.5 rounded-full">
                       {t("view_only")}
@@ -463,12 +555,14 @@ export default function AdminClientDetailPage({ loaderData }: any) {
                   )}
                 </div>
                 <div className="flex items-center flex-wrap gap-x-3 gap-y-1 mt-1.5">
+                  {!internal && (<>
                   <span className="text-sm text-white/70">{user?.name ?? "—"}</span>
                   <span className="text-white/30 hidden sm:inline">·</span>
                   <span className="flex items-center gap-1 text-sm text-white/70 min-w-0 break-all">
                     <FaEnvelope className="text-[10px] text-white/50" />
                     {currentEmail || "—"}
                   </span>
+                  </>)}
                   {client.website_url && (
                     <>
                       <span className="text-white/30 hidden sm:inline">·</span>
@@ -533,7 +627,36 @@ export default function AdminClientDetailPage({ loaderData }: any) {
       {/* ── Tab Content ── */}
       {activeTab === "details" && (
         <div className="space-y-5">
+          {internal && (
+            <Form method="post">
+              <input type="hidden" name="intent" value="update_internal" />
+              <SectionCard
+                title="ข้อมูลเว็บในเครือ"
+                action={!isViewOnly ? <Button type="submit" size="sm">{t("save")}</Button> : undefined}
+              >
+                <div className="grid grid-cols-1 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="company_name">ชื่อเว็บ / แบรนด์</Label>
+                    <Input id="company_name" name="company_name" defaultValue={client.company_name} required disabled={isViewOnly} />
+                    {errors?.company_name && <p className="text-[#B4541A] text-xs">{errors.company_name[0]}</p>}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="website_url">{t("admin_client_new_website")}</Label>
+                    <Input id="website_url" name="website_url" type="url" defaultValue={client.website_url ?? ""} placeholder="https://example.com" disabled={isViewOnly} />
+                    {errors?.website_url && <p className="text-[#B4541A] text-xs">{errors.website_url[0]}</p>}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="notes">{t("admin_client_new_notes")}</Label>
+                    <textarea id="notes" name="notes" rows={2} defaultValue={client.notes ?? ""} disabled={isViewOnly}
+                      className="w-full rounded-[14px] border border-line bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-faint-ink focus:outline-none focus:ring-2 focus:ring-ink/10 focus:border-ink/40 resize-none transition" />
+                  </div>
+                </div>
+              </SectionCard>
+            </Form>
+          )}
+
           {/* Edit form */}
+          {!internal && (
           <Form method="post" key={formKey}>
             <input type="hidden" name="intent" value="update_client" />
             <SectionCard
@@ -608,6 +731,7 @@ export default function AdminClientDetailPage({ loaderData }: any) {
               </div>
             </SectionCard>
           </Form>
+          )}
 
           {/* Backup folder mapping — admin only */}
           {isAdmin && (
@@ -665,6 +789,8 @@ export default function AdminClientDetailPage({ loaderData }: any) {
             jobs={siteJobs}
             paused={carePaused}
           />
+
+          {isAdmin && <KindSwitch internal={internal} error={(errors as any)?.kind_email?.[0]} />}
 
           {/* Danger zone */}
           {!isViewOnly && (

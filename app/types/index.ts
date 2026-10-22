@@ -44,6 +44,8 @@ export interface MagicLinkToken {
 
 export type ClientPackage = "basic" | "standard" | "premium";
 
+export type ClientKind = "client" | "internal";
+
 export interface Client {
   id: string;
   user_id: string;
@@ -56,6 +58,8 @@ export interface Client {
   notes: string | null;
   /** Folder name on backup server (admin maps per client) */
   backup_path: string | null;
+  /** "internal" = our own / sister website: admin-only, no client login, emails or reports. */
+  kind: ClientKind;
   deleted_at?: number | null;
   created_at: number;
 }

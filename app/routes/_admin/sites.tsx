@@ -12,7 +12,7 @@ export function meta() {
   return [{ title: "เว็บไซต์ — Admin" }];
 }
 
-type SiteWithClient = ConnectedSite & { client: { id: string; name: string } };
+type SiteWithClient = ConnectedSite & { client: { id: string; name: string }; internal: boolean };
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = context.cloudflare.env;
@@ -20,10 +20,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const db = createDB(env.DB);
   const rows = await db.listAllSitesWithInventory();
   const sites: SiteWithClient[] = rows.map(
-    ({ secret_enc: _s, inventory_json, client_id, client_company, ...row }) => {
+    ({ secret_enc: _s, inventory_json, client_id, client_company, client_kind, ...row }) => {
       let inventory = null;
       try { inventory = inventory_json ? JSON.parse(inventory_json) : null; } catch { inventory = null; }
-      return { ...row, inventory, client: { id: client_id, name: client_company } };
+      return { ...row, inventory, client: { id: client_id, name: client_company }, internal: client_kind === "internal" };
     },
   );
   const now = Math.floor(Date.now() / 1000);
@@ -89,7 +89,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   return { error: "unknown intent" };
 }
 
-type Filter = "all" | "updates" | "silent";
+type Filter = "all" | "updates" | "silent" | "internal";
 
 function pendingUpdates(site: ConnectedSite) {
   const inv = site.inventory;
@@ -109,12 +109,13 @@ export default function AdminSitesPage() {
   const silent = sites.filter(isSilent);
   const needUpdates = sites.filter((s) => pendingUpdates(s) > 0);
   const totalUpdates = sites.reduce((n, s) => n + pendingUpdates(s), 0);
-  const shown = filter === "updates" ? needUpdates : filter === "silent" ? silent : sites;
+  const shown = filter === "updates" ? needUpdates : filter === "silent" ? silent : filter === "internal" ? sites.filter((x) => x.internal) : sites;
 
   const chips: { key: Filter; label: string; count: number }[] = [
     { key: "all", label: "ทั้งหมด", count: sites.length },
     { key: "updates", label: "รออัปเดต", count: needUpdates.length },
     { key: "silent", label: "ขาดการติดต่อ", count: silent.length },
+    { key: "internal", label: "เว็บในเครือ", count: sites.filter((x) => x.internal).length },
   ];
 
   return (
