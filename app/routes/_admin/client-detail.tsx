@@ -1,5 +1,7 @@
 import { Form, redirect, useActionData, useSearchParams, type FormEvent as ReactFormEvent } from "react-router";
 import { ConfirmButton } from "~/components/ui/confirm-button";
+import { ConnectedSitesSection, type ConnectedSite } from "~/components/admin/connected-sites";
+import { generatePairCode, sha256hex } from "~/lib/agent/crypto";
 import { z } from "zod";
 import { useState } from "react";
 import { requireCoAdminOrAdmin, startImpersonation, generateMagicToken, evictUserCache } from "~/lib/auth.server";
@@ -102,7 +104,16 @@ export async function loader({ request, params, context }: any) {
     if (backup.ok) backupSites = backup.entries.map((e) => e.name);
   }
 
+  const siteRows = await db.listSitesWithInventoryByClient(client.id);
+  const sites: ConnectedSite[] = siteRows.map(({ secret_enc: _s, inventory_json, inventory_updated_at: _u, client_id: _c, ...row }) => {
+    let inventory = null;
+    try { inventory = inventory_json ? JSON.parse(inventory_json) : null; } catch { inventory = null; }
+    return { ...row, inventory };
+  });
+
   return {
+    sites,
+    appUrl: (env.APP_URL as string | undefined) || new URL(request.url).origin,
     client,
     user,
     reportsCount: reports.length,
@@ -127,6 +138,24 @@ export async function action({ request, params, context }: any) {
 
   if (currentUser.role === "co-admin" && intent !== "add_note" && intent !== "delete_note") {
     throw new Response("Forbidden", { status: 403 });
+  }
+
+  if (intent === "site_pair_create") {
+    const code = generatePairCode();
+    const expires_at = Math.floor(Date.now() / 1000) + 15 * 60;
+    await db.createSitePairCode({
+      code_hash: await sha256hex(code),
+      client_id: client.id,
+      created_by: currentUser.id,
+      expires_at,
+    });
+    return { pairCode: { code, expires_at } };
+  }
+
+  if (intent === "site_revoke") {
+    const siteId = String(formData.get("site_id") ?? "");
+    await db.revokeSite(siteId, client.id, Math.floor(Date.now() / 1000));
+    return { success: { site_revoked: true } };
   }
 
   if (intent === "update_client") {
@@ -297,7 +326,9 @@ type ActionData = {
     notes: string; cc_emails: string;
   };
   emailDuplicate?: boolean;
+  pairCode?: { code: string; expires_at: number };
   success?:
+    | { site_revoked: true }
     | { magic_link: true; email: string }
     | { email_changed: true; email: string }
     | { note_added: true }
@@ -347,6 +378,8 @@ export default function AdminClientDetailPage({ loaderData }: any) {
     canImpersonate,
     backupSites = [],
     backupPathUsage = {},
+    sites = [],
+    appUrl,
   } = loaderData;
   const { t } = useT();
   const actionData = useActionData() as ActionData | undefined;
@@ -615,6 +648,13 @@ export default function AdminClientDetailPage({ loaderData }: any) {
               )}
             </SectionCard>
           )}
+
+          <ConnectedSitesSection
+            sites={sites}
+            canManage={isAdmin}
+            pairCode={actionData?.pairCode}
+            appUrl={appUrl}
+          />
 
           {/* Danger zone */}
           {!isViewOnly && (

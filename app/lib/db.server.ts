@@ -1077,7 +1077,86 @@ export function createDB(d1: D1Database) {
         .bind(params.id, params.client_id, params.warning_stage, params.contract_end)
         .run();
     },
+
+    // ── Site care (P0: paired WordPress sites, read-only inventory) ──────────
+    async createSitePairCode(p: { code_hash: string; client_id: string; created_by: string; expires_at: number }): Promise<void> {
+      await d1
+        .prepare("INSERT INTO site_pair_codes (code_hash, client_id, created_by, expires_at) VALUES (?, ?, ?, ?)")
+        .bind(p.code_hash, p.client_id, p.created_by, p.expires_at)
+        .run();
+    },
+
+    /** Atomically consumes an unexpired, unused code; returns its client_id or null. */
+    async consumeSitePairCode(code_hash: string, now: number): Promise<string | null> {
+      const row = await d1
+        .prepare(
+          `UPDATE site_pair_codes SET used_at = ?
+           WHERE code_hash = ? AND used_at IS NULL AND expires_at > ?
+           RETURNING client_id`
+        )
+        .bind(now, code_hash, now)
+        .first<{ client_id: string }>();
+      return row?.client_id ?? null;
+    },
+
+    async createSite(p: {
+      id: string; client_id: string; site_url: string; secret_enc: string; paired_at: number;
+      plugin_version: string; wp_version: string;
+    }): Promise<void> {
+      await d1
+        .prepare(
+          `INSERT INTO sites (id, client_id, site_url, secret_enc, paired_at, plugin_version, wp_version)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`
+        )
+        .bind(p.id, p.client_id, p.site_url, p.secret_enc, p.paired_at, p.plugin_version, p.wp_version)
+        .run();
+    },
+
+    async getSiteById(id: string) {
+      return d1.prepare("SELECT * FROM sites WHERE id = ?").bind(id).first<SiteRow>();
+    },
+
+    async listSitesWithInventoryByClient(client_id: string) {
+      const { results } = await d1
+        .prepare(
+          `SELECT s.*, i.json AS inventory_json, i.updated_at AS inventory_updated_at
+           FROM sites s LEFT JOIN site_inventory i ON i.site_id = s.id
+           WHERE s.client_id = ? ORDER BY s.revoked_at IS NOT NULL, s.paired_at DESC`
+        )
+        .bind(client_id)
+        .all<SiteRow & { inventory_json: string | null; inventory_updated_at: number | null }>();
+      return results;
+    },
+
+    async saveSiteHeartbeat(p: {
+      site_id: string; now: number; json: string; site_url: string;
+      plugin_version: string; wp_version: string; php_version: string;
+    }): Promise<void> {
+      await d1.batch([
+        d1.prepare(
+          `UPDATE sites SET last_seen_at = ?, site_url = ?, plugin_version = ?, wp_version = ?, php_version = ?
+           WHERE id = ? AND revoked_at IS NULL`
+        ).bind(p.now, p.site_url, p.plugin_version, p.wp_version, p.php_version, p.site_id),
+        d1.prepare(
+          `INSERT INTO site_inventory (site_id, json, updated_at) VALUES (?, ?, ?)
+           ON CONFLICT(site_id) DO UPDATE SET json = excluded.json, updated_at = excluded.updated_at`
+        ).bind(p.site_id, p.json, p.now),
+      ]);
+    },
+
+    async revokeSite(id: string, client_id: string, now: number): Promise<void> {
+      await d1
+        .prepare("UPDATE sites SET revoked_at = ? WHERE id = ? AND client_id = ? AND revoked_at IS NULL")
+        .bind(now, id, client_id)
+        .run();
+    },
   };
 }
+
+export type SiteRow = {
+  id: string; client_id: string; site_url: string; secret_enc: string;
+  paired_at: number; last_seen_at: number | null; revoked_at: number | null;
+  plugin_version: string | null; wp_version: string | null; php_version: string | null;
+};
 
 export type DB = ReturnType<typeof createDB>;

@@ -1,6 +1,7 @@
 import { createRequestHandler } from "react-router";
 import { runTicketReminder } from "~/lib/ticket-reminder.server";
 import { handleMcpRequest } from "~/lib/mcp/server.server";
+import { handleAgentRequest, isAgentPath } from "~/lib/agent/server";
 import { flushHeldTicketEmails, runDailyEmailAlerts } from "~/lib/email-alerts.server";
 
 // AppLoadContext is augmented in app/types/cloudflare.d.ts
@@ -12,8 +13,12 @@ const requestHandler = createRequestHandler(
 
 export default {
   fetch(request: Request, env: CloudflareEnv, ctx: ExecutionContext) {
-    if (new URL(request.url).pathname === "/mcp") {
+    const { pathname } = new URL(request.url);
+    if (pathname === "/mcp") {
       return handleMcpRequest(request, env);
+    }
+    if (isAgentPath(pathname)) {
+      return handleAgentRequest(request, env);
     }
     return requestHandler(request, {
       cloudflare: { env, ctx },
