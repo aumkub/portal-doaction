@@ -161,6 +161,7 @@ function createKVAdapter(kv: KVNamespace, db: ReturnType<typeof createDB>) {
             role: user.role,
             avatar_url: user.avatar_url,
             language: user.language ?? "th",
+            totp_enabled_at: user.totp_enabled_at ?? null,
             created_at: user.created_at,
             updated_at: user.updated_at,
           },
@@ -247,6 +248,7 @@ export function createAuth(d1: D1Database, kv: KVNamespace) {
         role: attrs.role as UserRole,
         avatar_url: attrs.avatar_url as string | null,
         language: attrs.language as UserLanguage,
+        totp_enabled_at: (attrs.totp_enabled_at as number | null | undefined) ?? null,
         created_at: attrs.created_at as number,
         updated_at: attrs.updated_at as number,
       };
@@ -327,6 +329,25 @@ export async function requireUser(
   return user;
 }
 
+/** Where a staff member without 2FA may still go: set it up, or leave. */
+const TWO_FACTOR_SETUP_PATH = "/admin/security";
+const TWO_FACTOR_EXEMPT_PATHS = [TWO_FACTOR_SETUP_PATH, "/logout", "/api/impersonation/stop"];
+
+/**
+ * Staff (admin, co-admin) must have 2FA on before they can use anything
+ * else. Enforced here rather than in the admin layout, because route
+ * actions run without their parent layout's loader. An admin viewing the
+ * portal as someone else (impersonation) is not asked to enrol for them.
+ */
+async function enforceStaffTwoFactor(request: Request, kv: KVNamespace, user: User): Promise<void> {
+  if (user.totp_enabled_at) return;
+  const pathname = new URL(request.url).pathname.replace(/\.data$/, "");
+  if (TWO_FACTOR_EXEMPT_PATHS.includes(pathname)) return;
+  const sessionId = (request.headers.get("Cookie") ?? "").match(/doaction_session=([^;]+)/)?.[1];
+  if (sessionId && (await kv.get(`imp:${sessionId}`))) return;
+  throw new Response(null, { status: 302, headers: { Location: `${TWO_FACTOR_SETUP_PATH}?required=1` } });
+}
+
 export async function requireAdmin(
   request: Request,
   d1: D1Database,
@@ -336,6 +357,7 @@ export async function requireAdmin(
   if (user.role !== "admin") {
     throw new Response("Forbidden", { status: 403 });
   }
+  await enforceStaffTwoFactor(request, kv, user);
   return user;
 }
 
@@ -348,6 +370,7 @@ export async function requireCoAdminOrAdmin(
   if (user.role !== "admin" && user.role !== "co-admin") {
     throw new Response("Forbidden", { status: 403 });
   }
+  await enforceStaffTwoFactor(request, kv, user);
   return user;
 }
 
