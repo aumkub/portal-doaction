@@ -163,6 +163,34 @@ export async function emailTeamNewTicket(
   });
 }
 
+/**
+ * Receipt for someone who reported a problem from a site's wp-admin but is
+ * not the client's account or CC address: no sign-in link, replies still go
+ * to the client's account.
+ */
+export async function emailTicketReceipt(
+  env: CloudflareEnv,
+  db: DB,
+  to: { email: string; name: string },
+  ticket: { title: string },
+  site: string
+): Promise<void> {
+  if (!env.SEND_EMAIL) return;
+  await sendEmail({
+    to: to.email,
+    toName: to.name,
+    subject: `ได้รับเรื่องแล้ว: ${ticket.title}`,
+    text: `ทีม do action ได้รับเรื่อง "${ticket.title}" ที่แจ้งจาก ${site} แล้ว และจะติดต่อกลับผ่านบัญชีลูกค้าของเว็บไซต์นี้\n\n— ทีม do action`,
+    html: emailShell(
+      `<p style="margin:0">ทีม do action ได้รับเรื่องที่คุณแจ้งจาก ${escapeHtml(site)} แล้ว</p><h2 style="margin:8px 0 0;font-size:18px">${escapeHtml(ticket.title)}</h2><p style="margin:12px 0 0;color:#6F6D66;font-size:13px">ทีมจะอัปเดตความคืบหน้าผ่านบัญชีลูกค้าของเว็บไซต์นี้</p>`,
+      env.APP_URL
+    ),
+    sendEmail: env.SEND_EMAIL,
+    db,
+    source: "ticket_receipt_reporter",
+  });
+}
+
 // ── Daily team digest + contract warnings ───────────────────────────────────
 
 const DEFAULT_DIGEST_HOUR = 8; // Bangkok time

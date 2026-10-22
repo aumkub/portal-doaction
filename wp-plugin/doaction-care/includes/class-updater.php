@@ -98,7 +98,7 @@ class DoAction_Care_Updater {
 		}
 		if ( ! $ok ) {
 			wp_delete_file( $tmp );
-			return new WP_Error( 'doaction_care_signature', 'ลายเซ็นของไฟล์อัปเดต do action Care ไม่ถูกต้อง — ไม่ติดตั้ง' );
+			return new WP_Error( 'doaction_care_signature', 'ลายเซ็นของไฟล์อัปเดต Do Action: Care ไม่ถูกต้อง — ไม่ติดตั้ง' );
 		}
 		return $tmp;
 	}

@@ -16,7 +16,9 @@ import { InventorySchema, JobReportSchema, PairSchema, SsoRequestSchema, WidgetT
 import { parseClientCcEmails } from "~/lib/client-cc";
 import { CARE_PAUSED_KEY, addJobToDraftReport } from "./jobs.server";
 import type { SiteRow } from "~/lib/db.server";
-import { emailTeamNewTicket } from "~/lib/email-alerts.server";
+import { emailTeamNewTicket, emailTicketReceipt } from "~/lib/email-alerts.server";
+import { sendTelegramNotificationForClient } from "~/lib/telegram.server";
+import type { Client } from "~/types";
 import { fetchAllMonitors, hostOf } from "~/lib/uptime.server";
 import { getUptimeRobotKey } from "~/lib/secrets.server";
 
@@ -214,12 +216,14 @@ async function handleHeartbeat(request: Request, env: CloudflareEnv): Promise<Re
   // Our own agent is kept current without waiting for the team: queue a
   // self-update (same backup/rollback path) when a newer signed release exists.
   const alreadyDone = release && (await env.DB
-    .prepare("SELECT 1 FROM site_jobs WHERE site_id = ? AND slug = 'doaction-care/doaction-care.php' AND status = 'succeeded' AND result_version = ? LIMIT 1")
-    .bind(siteId, release.version)
+    // Any earlier attempt at this release (done, failed or rolled back) stops
+    // the hourly auto-queue; a failed release is retried only by a person.
+    .prepare("SELECT 1 FROM site_jobs WHERE site_id = ? AND slug = 'doaction-care/doaction-care.php' AND status != 'cancelled' AND (to_version = ? OR result_version = ?) LIMIT 1")
+    .bind(siteId, release.version, release.version)
     .first());
   if (release && !alreadyDone && newerVersion(release.version, inv.plugin_version) && !(await env.SESSIONPORTAL.get(CARE_PAUSED_KEY))) {
     await db.queueSiteJobs([{
-      id: generateId(), site_id: siteId, kind: "plugin", slug: "doaction-care/doaction-care.php", name: "do action Care",
+      id: generateId(), site_id: siteId, kind: "plugin", slug: "doaction-care/doaction-care.php", name: "Do Action: Care",
       from_version: inv.plugin_version, to_version: release.version, not_before: 0, created_by: "system", created_at: now,
     }]);
   }
@@ -297,22 +301,41 @@ async function handleWidgetTicket(request: Request, env: CloudflareEnv): Promise
   if (!client) return signedJson(auth.secret, 404, { error: "no_client" });
 
   const ticketId = generateId();
-  const description = `${parsed.data.description}\n\n— แจ้งจากหน้า wp-admin ของ ${auth.site.site_url}${parsed.data.reporter ? ` โดย ${parsed.data.reporter}` : ""}`;
+  const site = new URL(auth.site.site_url).host;
+  const reporterEmail = parsed.data.reporter_email;
+  const reporterLabel = parsed.data.reporter ?? (reporterEmail ? `${parsed.data.reporter_name ?? ""} <${reporterEmail}>`.trim() : null);
+  const description = `${parsed.data.description}\n\n— แจ้งจากหน้า wp-admin ของ ${site}${reporterLabel ? ` โดย ${reporterLabel}` : ""}`;
   await db.createTicket({
     id: ticketId, client_id: client.id, title: parsed.data.title, description,
     priority: "medium", status: "open", created_by: client.user_id, assigned_to: null, resolved_at: null,
   });
+  const notification = { title: `New ticket from ${client.company_name}`, body: parsed.data.title, link: `/admin/tickets/${ticketId}` };
   const admins = await db.listAdminUsers();
-  await Promise.all(admins.map((a) => db.createNotification({
-    id: generateId(), user_id: a.id, type: "ticket", title: `New ticket from ${client.company_name}`,
-    body: parsed.data.title, link: `/admin/tickets/${ticketId}`, read: 0,
-  })));
+  await Promise.all(admins.map((a) => db.createNotification({ id: generateId(), user_id: a.id, type: "ticket", ...notification, read: 0 })));
+  await sendTelegramNotificationForClient({ db, appUrl: env.APP_URL, notification, clientId: client.id }).catch((e) => console.error("[agent ticket] telegram failed", e));
   try {
     await emailTeamNewTicket(env, db, { id: ticketId, title: parsed.data.title, description, priority: "medium" }, client.company_name);
   } catch (e) {
     console.error("[agent ticket] team email failed", e);
   }
-  return signedJson(auth.secret, 200, { ok: true, ticket_id: ticketId });
+
+  // Reporters who are the client (account or CC) can jump straight to the
+  // ticket via SSO; anyone else gets an email receipt instead.
+  const isClientContact = Boolean(reporterEmail && (await clientEmails(db, client)).has(reporterEmail));
+  if (reporterEmail && !isClientContact) {
+    await emailTicketReceipt(env, db, { email: reporterEmail, name: parsed.data.reporter_name ?? reporterEmail }, { title: parsed.data.title }, site)
+      .catch((e) => console.error("[agent ticket] receipt failed", e));
+  }
+  const canOpen = isClientContact && client.kind === "client" && Boolean(client.sso_enabled);
+  return signedJson(auth.secret, 200, { ok: true, ticket_id: ticketId, can_open: canOpen });
+}
+
+/** Emails allowed to act as this client from wp-admin: the account email and its CC list. */
+async function clientEmails(db: ReturnType<typeof createDB>, client: Client): Promise<Set<string>> {
+  const user = await db.getUserById(client.user_id);
+  const out = new Set(parseClientCcEmails(client.cc_emails).map((e) => e.toLowerCase()));
+  if (user?.role === "client" && user.email) out.add(user.email.toLowerCase());
+  return out;
 }
 
 export const SSO_TOKEN_TTL_S = 60;
@@ -352,13 +375,12 @@ async function handleSso(request: Request, env: CloudflareEnv): Promise<Response
   await env.SESSIONPORTAL.put(rlKey, String(used + 1), { expirationTtl: 3600 });
 
   const user = await db.getUserById(client.user_id);
-  const allowed = new Set([user?.email?.toLowerCase(), ...parseClientCcEmails(client.cc_emails).map((e) => e.toLowerCase())]);
-  if (!user || user.role !== "client" || !allowed.has(parsed.data.email)) return refuse("email_mismatch");
+  if (!user || user.role !== "client" || !(await clientEmails(db, client)).has(parsed.data.email)) return refuse("email_mismatch");
 
   const token = randomHex(32);
   await env.SESSIONPORTAL.put(
     `sso:${await sha256hex(token)}`,
-    JSON.stringify({ user_id: user.id, client_id: client.id, site_id: auth.site.id, email: parsed.data.email }),
+    JSON.stringify({ user_id: user.id, client_id: client.id, site_id: auth.site.id, email: parsed.data.email, path: parsed.data.path }),
     { expirationTtl: SSO_TOKEN_TTL_S },
   );
   await log("issued");

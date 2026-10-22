@@ -30,7 +30,7 @@ class DoAction_Care_Widget {
 		if ( ! current_user_can( self::CAP ) || ! DoAction_Care_Api_Client::is_paired() ) {
 			return;
 		}
-		wp_add_dashboard_widget( 'doaction_care_widget', 'do action Care', array( __CLASS__, 'render' ) );
+		wp_add_dashboard_widget( 'doaction_care_widget', 'Do Action: Care', array( __CLASS__, 'render' ) );
 	}
 
 	public static function render() {
@@ -49,6 +49,8 @@ class DoAction_Care_Widget {
 		$uptime = isset( $w['uptime30'] ) && is_numeric( $w['uptime30'] ) ? number_format( (float) $w['uptime30'], 2 ) . '%' : '—';
 		$portal = ! empty( $w['portal_url'] ) ? (string) $w['portal_url'] : DOACTION_CARE_PORTAL;
 		$notice = isset( $_GET['doaction_care_ticket'] ) ? sanitize_key( wp_unslash( $_GET['doaction_care_ticket'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$open   = isset( $_GET['doaction_care_open'] ) ? (string) wp_unslash( $_GET['doaction_care_open'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		$open   = preg_match( '/^[A-Za-z0-9_-]{8,64}$/', $open ) ? $open : '';
 		$stats  = array(
 			array( 'Uptime 30 วัน', $uptime, false ),
 			array( 'อัปเดตเดือนนี้', ( isset( $w['updates_this_month'] ) ? (int) $w['updates_this_month'] : 0 ) . ' รายการ', false ),
@@ -66,7 +68,19 @@ class DoAction_Care_Widget {
 			</div>
 
 			<?php if ( 'ok' === $notice ) : ?>
-				<div class="dac-notice is-success">ส่งเรื่องถึงทีม do action แล้ว ติดตามได้ในพอร์ทัล</div>
+				<div class="dac-notice is-success">
+					ส่งเรื่องถึงทีม do action แล้ว
+					<?php if ( $open ) : ?>
+						<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin-top:8px">
+							<input type="hidden" name="action" value="doaction_care_sso">
+							<input type="hidden" name="path" value="<?php echo esc_attr( '/tickets/' . $open ); ?>">
+							<?php wp_nonce_field( 'doaction_care_sso' ); ?>
+							<button type="submit" class="dac-btn is-primary">ดู ticket นี้ในพอร์ทัล</button>
+						</form>
+					<?php else : ?>
+						— ทีมจะติดต่อกลับผ่านบัญชีลูกค้าของเว็บไซต์นี้
+					<?php endif; ?>
+				</div>
 			<?php elseif ( 'error' === $notice ) : ?>
 				<div class="dac-notice is-error">ส่งเรื่องไม่สำเร็จ ลองใหม่ หรือแจ้งผ่านพอร์ทัล</div>
 			<?php endif; ?>
@@ -113,11 +127,16 @@ class DoAction_Care_Widget {
 		}
 		check_admin_referer( 'doaction_care_sso' );
 		$user = wp_get_current_user();
-		$res  = DoAction_Care_Api_Client::signed_post(
+		$path = isset( $_POST['path'] ) ? sanitize_text_field( wp_unslash( $_POST['path'] ) ) : '/tickets/new';
+		if ( ! preg_match( '#^/tickets/(new|[A-Za-z0-9_-]{8,64})$#', $path ) ) {
+			$path = '/tickets/new';
+		}
+		$res = DoAction_Care_Api_Client::signed_post(
 			'sso',
 			array(
 				'email'   => (string) $user->user_email,
 				'wp_user' => (string) $user->user_login,
+				'path'    => $path,
 			)
 		);
 		$back = admin_url( 'index.php' );
@@ -169,12 +188,17 @@ class DoAction_Care_Widget {
 				array(
 					'title'       => $title,
 					'description' => $desc,
-					'reporter'    => $user->display_name . ' <' . $user->user_email . '>',
+					'reporter_name'  => (string) $user->display_name,
+					'reporter_email' => (string) $user->user_email,
 				)
 			);
 			$ok  = ! is_wp_error( $res ) && 200 === $res['status'];
 		}
-		wp_safe_redirect( add_query_arg( 'doaction_care_ticket', $ok ? 'ok' : 'error', admin_url( 'index.php' ) ) );
+		$args = array( 'doaction_care_ticket' => $ok ? 'ok' : 'error' );
+		if ( $ok && is_array( $res['data'] ) && ! empty( $res['data']['can_open'] ) && preg_match( '/^[A-Za-z0-9_-]{8,64}$/', (string) $res['data']['ticket_id'] ) ) {
+			$args['doaction_care_open'] = (string) $res['data']['ticket_id'];
+		}
+		wp_safe_redirect( add_query_arg( $args, admin_url( 'index.php' ) ) );
 		exit;
 	}
 }

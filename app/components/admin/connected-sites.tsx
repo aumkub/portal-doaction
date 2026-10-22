@@ -349,7 +349,7 @@ export function ConnectedSitesSection({
       <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-line-soft">
         <div className="min-w-0">
           <p className="text-[16px] font-semibold text-ink">เว็บไซต์ที่เชื่อมต่อ</p>
-          <p className="text-xs text-muted-ink mt-0.5">ข้อมูลจากปลั๊กอิน do action Care (อ่านอย่างเดียว)</p>
+          <p className="text-xs text-muted-ink mt-0.5">ข้อมูลจากปลั๊กอิน Do Action: Care (อ่านอย่างเดียว)</p>
         </div>
         {canManage && (
           <Form method="post">
@@ -370,8 +370,8 @@ export function ConnectedSitesSection({
             <p className="mt-1 font-display text-[28px] font-bold tracking-[0.15em] tabular-nums select-all">{pairCode.code}</p>
             <p className="text-xs text-ink-soft"><Countdown expiresAt={pairCode.expires_at} /></p>
             <ol className="mt-3 list-decimal space-y-1 pl-5 text-xs text-ink-soft">
-              <li>ติดตั้งและเปิดใช้ปลั๊กอิน do action Care บนเว็บไซต์ลูกค้า</li>
-              <li>ไปที่ Settings → do action Care</li>
+              <li>ติดตั้งและเปิดใช้ปลั๊กอิน Do Action: Care บนเว็บไซต์ลูกค้า</li>
+              <li>ไปที่ Settings → Do Action: Care</li>
               <li>ใส่ Portal URL <span className="font-mono text-ink select-all">{appUrl}</span> และรหัสด้านบน แล้วกด “เชื่อมต่อ”</li>
             </ol>
           </div>

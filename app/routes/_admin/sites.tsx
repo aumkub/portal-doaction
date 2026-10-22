@@ -56,6 +56,10 @@ export async function action({ request, context }: Route.ActionArgs) {
   if (intent === "site_refresh") {
     const site = await db.getSiteById(String(form.get("site_id") ?? ""));
     if (!site || site.revoked_at) return { error: "ไม่พบเว็บไซต์" };
+    // Each wake makes the client server do work; at most one per site per minute.
+    const rlKey = `wake-rl:${site.id}`;
+    if (await env.SESSIONPORTAL.get(rlKey)) return { error: "เพิ่งขอไป รอ 1 นาทีแล้วลองใหม่" };
+    await env.SESSIONPORTAL.put(rlKey, "1", { expirationTtl: 60 });
     const invRow = await env.DB.prepare("SELECT json FROM site_inventory WHERE site_id = ?").bind(site.id).first<{ json: string }>();
     const home = invRow ? (JSON.parse(invRow.json) as { home_url?: string }).home_url : site.site_url;
     const ok = await wakeSite(env, site, home ?? site.site_url);

@@ -75,9 +75,13 @@ export const WidgetTicketSchema = z.object({
   title: z.string().trim().min(1).max(200),
   description: z.string().trim().min(1).max(5000),
   reporter: str(200).nullable().default(null),
+  reporter_name: str(200).nullable().default(null),
+  reporter_email: z.string().trim().toLowerCase().email().max(200).nullable().catch(null).default(null),
 });
 
 export const SsoRequestSchema = z.object({
   email: z.string().trim().toLowerCase().email().max(200),
   wp_user: str(200).nullable().default(null),
+  /** Where to land after sign-in; only a ticket page or the new-ticket form. */
+  path: z.string().regex(/^\/tickets\/(new|[A-Za-z0-9_-]{8,64})$/).catch("/tickets/new").default("/tickets/new"),
 });

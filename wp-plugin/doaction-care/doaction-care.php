@@ -1,9 +1,9 @@
 <?php
 /**
- * Plugin Name:       do action Care
+ * Plugin Name:       Do Action: Care
  * Plugin URI:        https://doaction.co.th
  * Description:       Connects this site to the do action client portal: reports versions and available updates, runs updates the do action team starts (with checks and automatic rollback), and shows a care summary on the dashboard.
- * Version:           0.3.6
+ * Version:           0.3.8
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            do action
@@ -16,7 +16,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'DOACTION_CARE_VERSION', '0.3.6' );
+define( 'DOACTION_CARE_VERSION', '0.3.8' );
 define( 'DOACTION_CARE_FILE', __FILE__ );
 if ( ! defined( 'DOACTION_CARE_PORTAL' ) ) {
 	define( 'DOACTION_CARE_PORTAL', 'https://portal.doaction.co.th' );
@@ -27,13 +27,23 @@ define( 'DOACTION_CARE_POLL_HOOK', 'doaction_care_poll' );
 // Ed25519 public key for signed self-updates (private key stays on the release machine).
 define( 'DOACTION_CARE_PUBKEY', 'K24PewIlSU0GbgObclSRej0DQNT/zUhtwRDNDTDnbd4=' );
 
-require_once __DIR__ . '/includes/class-api-client.php';
-require_once __DIR__ . '/includes/class-inventory.php';
-require_once __DIR__ . '/includes/class-admin.php';
-require_once __DIR__ . '/includes/class-backup.php';
-require_once __DIR__ . '/includes/class-runner.php';
-require_once __DIR__ . '/includes/class-widget.php';
-require_once __DIR__ . '/includes/class-updater.php';
+// Classes load on first use, so a normal page view only reads this file.
+spl_autoload_register(
+	static function ( $class ) {
+		$map = array(
+			'DoAction_Care_Api_Client' => 'class-api-client.php',
+			'DoAction_Care_Inventory'  => 'class-inventory.php',
+			'DoAction_Care_Admin'      => 'class-admin.php',
+			'DoAction_Care_Backup'     => 'class-backup.php',
+			'DoAction_Care_Runner'     => 'class-runner.php',
+			'DoAction_Care_Widget'     => 'class-widget.php',
+			'DoAction_Care_Updater'    => 'class-updater.php',
+		);
+		if ( isset( $map[ $class ] ) ) {
+			require_once __DIR__ . '/includes/' . $map[ $class ];
+		}
+	}
+);
 
 DoAction_Care_Updater::init();
 

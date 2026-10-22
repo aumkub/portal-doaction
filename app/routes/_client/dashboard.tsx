@@ -79,7 +79,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const tasks = latestReport ? await db.listTasksByReport(latestReport.id) : [];
   const openTickets = tickets.filter((t) => ["open", "in_progress", "waiting"].includes(t.status));
 
-  // Newest backup any connected site reported through the do action Care plugin.
+  // Newest backup any connected site reported through the Do Action: Care plugin.
   const backupRow = await env.DB
     .prepare(
       `SELECT MAX(json_extract(i.json, '$.backup.last_at')) AS at FROM sites s

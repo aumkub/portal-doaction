@@ -1,6 +1,6 @@
 <?php
 /**
- * Settings → do action Care.
+ * Settings → Do Action: Care.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -37,7 +37,7 @@ class DoAction_Care_Admin {
 	}
 
 	public static function menu() {
-		add_options_page( 'do action Care', 'do action Care', 'manage_options', self::PAGE, array( __CLASS__, 'render' ) );
+		add_options_page( 'Do Action: Care', 'Do Action: Care', 'manage_options', self::PAGE, array( __CLASS__, 'render' ) );
 	}
 
 	private static function guard( $action ) {
@@ -104,7 +104,7 @@ class DoAction_Care_Admin {
 		}
 		?>
 		<div class="wrap dac-wrap">
-			<h1 class="screen-reader-text">do action Care</h1>
+			<h1 class="screen-reader-text">Do Action: Care</h1>
 			<div class="dac-head">
 				<div class="dac-brand">
 					<img src="<?php echo esc_url( plugins_url( 'assets/logo.svg', DOACTION_CARE_FILE ) ); ?>" alt="do action">
@@ -139,7 +139,7 @@ class DoAction_Care_Admin {
 			<?php endif; ?>
 
 			<p class="dac-foot">
-				do action Care ส่งข้อมูลเวอร์ชันและรายการปลั๊กอิน/ธีมให้ทีม do action และรับงานได้เฉพาะ “อัปเดตปลั๊กอิน ธีม หรือ WordPress” ที่ทีมสั่งเท่านั้น
+				Do Action: Care ส่งข้อมูลเวอร์ชันและรายการปลั๊กอิน/ธีมให้ทีม do action และรับงานได้เฉพาะ “อัปเดตปลั๊กอิน ธีม หรือ WordPress” ที่ทีมสั่งเท่านั้น
 				ทุกครั้งจะสำรองไฟล์เดิม ตรวจหน้าเว็บ และย้อนกลับอัตโนมัติถ้าเว็บมีปัญหา ไม่รับคำสั่งอื่นใดจากภายนอก
 			</p>
 		</div>

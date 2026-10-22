@@ -13,7 +13,7 @@ export function loader() {
 }
 
 /**
- * Lands the auto-submitted form from the do action Care widget. The token
+ * Lands the auto-submitted form from the Do Action: Care widget. The token
  * is single use: it is deleted before anything else happens.
  */
 export async function action({ request, context }: Route.ActionArgs) {
@@ -26,7 +26,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   const raw = await env.SESSIONPORTAL.get(key);
   if (!raw) return redirect("/login?redirect=%2Ftickets%2Fnew");
   await env.SESSIONPORTAL.delete(key);
-  const grant = JSON.parse(raw) as { user_id: string; client_id: string; site_id: string; email: string };
+  const grant = JSON.parse(raw) as { user_id: string; client_id: string; site_id: string; email: string; path?: string };
 
   const db = createDB(env.DB);
   const [user, client] = await Promise.all([db.getUserById(grant.user_id), db.getClientById(grant.client_id)]);
@@ -38,7 +38,8 @@ export async function action({ request, context }: Route.ActionArgs) {
     .bind(generateId(), client.id, grant.site_id, grant.email, request.headers.get("CF-Connecting-IP"), Math.floor(Date.now() / 1000))
     .run();
 
-  return redirect("/tickets/new", {
+  const path = grant.path && /^\/tickets\/(new|[A-Za-z0-9_-]{8,64})$/.test(grant.path) ? grant.path : "/tickets/new";
+  return redirect(path, {
     headers: {
       "Set-Cookie": await createCappedClientSession(env, user.id, SSO_SESSION_S),
       "Referrer-Policy": "no-referrer",

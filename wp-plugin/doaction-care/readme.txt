@@ -1,4 +1,4 @@
-=== do action Care ===
+=== Do Action: Care ===
 Contributors: doaction
 Requires at least: 6.0
 Tested up to: 6.6
@@ -18,7 +18,7 @@ The plugin never accepts or executes remote commands. The portal never connects 
 
 == Installation ==
 1. Upload the `doaction-care` folder to `/wp-content/plugins/` and activate it.
-2. Go to Settings → do action Care.
+2. Go to Settings → Do Action: Care.
 3. Enter the portal URL and the one-time pairing code from do action, then click "เชื่อมต่อ".
 
 == Changelog ==
