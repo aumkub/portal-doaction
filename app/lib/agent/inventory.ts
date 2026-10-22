@@ -45,3 +45,16 @@ export const PairSchema = z.object({
   wp_version: ver,
   plugin_version: ver,
 });
+
+export const JobReportSchema = z.object({
+  job_id: str(64),
+  status: z.enum(["succeeded", "rolled_back", "failed"]),
+  result_version: ver.nullable().default(null),
+  log: z.string().max(8000),
+});
+
+export const WidgetTicketSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  description: z.string().trim().min(1).max(5000),
+  reporter: str(200).nullable().default(null),
+});

@@ -134,7 +134,20 @@ export async function loader({ request, context }: any) {
     }
   }
 
+  const careAlert = await context.cloudflare.env.DB
+    .prepare(
+      `SELECT
+         SUM(CASE WHEN s.last_seen_at IS NULL OR s.last_seen_at < ? THEN 1 ELSE 0 END) AS silent,
+         (SELECT COUNT(*) FROM site_jobs WHERE status = 'failed' AND finished_at > ?) AS failed
+       FROM sites s JOIN clients c ON c.id = s.client_id
+       WHERE s.revoked_at IS NULL AND c.deleted_at IS NULL`
+    )
+    .bind(Math.floor(Date.now() / 1000) - 2 * 3600, Math.floor(Date.now() / 1000) - 7 * 86400)
+    .first<{ silent: number | null; failed: number }>()
+    .catch(() => null);
+
   return {
+    careAlert: { silent: careAlert?.silent ?? 0, failed: careAlert?.failed ?? 0 },
     uptime,
     totalClients: clients.length,
     unresolvedCount: unresolved.length,
@@ -453,6 +466,20 @@ export default function AdminOverviewPage({ loaderData }: any) {
           )}
         </div>
       </section>
+
+      {(data.careAlert.silent > 0 || data.careAlert.failed > 0) && (
+        <a
+          href="/admin/sites"
+          className="block rounded-[20px] border border-[#F6D3B0] bg-[#FFF7EE] px-5 py-4 text-sm text-[#7A3410] hover:bg-[#FFEFDD] transition-colors"
+        >
+          <span className="font-semibold">เว็บไซต์ที่ดูแล: </span>
+          {[
+            data.careAlert.silent > 0 && `${data.careAlert.silent} เว็บไม่ได้ส่งข้อมูลเกิน 2 ชม.`,
+            data.careAlert.failed > 0 && `อัปเดตไม่สำเร็จ ${data.careAlert.failed} รายการใน 7 วัน`,
+          ].filter(Boolean).join(" · ")}
+          <span className="ml-1 font-semibold underline underline-offset-2">ดูรายละเอียด</span>
+        </a>
+      )}
 
       {/* Website uptime — admin only */}
       {!isCoAdmin && data.uptime && <UptimeSection data={data.uptime} lang={lang} />}

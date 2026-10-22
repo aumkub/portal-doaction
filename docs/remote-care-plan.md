@@ -23,11 +23,11 @@ report — without storing client admin passwords.
 
 | Phase | Scope | Status |
 |---|---|---|
-| **S0 — 2FA** | TOTP for admin and co-admin, recovery codes, login challenge, settings UI. Prerequisite for anything that changes client sites. | in progress |
-| **P0 — Connect & see** | Pairing code, signed heartbeat every 15 min, inventory (WP/PHP, plugins, themes, updates, health, file-mods allowed), portal "connected sites" on the client page, revoke. Read-only. | in progress |
-| **P1 — Client widget** | wp-admin dashboard widget: contract status, 30-day uptime (via portal, no API key in the plugin), last backup, updates done this month, open tickets, "แจ้งปัญหา" → ticket, short-lived link into the portal. Heartbeat silence alerts on the admin overview. | planned |
-| **P2 — Safe update (manual)** | Command queue in D1, per-site lock, one-click update from the portal: pre-check → keep previous version → update one item → post-check (homepage + key URLs, fatal-error text, PHP log) → auto rollback. Progress view, audit log, emergency "stop all". Requires S0 enforced for admins. | planned |
-| **P3 — Policies & reports** | Update windows (night, Bangkok), auto for minor/security, approval for major, exclusions, staged rollout, per-host concurrency. Update history auto-fills monthly report tasks. | planned |
+| **S0 — 2FA** | TOTP for admin and co-admin, recovery codes, login challenge, settings UI. Prerequisite for anything that changes client sites. Enforced for all staff; passkey or TOTP. | done |
+| **P0 — Connect & see** | Pairing code, signed heartbeat every 15 min, inventory (WP/PHP, plugins, themes, updates, health, file-mods allowed), portal "connected sites" on the client page, revoke. Read-only. | done |
+| **P1 — Client widget** | wp-admin dashboard widget: contract status, 30-day uptime (via portal, no API key in the plugin), last backup, updates done this month, open tickets, "แจ้งปัญหา" → ticket, short-lived link into the portal. Heartbeat silence alerts on the admin overview. | done (uptime and portal sign-in link left out, see below) |
+| **P2 — Safe update (manual)** | Command queue in D1, per-site lock, one-click update from the portal: pre-check → keep previous version → update one item → post-check (homepage + key URLs, fatal-error text, PHP log) → auto rollback. Progress view, audit log, emergency "stop all". Requires S0 enforced for admins. | done |
+| **P3 — Policies & reports** | Update windows (night, Bangkok), auto for minor/security, approval for major, exclusions, staged rollout, per-host concurrency. Update history auto-fills monthly report tasks. | done as night window + report auto-fill |
 | **P4 — Hardening & extras** | Vulnerability feed (Patchstack/WPScan), signed plugin self-update from our server (signing key kept off Cloudflare), before/after screenshots, external security review of the plugin before wide rollout. | planned |
 
 ## Decisions (2026-10-22)
@@ -47,3 +47,38 @@ report — without storing client admin passwords.
   person.
 - **We build the update runner ourselves** (no MainWP), keeping the fixed
   command list and signing rules above.
+
+## How P1–P3 work (2026-10-22)
+
+- **Jobs.** `site_jobs` (migration 0019) is the queue and the audit log. A
+  job is one item: plugin, theme or core. Only items the site's own latest
+  inventory lists as updatable can be queued.
+- **Start.** The team picks items on `/admin/sites` or the client page. The
+  portal queues them and sends a signed, content-free "wake" to
+  `?rest_route=/doaction-care/v1/wake`; the plugin schedules a cron run and
+  pulls `/agent/v1/jobs/next`. Without the wake, jobs start at the next
+  15-minute heartbeat. "Night" jobs carry `not_before` = next 01:00 Bangkok.
+- **Run (plugin/theme).** Check `/` and `/wp-login.php` over HTTP → copy the
+  current files to `wp-content/doaction-care-backup/` → upgrade → wait for
+  opcache → check again → on failure restore the copy and check again.
+  Result `succeeded`, `rolled_back` or `failed` (failed after a restore means
+  "check the site now").
+- **Run (core).** Refused unless UpdraftPlus reports a backup newer than 24 h.
+  No automatic rollback; a broken check is reported as failed.
+- **Safety.** One running job per site (unique index). Stop-all is the KV flag
+  `care:paused`; it cancels everything queued. Cron fails jobs running > 20
+  min and cancels jobs not picked up within 24 h. Re-pairing a site revokes its
+  older pairing. Updates are offered only for sites heard from in the last 2 h.
+- **Reports.** Successful jobs become maintenance tasks in that month's report:
+  immediately if a draft exists, otherwise when the report is created.
+- **Widget.** wp-admin dashboard: contract end, updates this month, open
+  tickets, last backup, and "report a problem" which opens a ticket as the
+  client's user.
+
+### Not built yet
+
+- 30-day uptime in the widget and a one-click portal sign-in link (the link
+  would be a login credential inside the client's wp-admin; left out on
+  purpose).
+- P4: vulnerability feed (needs a Patchstack/WPScan API key), signed plugin
+  self-update, before/after screenshots, external security review.

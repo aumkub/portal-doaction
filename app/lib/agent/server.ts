@@ -1,15 +1,21 @@
 /**
  * Site-care agent endpoints (pull model: the WordPress plugin always calls us).
  *   POST /agent/v1/pair       {code, site_url, wp_version, plugin_version} -> {site_id, secret}
- *   POST /agent/v1/heartbeat  signed; body = inventory JSON -> {ok, server_time}
- * P0 is read-only: no commands are ever returned to the site.
+ *   POST /agent/v1/heartbeat  signed; body = inventory JSON -> {ok, server_time, widget}
+ *   POST /agent/v1/jobs/next  signed; claims the next due update job -> {job | null}
+ *   POST /agent/v1/jobs/report signed; {job_id, status, result_version, log}
+ *   POST /agent/v1/ticket     signed; {title, description} from the wp-admin widget
+ * Jobs are limited to the fixed list in JobSchema: update one plugin, theme or core.
  */
 import { createDB } from "~/lib/db.server";
 import { generateId } from "~/lib/utils";
 import {
   decryptSecret, encryptSecret, normalizePairCode, randomHex, sha256hex, signPayload, verifySignature,
 } from "./crypto";
-import { InventorySchema, PairSchema } from "./inventory";
+import { InventorySchema, JobReportSchema, PairSchema, WidgetTicketSchema } from "./inventory";
+import { CARE_PAUSED_KEY, addJobToDraftReport } from "./jobs.server";
+import type { SiteRow } from "~/lib/db.server";
+import { emailTeamNewTicket } from "~/lib/email-alerts.server";
 
 const MAX_BODY_BYTES = 256 * 1024;
 const HEARTBEAT_MIN_INTERVAL_S = 60;
@@ -58,6 +64,9 @@ export async function handleAgentRequest(request: Request, env: CloudflareEnv): 
   try {
     if (pathname === "/agent/v1/pair") return await handlePair(request, env);
     if (pathname === "/agent/v1/heartbeat") return await handleHeartbeat(request, env);
+    if (pathname === "/agent/v1/jobs/next") return await handleJobsNext(request, env);
+    if (pathname === "/agent/v1/jobs/report") return await handleJobReport(request, env);
+    if (pathname === "/agent/v1/ticket") return await handleWidgetTicket(request, env);
     return json(404, { error: "not_found" });
   } catch (err) {
     console.error("agent error", err);
@@ -96,11 +105,24 @@ async function handlePair(request: Request, env: CloudflareEnv): Promise<Respons
     plugin_version: parsed.data.plugin_version,
     wp_version: parsed.data.wp_version,
   });
+  // A site that pairs again (reinstall, new code) replaces its older pairing.
+  await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE site_jobs SET status = 'cancelled', finished_at = ? WHERE status = 'queued'
+         AND site_id IN (SELECT id FROM sites WHERE client_id = ? AND site_url = ? AND id != ? AND revoked_at IS NULL)`
+    ).bind(now, clientId, parsed.data.site_url, siteId),
+    env.DB.prepare(
+      "UPDATE sites SET revoked_at = ? WHERE client_id = ? AND site_url = ? AND id != ? AND revoked_at IS NULL"
+    ).bind(now, clientId, parsed.data.site_url, siteId),
+  ]);
   // Secret is returned exactly once; sign the response with it so the plugin can sanity-check.
   return signedJson(secret, 200, { site_id: siteId, secret });
 }
 
-async function handleHeartbeat(request: Request, env: CloudflareEnv): Promise<Response> {
+type Authed = { site: SiteRow; secret: string; raw: Uint8Array };
+
+/** Verifies the site's signature and nonce. Returns a ready error Response on failure. */
+async function authenticate(request: Request, env: CloudflareEnv): Promise<Authed | Response> {
   const siteId = request.headers.get("X-DA-Site") ?? "";
   const timestamp = request.headers.get("X-DA-Timestamp") ?? "";
   const nonce = request.headers.get("X-DA-Nonce") ?? "";
@@ -110,8 +132,7 @@ async function handleHeartbeat(request: Request, env: CloudflareEnv): Promise<Re
   const raw = await readBody(request);
   if (!raw) return json(413, { error: "too_large" });
 
-  const db = createDB(env.DB);
-  const site = await db.getSiteById(siteId);
+  const site = await createDB(env.DB).getSiteById(siteId);
   if (!site || site.revoked_at) return json(401, { error: "revoked" });
 
   const secret = await decryptSecret(env.SESSION_SECRET, site.secret_enc);
@@ -121,14 +142,25 @@ async function handleHeartbeat(request: Request, env: CloudflareEnv): Promise<Re
   const nonceKey = `agent-nonce:${siteId}:${nonce}`;
   if (await env.SESSIONPORTAL.get(nonceKey)) return json(401, { error: "replay" });
   await env.SESSIONPORTAL.put(nonceKey, "1", { expirationTtl: 600 });
+  return { site, secret, raw };
+}
+
+function parseBody(raw: Uint8Array): unknown {
+  try { return JSON.parse(new TextDecoder().decode(raw)); } catch { return undefined; }
+}
+
+async function handleHeartbeat(request: Request, env: CloudflareEnv): Promise<Response> {
+  const auth = await authenticate(request, env);
+  if (auth instanceof Response) return auth;
+  const { site, secret, raw } = auth;
+  const siteId = site.id;
+  const db = createDB(env.DB);
 
   const rlKey = `agent-hb:${siteId}`;
   if (await env.SESSIONPORTAL.get(rlKey)) return signedJson(secret, 429, { error: "rate_limited", retry_after: HEARTBEAT_MIN_INTERVAL_S });
   await env.SESSIONPORTAL.put(rlKey, "1", { expirationTtl: HEARTBEAT_MIN_INTERVAL_S });
 
-  let body: unknown;
-  try { body = JSON.parse(new TextDecoder().decode(raw)); } catch { return signedJson(secret, 400, { error: "bad_json" }); }
-  const parsed = InventorySchema.safeParse(body);
+  const parsed = InventorySchema.safeParse(parseBody(raw));
   if (!parsed.success) {
     return signedJson(secret, 400, { error: "invalid_inventory", issues: parsed.error.issues.slice(0, 5).map((i) => i.path.join(".")) });
   }
@@ -139,5 +171,86 @@ async function handleHeartbeat(request: Request, env: CloudflareEnv): Promise<Re
     site_id: siteId, now, json: JSON.stringify(inv), site_url: inv.site_url,
     plugin_version: inv.plugin_version, wp_version: inv.wp_version, php_version: inv.php_version,
   });
-  return signedJson(secret, 200, { ok: true, server_time: now });
+  return signedJson(secret, 200, { ok: true, server_time: now, widget: await widgetData(env, site, now) });
+}
+
+/** What the wp-admin dashboard widget shows. Only this client's own data. */
+async function widgetData(env: CloudflareEnv, site: SiteRow, now: number) {
+  const db = createDB(env.DB);
+  const client = await db.getClientById(site.client_id);
+  const d = new Date((now + 7 * 3600) * 1000); // Bangkok month
+  const monthStart = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1) / 1000 - 7 * 3600;
+  const open = await env.DB
+    .prepare("SELECT COUNT(*) AS n FROM support_tickets WHERE client_id = ? AND status NOT IN ('resolved','closed') AND deleted_at IS NULL")
+    .bind(site.client_id)
+    .first<{ n: number }>()
+    .catch(() => null);
+  return {
+    company: client?.company_name ?? "",
+    contract_end: client?.contract_end ?? null,
+    open_tickets: open?.n ?? 0,
+    updates_this_month: await db.countSiteJobsSince(site.id, monthStart),
+    portal_url: env.APP_URL,
+  };
+}
+
+async function handleJobsNext(request: Request, env: CloudflareEnv): Promise<Response> {
+  const auth = await authenticate(request, env);
+  if (auth instanceof Response) return auth;
+  if (await env.SESSIONPORTAL.get(CARE_PAUSED_KEY)) return signedJson(auth.secret, 200, { job: null, paused: true });
+  const job = await createDB(env.DB).claimNextSiteJob(auth.site.id, Math.floor(Date.now() / 1000));
+  return signedJson(auth.secret, 200, {
+    job: job && { id: job.id, kind: job.kind, slug: job.slug, to_version: job.to_version },
+  });
+}
+
+async function handleJobReport(request: Request, env: CloudflareEnv): Promise<Response> {
+  const auth = await authenticate(request, env);
+  if (auth instanceof Response) return auth;
+  const parsed = JobReportSchema.safeParse(parseBody(auth.raw));
+  if (!parsed.success) return signedJson(auth.secret, 400, { error: "invalid_payload" });
+  const now = Math.floor(Date.now() / 1000);
+  const ok = await createDB(env.DB).finishSiteJob({
+    id: parsed.data.job_id, site_id: auth.site.id, status: parsed.data.status,
+    result_version: parsed.data.result_version, log: parsed.data.log, now,
+  });
+  // The site sends a fresh inventory right after its jobs; let it through the heartbeat limiter.
+  if (ok) await env.SESSIONPORTAL.delete(`agent-hb:${auth.site.id}`);
+  if (ok && parsed.data.status === "succeeded") {
+    await addJobToDraftReport(env, auth.site.client_id, now).catch((e) => console.error("[agent] report fill failed", e));
+  }
+  return signedJson(auth.secret, ok ? 200 : 409, { ok });
+}
+
+async function handleWidgetTicket(request: Request, env: CloudflareEnv): Promise<Response> {
+  const auth = await authenticate(request, env);
+  if (auth instanceof Response) return auth;
+  const rlKey = `agent-ticket:${auth.site.id}`;
+  const recent = Number((await env.SESSIONPORTAL.get(rlKey)) ?? "0");
+  if (recent >= 5) return signedJson(auth.secret, 429, { error: "rate_limited" });
+  await env.SESSIONPORTAL.put(rlKey, String(recent + 1), { expirationTtl: 3600 });
+
+  const parsed = WidgetTicketSchema.safeParse(parseBody(auth.raw));
+  if (!parsed.success) return signedJson(auth.secret, 400, { error: "invalid_payload" });
+  const db = createDB(env.DB);
+  const client = await db.getClientById(auth.site.client_id);
+  if (!client) return signedJson(auth.secret, 404, { error: "no_client" });
+
+  const ticketId = generateId();
+  const description = `${parsed.data.description}\n\n— แจ้งจากหน้า wp-admin ของ ${auth.site.site_url}${parsed.data.reporter ? ` โดย ${parsed.data.reporter}` : ""}`;
+  await db.createTicket({
+    id: ticketId, client_id: client.id, title: parsed.data.title, description,
+    priority: "medium", status: "open", created_by: client.user_id, assigned_to: null, resolved_at: null,
+  });
+  const admins = await db.listAdminUsers();
+  await Promise.all(admins.map((a) => db.createNotification({
+    id: generateId(), user_id: a.id, type: "ticket", title: `New ticket from ${client.company_name}`,
+    body: parsed.data.title, link: `/admin/tickets/${ticketId}`, read: 0,
+  })));
+  try {
+    await emailTeamNewTicket(env, db, { id: ticketId, title: parsed.data.title, description, priority: "medium" }, client.company_name);
+  } catch (e) {
+    console.error("[agent ticket] team email failed", e);
+  }
+  return signedJson(auth.secret, 200, { ok: true, ticket_id: ticketId });
 }

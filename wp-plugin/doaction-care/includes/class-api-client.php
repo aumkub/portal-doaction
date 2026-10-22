@@ -153,6 +153,84 @@ class DoAction_Care_Api_Client {
 		delete_option( DOACTION_CARE_OPTION );
 	}
 
+	// ── Signed calls ──────────────────────────────────────────────────────────
+
+	/**
+	 * POSTs a signed JSON body and verifies the signed reply.
+	 *
+	 * @param array<string,mixed> $payload
+	 * @return array{status:int,data:mixed}|WP_Error
+	 */
+	public static function signed_post( $path, array $payload, $timeout = 20 ) {
+		if ( ! self::is_paired() ) {
+			return new WP_Error( 'doaction_care_unpaired', 'ยังไม่ได้เชื่อมต่อ' );
+		}
+		$s      = self::get_settings();
+		$secret = self::decrypt_secret( $s['secret_enc'] );
+		if ( ! $secret ) {
+			return new WP_Error( 'doaction_care_secret', 'ถอดรหัส secret ไม่ได้ (salt เปลี่ยน?) — กรุณาเชื่อมต่อใหม่' );
+		}
+		$body  = wp_json_encode( $payload );
+		$ts    = (string) time();
+		$nonce = bin2hex( random_bytes( 16 ) );
+		$args  = self::http_args(
+			$body,
+			array(
+				'X-DA-Site'      => $s['site_id'],
+				'X-DA-Timestamp' => $ts,
+				'X-DA-Nonce'     => $nonce,
+				'X-DA-Signature' => self::sign( $secret, $ts, $nonce, $body ),
+			)
+		);
+		$args['timeout'] = $timeout;
+		$res             = wp_remote_post( self::endpoint( $s['portal_url'], $path ), $args );
+		if ( is_wp_error( $res ) ) {
+			return $res;
+		}
+		$status = (int) wp_remote_retrieve_response_code( $res );
+		if ( 401 === $status ) {
+			return new WP_Error( 'doaction_care_401', 'Portal ปฏิเสธการเชื่อมต่อ (ถูกตัดการเชื่อมต่อหรือ secret ไม่ถูกต้อง)' );
+		}
+		if ( ! self::verify_response( $secret, $res ) ) {
+			return new WP_Error( 'doaction_care_sig', 'ลายเซ็นตอบกลับจาก Portal ไม่ถูกต้อง (HTTP ' . $status . ')' );
+		}
+		return array(
+			'status' => $status,
+			'data'   => json_decode( wp_remote_retrieve_body( $res ), true ),
+		);
+	}
+
+	/**
+	 * Verifies a request the portal signed with this site's secret (the wake call).
+	 *
+	 * @param WP_REST_Request $request
+	 */
+	public static function verify_portal_request( $request ) {
+		if ( ! self::is_paired() ) {
+			return false;
+		}
+		$s      = self::get_settings();
+		$secret = self::decrypt_secret( $s['secret_enc'] );
+		$ts     = (string) $request->get_header( 'x_da_timestamp' );
+		$nonce  = (string) $request->get_header( 'x_da_nonce' );
+		$sig    = strtolower( (string) $request->get_header( 'x_da_signature' ) );
+		if ( ! $secret || ! ctype_digit( $ts ) || ! preg_match( '/^[0-9a-f]{16,64}$/', $nonce ) || '' === $sig ) {
+			return false;
+		}
+		if ( abs( time() - (int) $ts ) > self::MAX_SKEW || $request->get_header( 'x_da_site' ) !== $s['site_id'] ) {
+			return false;
+		}
+		if ( ! hash_equals( self::sign( $secret, $ts, $nonce, $request->get_body() ), $sig ) ) {
+			return false;
+		}
+		$key = 'doaction_care_n_' . $nonce;
+		if ( get_transient( $key ) ) {
+			return false;
+		}
+		set_transient( $key, 1, 2 * self::MAX_SKEW );
+		return true;
+	}
+
 	// ── Heartbeat ─────────────────────────────────────────────────────────────
 
 	/** @return true|WP_Error */
@@ -160,47 +238,26 @@ class DoAction_Care_Api_Client {
 		if ( ! self::is_paired() ) {
 			return new WP_Error( 'doaction_care_unpaired', 'ยังไม่ได้เชื่อมต่อ' );
 		}
-		$s      = self::get_settings();
-		$secret = self::decrypt_secret( $s['secret_enc'] );
-		if ( ! $secret ) {
-			return self::record_error( $s, 'ถอดรหัส secret ไม่ได้ (salt เปลี่ยน?) — กรุณาเชื่อมต่อใหม่' );
-		}
-
-		$body  = wp_json_encode( DoAction_Care_Inventory::collect() );
-		$ts    = (string) time();
-		$nonce = bin2hex( random_bytes( 16 ) );
-		$res   = wp_remote_post(
-			self::endpoint( $s['portal_url'], 'heartbeat' ),
-			self::http_args(
-				$body,
-				array(
-					'X-DA-Site'      => $s['site_id'],
-					'X-DA-Timestamp' => $ts,
-					'X-DA-Nonce'     => $nonce,
-					'X-DA-Signature' => self::sign( $secret, $ts, $nonce, $body ),
-				)
-			)
-		);
+		$res = self::signed_post( 'heartbeat', DoAction_Care_Inventory::collect() );
+		$s   = self::get_settings();
 		if ( is_wp_error( $res ) ) {
+			if ( 'doaction_care_401' === $res->get_error_code() ) {
+				$s['status'] = 'disconnected';
+			}
 			return self::record_error( $s, $res->get_error_message() );
 		}
-		$status = (int) wp_remote_retrieve_response_code( $res );
-		if ( 401 === $status ) {
-			$s['status'] = 'disconnected';
-			return self::record_error( $s, 'Portal ปฏิเสธการเชื่อมต่อ (ถูกตัดการเชื่อมต่อหรือ secret ไม่ถูกต้อง)' );
-		}
-		if ( ! self::verify_response( $secret, $res ) ) {
-			return self::record_error( $s, 'ลายเซ็นตอบกลับจาก Portal ไม่ถูกต้อง (HTTP ' . $status . ')' );
-		}
-		if ( 429 === $status ) {
+		if ( 429 === $res['status'] ) {
 			return self::record_error( $s, 'ส่งถี่เกินไป ลองใหม่ในอีก 1 นาที' );
 		}
-		if ( 200 !== $status ) {
-			return self::record_error( $s, 'HTTP ' . $status );
+		if ( 200 !== $res['status'] ) {
+			return self::record_error( $s, 'HTTP ' . $res['status'] );
 		}
 		$s['status']     = 'connected';
 		$s['last_ok']    = time();
 		$s['last_error'] = '';
+		if ( is_array( $res['data'] ) && isset( $res['data']['widget'] ) && is_array( $res['data']['widget'] ) ) {
+			$s['widget'] = $res['data']['widget'];
+		}
 		self::save_settings( $s );
 		return true;
 	}

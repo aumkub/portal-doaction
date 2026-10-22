@@ -1164,6 +1164,141 @@ export function createDB(d1: D1Database) {
         .bind(now, id, client_id)
         .run();
     },
+
+    // ── Site update jobs ─────────────────────────────────────────────────────
+
+    async queueSiteJobs(jobs: Omit<SiteJobRow, "status" | "started_at" | "finished_at" | "result_version" | "log" | "reported_at">[]): Promise<number> {
+      if (jobs.length === 0) return 0;
+      const res = await d1.batch(
+        jobs.map((j) =>
+          d1.prepare(
+            `INSERT INTO site_jobs (id, site_id, kind, slug, name, from_version, to_version, not_before, created_by, created_at)
+             SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+             WHERE NOT EXISTS (SELECT 1 FROM site_jobs WHERE site_id = ? AND kind = ? AND slug = ? AND status IN ('queued','running'))`
+          ).bind(j.id, j.site_id, j.kind, j.slug, j.name, j.from_version, j.to_version, j.not_before, j.created_by, j.created_at, j.site_id, j.kind, j.slug)
+        )
+      );
+      return res.reduce((n, r) => n + (r.meta.changes ?? 0), 0);
+    },
+
+    /** Claims the next due job for a site, or null. Never more than one running per site. */
+    async claimNextSiteJob(site_id: string, now: number): Promise<SiteJobRow | null> {
+      try {
+        return await d1
+          .prepare(
+            `UPDATE site_jobs SET status = 'running', started_at = ?
+             WHERE id = (
+               SELECT id FROM site_jobs
+               WHERE site_id = ? AND status = 'queued' AND not_before <= ?
+                 AND NOT EXISTS (SELECT 1 FROM site_jobs WHERE site_id = ? AND status = 'running')
+               ORDER BY CASE kind WHEN 'plugin' THEN 0 WHEN 'theme' THEN 1 ELSE 2 END, created_at
+               LIMIT 1
+             )
+             RETURNING *`
+          )
+          .bind(now, site_id, now, site_id)
+          .first<SiteJobRow>();
+      } catch {
+        return null; // lost a race against the one-running index
+      }
+    },
+
+    async finishSiteJob(p: { id: string; site_id: string; status: SiteJobStatus; result_version: string | null; log: string; now: number }): Promise<boolean> {
+      const r = await d1
+        .prepare(
+          `UPDATE site_jobs SET status = ?, result_version = ?, log = ?, finished_at = ?
+           WHERE id = ? AND site_id = ? AND status = 'running'`
+        )
+        .bind(p.status, p.result_version, p.log, p.now, p.id, p.site_id)
+        .run();
+      return (r.meta.changes ?? 0) > 0;
+    },
+
+    async cancelSiteJob(id: string): Promise<void> {
+      await d1.prepare("UPDATE site_jobs SET status = 'cancelled', finished_at = unixepoch() WHERE id = ? AND status = 'queued'").bind(id).run();
+    },
+
+    async cancelAllQueuedSiteJobs(): Promise<number> {
+      const r = await d1.prepare("UPDATE site_jobs SET status = 'cancelled', finished_at = unixepoch() WHERE status = 'queued'").run();
+      return r.meta.changes ?? 0;
+    },
+
+    /** Running jobs the site never reported back on (crash, timeout) are failed after `olderThan`. */
+    async failStaleSiteJobs(olderThan: number): Promise<number> {
+      const r = await d1
+        .prepare(
+          `UPDATE site_jobs SET status = 'failed', finished_at = unixepoch(),
+             log = COALESCE(log, '') || 'ไม่ได้รับผลจากเว็บไซต์ภายในเวลาที่กำหนด — ตรวจสอบเว็บด้วยตนเอง'
+           WHERE status = 'running' AND started_at < ?`
+        )
+        .bind(olderThan)
+        .run();
+      return r.meta.changes ?? 0;
+    },
+
+    /** Queued jobs the site never picked up (offline, unpaired) expire. */
+    async expireUnclaimedSiteJobs(olderThan: number): Promise<number> {
+      const r = await d1
+        .prepare(
+          `UPDATE site_jobs SET status = 'cancelled', finished_at = unixepoch(),
+             log = 'เว็บไซต์ไม่ได้รับงานภายใน 24 ชม. — ยกเลิกอัตโนมัติ'
+           WHERE status = 'queued' AND MAX(not_before, created_at) < ?`
+        )
+        .bind(olderThan)
+        .run();
+      return r.meta.changes ?? 0;
+    },
+
+    async listSiteJobs(opts: { site_ids?: string[]; since?: number; limit?: number }) {
+      const where: string[] = [];
+      const binds: unknown[] = [];
+      if (opts.site_ids) {
+        if (opts.site_ids.length === 0) return [];
+        where.push(`j.site_id IN (${opts.site_ids.map(() => "?").join(",")})`);
+        binds.push(...opts.site_ids);
+      }
+      if (opts.since) { where.push("j.created_at >= ?"); binds.push(opts.since); }
+      const { results } = await d1
+        .prepare(
+          `SELECT j.*, s.site_url, u.name AS created_by_name FROM site_jobs j
+           JOIN sites s ON s.id = j.site_id LEFT JOIN users u ON u.id = j.created_by
+           ${where.length ? "WHERE " + where.join(" AND ") : ""}
+           ORDER BY j.created_at DESC LIMIT ?`
+        )
+        .bind(...binds, opts.limit ?? 100)
+        .all<SiteJobRow & { site_url: string; created_by_name: string | null }>();
+      return results;
+    },
+
+    async countSiteJobsSince(site_id: string, since: number): Promise<number> {
+      const r = await d1
+        .prepare("SELECT COUNT(*) AS n FROM site_jobs WHERE site_id = ? AND status = 'succeeded' AND finished_at >= ?")
+        .bind(site_id, since)
+        .first<{ n: number }>();
+      return r?.n ?? 0;
+    },
+
+    /** Succeeded jobs of a client's sites in [from, to) not yet copied into a report. */
+    async listUnreportedSiteJobs(client_id: string, from: number, to: number) {
+      const { results } = await d1
+        .prepare(
+          `SELECT j.*, s.site_url FROM site_jobs j JOIN sites s ON s.id = j.site_id
+           WHERE s.client_id = ? AND j.status = 'succeeded' AND j.reported_at IS NULL
+             AND j.finished_at >= ? AND j.finished_at < ?
+           ORDER BY j.finished_at`
+        )
+        .bind(client_id, from, to)
+        .all<SiteJobRow & { site_url: string }>();
+      return results;
+    },
+
+    async markSiteJobsReported(ids: string[], now: number): Promise<void> {
+      if (ids.length === 0) return;
+      await d1
+        .prepare(`UPDATE site_jobs SET reported_at = ? WHERE id IN (${ids.map(() => "?").join(",")})`)
+        .bind(now, ...ids)
+        .run();
+    },
   };
 }
 
@@ -1174,3 +1309,13 @@ export type SiteRow = {
 };
 
 export type DB = ReturnType<typeof createDB>;
+
+export type SiteJobKind = "plugin" | "theme" | "core";
+export type SiteJobStatus = "queued" | "running" | "succeeded" | "rolled_back" | "failed" | "cancelled";
+export type SiteJobRow = {
+  id: string; site_id: string; kind: SiteJobKind; slug: string; name: string;
+  from_version: string | null; to_version: string | null; status: SiteJobStatus;
+  not_before: number; created_by: string; created_at: number;
+  started_at: number | null; finished_at: number | null;
+  result_version: string | null; log: string | null; reported_at: number | null;
+};

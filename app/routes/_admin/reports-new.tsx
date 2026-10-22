@@ -1,3 +1,4 @@
+import { appendSiteUpdatesToReport } from "~/lib/agent/jobs.server";
 import { redirect } from "react-router";
 import { isContractExpired } from "~/lib/contract";
 import { getReportLinkSecret, getUptimeRobotKey } from "~/lib/secrets.server";
@@ -169,6 +170,7 @@ export async function action({ request, context }: Route.ActionArgs) {
         sort_order: i,
       });
     }
+    await appendSiteUpdatesToReport(db, { clientId: currentClientId, reportId, year, month });
 
     if (isPublish) {
       const notification = {

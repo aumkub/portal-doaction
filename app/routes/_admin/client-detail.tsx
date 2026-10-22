@@ -1,5 +1,6 @@
 import { Form, redirect, useActionData, useSearchParams, type FormEvent as ReactFormEvent } from "react-router";
 import { ConfirmButton } from "~/components/ui/confirm-button";
+import { CARE_PAUSED_KEY } from "~/lib/agent/jobs.server";
 import { ConnectedSitesSection, type ConnectedSite } from "~/components/admin/connected-sites";
 import { generatePairCode, sha256hex } from "~/lib/agent/crypto";
 import { z } from "zod";
@@ -111,8 +112,13 @@ export async function loader({ request, params, context }: any) {
     return { ...row, inventory };
   });
 
+  const siteJobs = await db.listSiteJobs({ site_ids: sites.map((x) => x.id), since: Math.floor(Date.now() / 1000) - 30 * 86400 });
+  const carePaused = Boolean(await context.cloudflare.env.SESSIONPORTAL.get(CARE_PAUSED_KEY));
+
   return {
     sites,
+    siteJobs,
+    carePaused,
     appUrl: (env.APP_URL as string | undefined) || new URL(request.url).origin,
     client,
     user,
@@ -379,6 +385,8 @@ export default function AdminClientDetailPage({ loaderData }: any) {
     backupSites = [],
     backupPathUsage = {},
     sites = [],
+    siteJobs = [],
+    carePaused = false,
     appUrl,
   } = loaderData;
   const { t } = useT();
@@ -654,6 +662,8 @@ export default function AdminClientDetailPage({ loaderData }: any) {
             canManage={isAdmin}
             pairCode={actionData?.pairCode}
             appUrl={appUrl}
+            jobs={siteJobs}
+            paused={carePaused}
           />
 
           {/* Danger zone */}
