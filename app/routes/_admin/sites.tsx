@@ -176,7 +176,7 @@ function SiteRow({ site, now, activity, wake, oldestQueued, open, onToggle, chil
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="grid w-full grid-cols-[minmax(0,1fr)_24px] items-center gap-3 px-5 py-3 text-left transition-colors hover:bg-paper/60 md:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1.3fr)_minmax(0,0.9fr)_24px]"
+        className="group grid w-full grid-cols-[minmax(0,1fr)_24px] items-center gap-3 px-5 py-3 text-left transition-colors hover:bg-paper/60 md:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1.3fr)_minmax(0,0.9fr)_24px]"
       >
         <span className="flex min-w-0 items-center gap-3">
           <span className="relative flex h-2.5 w-2.5 shrink-0">
@@ -230,7 +230,9 @@ function SiteRow({ site, now, activity, wake, oldestQueued, open, onToggle, chil
         <span className={`hidden text-xs md:block ${online ? "text-ink-soft" : "text-[#B4541A]"}`}>
           {silentFor === null ? "ยังไม่ส่งข้อมูล" : `${ago(silentFor)}ที่แล้ว`}
         </span>
-        <span className={`text-faint-ink transition-transform ${open ? "rotate-90" : ""}`} aria-hidden="true">›</span>
+        <span className={`grid h-6 w-6 place-items-center rounded-full text-faint-ink transition-[transform,background-color,color] duration-200 ease-out group-hover:bg-black/5 group-hover:text-ink ${open ? "rotate-90 bg-black/5 text-ink" : ""}`} aria-hidden="true">
+          <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3.5 10.5 8 6 12.5" /></svg>
+        </span>
       </button>
       {stallText && <p className="-mt-1 px-5 pb-2.5 pl-[42px] text-[11px] text-[#B4541A]">{stallText}</p>}
       {open && <div className="px-3 pb-4 sm:px-5">{children}</div>}

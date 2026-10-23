@@ -71,7 +71,24 @@ class DoAction_Care_Admin {
 	public static function handle_send() {
 		self::guard( 'doaction_care_send' );
 		$hb = DoAction_Care_Api_Client::send_heartbeat();
-		self::back( is_wp_error( $hb ) ? $hb->get_error_message() : 'ส่งข้อมูลเรียบร้อย', is_wp_error( $hb ) ? 'error' : 'success' );
+		if ( is_wp_error( $hb ) ) {
+			self::back( $hb->get_error_message(), 'error' );
+		}
+		// Pull queued jobs after the redirect is sent, so the page doesn't hang while updates run.
+		add_action(
+			'shutdown',
+			static function () {
+				ignore_user_abort( true );
+				if ( function_exists( 'fastcgi_finish_request' ) ) {
+					fastcgi_finish_request();
+				} elseif ( function_exists( 'litespeed_finish_request' ) ) {
+					litespeed_finish_request();
+				}
+				DoAction_Care_Runner::poll();
+			},
+			PHP_INT_MAX
+		);
+		self::back( 'ส่งข้อมูลแล้ว กำลังรับงานอัปเดตที่รอคิวอยู่ในเบื้องหลัง' );
 	}
 
 	public static function handle_disconnect() {
@@ -196,7 +213,7 @@ class DoAction_Care_Admin {
 					<form method="post" action="<?php echo esc_url( $post ); ?>">
 						<input type="hidden" name="action" value="doaction_care_send">
 						<?php wp_nonce_field( 'doaction_care_send' ); ?>
-						<button type="submit" class="dac-btn is-primary">ส่งข้อมูลตอนนี้</button>
+						<button type="submit" class="dac-btn is-primary">ส่งข้อมูลและรับงานอัปเดต</button>
 					</form>
 					<a class="dac-btn is-yellow" href="<?php echo esc_url( $portal ); ?>" target="_blank" rel="noopener">เปิดพอร์ทัล</a>
 				</div>

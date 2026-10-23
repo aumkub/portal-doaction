@@ -68,6 +68,8 @@ export async function wakeSite(env: CloudflareEnv, site: { id: string; secret_en
     const ts = String(Math.floor(Date.now() / 1000));
     const nonce = randomHex(16);
     const url = new URL(homeUrl);
+    // Sites saved as http:// usually 301 to https, and a redirected POST loses its body.
+    url.protocol = "https:";
     url.searchParams.set("rest_route", "/doaction-care/v1/wake");
     const res = await fetch(url.toString(), {
       method: "POST",
