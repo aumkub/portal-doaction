@@ -218,7 +218,7 @@ function UpdateForm({ site, paused, jobs }: { site: ConnectedSite; paused: boole
             <>
               อัปเดต {pickable.length} รายการบน {site.site_url}?<br />
               ระบบจะอัปเดตทีละรายการ ตรวจหน้าเว็บหลังแต่ละรายการ และย้อนกลับเวอร์ชันเดิมอัตโนมัติถ้าเว็บพัง
-              {selected.has("core:wordpress") && " — WordPress core ย้อนกลับอัตโนมัติไม่ได้ ระบบจะเช็กว่ามี backup ภายใน 24 ชม. ก่อน"}
+              {selected.has("core:wordpress") && " — WordPress core ย้อนกลับอัตโนมัติไม่ได้ ระบบจะเช็กว่ามี backup ก่อน"}
             </>
           }
           confirmLabel="เริ่มอัปเดต"
