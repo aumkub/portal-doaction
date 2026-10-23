@@ -148,6 +148,7 @@ class DoAction_Care_Api_Client {
 	}
 
 	public static function disconnect() {
+		delete_option( DOACTION_CARE_DUE_OPTION );
 		delete_option( DOACTION_CARE_OPTION );
 	}
 
@@ -262,8 +263,16 @@ class DoAction_Care_Api_Client {
 		self::save_settings( $s );
 		// Jobs still queued (e.g. the portal's wake didn't get through): check back in
 		// 15 minutes instead of waiting for the hourly heartbeat. One event at a time.
-		if ( ! empty( $res['data']['jobs_waiting'] ) && ! wp_next_scheduled( DOACTION_CARE_WAKE_HOOK ) ) {
-			wp_schedule_single_event( time() + 15 * MINUTE_IN_SECONDS, DOACTION_CARE_WAKE_HOOK );
+		if ( ! empty( $res['data']['jobs_waiting'] ) ) {
+			if ( ! wp_next_scheduled( DOACTION_CARE_WAKE_HOOK ) ) {
+				wp_schedule_single_event( time() + 15 * MINUTE_IN_SECONDS, DOACTION_CARE_WAKE_HOOK );
+			}
+			// Also let the next page view pick the jobs up (see doaction_care_due_check).
+			if ( false === get_option( DOACTION_CARE_DUE_OPTION ) ) {
+				add_option( DOACTION_CARE_DUE_OPTION, (string) ( time() + DOACTION_CARE_DUE_EVERY ), '', 'yes' );
+			}
+		} else {
+			delete_option( DOACTION_CARE_DUE_OPTION );
 		}
 		return true;
 	}

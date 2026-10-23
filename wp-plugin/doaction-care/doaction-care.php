@@ -3,7 +3,7 @@
  * Plugin Name:       Do Action: Care
  * Plugin URI:        https://doaction.co.th
  * Description:       Connects this site to the do action client portal: reports versions and available updates, runs updates the do action team starts (with checks and automatic rollback), and shows a care summary on the dashboard.
- * Version:           0.4.6
+ * Version:           0.4.7
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            do action
@@ -16,7 +16,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'DOACTION_CARE_VERSION', '0.4.6' );
+define( 'DOACTION_CARE_VERSION', '0.4.7' );
 define( 'DOACTION_CARE_FILE', __FILE__ );
 if ( ! defined( 'DOACTION_CARE_PORTAL' ) ) {
 	define( 'DOACTION_CARE_PORTAL', 'https://portal.doaction.co.th' );
@@ -57,6 +57,40 @@ function doaction_care_ensure_schedule() {
 	}
 }
 add_action( 'init', 'doaction_care_ensure_schedule' );
+
+define( 'DOACTION_CARE_DUE_OPTION', 'doaction_care_due' );
+define( 'DOACTION_CARE_DUE_EVERY', 5 * MINUTE_IN_SECONDS );
+
+/**
+ * While the portal has jobs waiting for this site, the next ordinary page view
+ * (at most once per 5 minutes) sends a heartbeat and pulls jobs after its
+ * response is finished. This works when the portal's wake call is blocked by
+ * the site's firewall/CDN and WP-cron's loopback is blocked too. When nothing is
+ * waiting the option is absent and this costs one autoloaded option read.
+ */
+function doaction_care_due_check() {
+	$due = get_option( DOACTION_CARE_DUE_OPTION );
+	if ( false === $due || (int) $due > time() || wp_doing_cron() || ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) ) {
+		return;
+	}
+	global $wpdb;
+	// Claim this slot atomically so concurrent page views run it once.
+	$claimed = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND option_value = %s", (string) ( time() + DOACTION_CARE_DUE_EVERY ), DOACTION_CARE_DUE_OPTION, (string) $due ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	wp_cache_delete( 'alloptions', 'options' );
+	if ( 1 !== $claimed ) {
+		return;
+	}
+	ignore_user_abort( true );
+	if ( function_exists( 'fastcgi_finish_request' ) ) {
+		fastcgi_finish_request();
+	} elseif ( function_exists( 'litespeed_finish_request' ) ) {
+		litespeed_finish_request();
+	} else {
+		return; // Can't detach from the visitor's request: leave it to cron.
+	}
+	do_action( DOACTION_CARE_WAKE_HOOK );
+}
+add_action( 'shutdown', 'doaction_care_due_check', PHP_INT_MAX );
 
 // Health probe used by the runner around updates: answers only to the
 // one-time token it just stored, after every plugin and the theme loaded.
@@ -130,6 +164,7 @@ register_deactivation_hook(
 		wp_clear_scheduled_hook( DOACTION_CARE_CRON_HOOK );
 		wp_clear_scheduled_hook( DOACTION_CARE_POLL_HOOK );
 		wp_clear_scheduled_hook( DOACTION_CARE_WAKE_HOOK );
+		delete_option( DOACTION_CARE_DUE_OPTION );
 	}
 );
 
