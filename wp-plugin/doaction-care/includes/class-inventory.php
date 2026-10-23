@@ -72,11 +72,14 @@ class DoAction_Care_Inventory {
 			}
 		}
 
-		$db_size = null;
-		$size    = $wpdb->get_var( $wpdb->prepare( 'SELECT SUM(data_length + index_length) FROM information_schema.TABLES WHERE table_schema = %s', DB_NAME ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		// information_schema can be slow on shared MySQL: measure at most twice a day.
+		$db_size = get_transient( 'doaction_care_db_size' );
+		$size    = false !== $db_size ? null : $wpdb->get_var( $wpdb->prepare( 'SELECT SUM(data_length + index_length) FROM information_schema.TABLES WHERE table_schema = %s', DB_NAME ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		if ( null !== $size ) {
 			$db_size = round( (float) $size / 1048576, 1 );
+			set_transient( 'doaction_care_db_size', $db_size, 12 * HOUR_IN_SECONDS );
 		}
+		$db_size = false === $db_size ? null : (float) $db_size;
 
 		$file_mods = ! ( defined( 'DISALLOW_FILE_MODS' ) && DISALLOW_FILE_MODS );
 		if ( $file_mods && defined( 'FS_METHOD' ) && 'direct' !== FS_METHOD ) {

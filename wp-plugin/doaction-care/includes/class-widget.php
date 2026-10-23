@@ -198,6 +198,7 @@ class DoAction_Care_Widget {
 		$desc  = sanitize_textarea_field( wp_unslash( isset( $_POST['description'] ) ? $_POST['description'] : '' ) );
 		$user  = wp_get_current_user();
 		$ok    = false;
+		$res   = null;
 		if ( '' !== $title && '' !== $desc ) {
 			$res = DoAction_Care_Api_Client::signed_post(
 				'ticket',

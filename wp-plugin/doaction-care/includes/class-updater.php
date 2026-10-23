@@ -21,6 +21,18 @@ class DoAction_Care_Updater {
 
 	/** @return array<string,mixed>|null */
 	private static function release() {
+		// Verified once per request: the update transient is read many times per page.
+		static $memo = array();
+		$s0  = DoAction_Care_Api_Client::get_settings();
+		$key = isset( $s0['plugin_release']['version_signature'] ) ? (string) $s0['plugin_release']['version_signature'] : '-';
+		if ( ! array_key_exists( $key, $memo ) ) {
+			$memo[ $key ] = self::release_uncached();
+		}
+		return $memo[ $key ];
+	}
+
+	/** @return array<string,mixed>|null */
+	private static function release_uncached() {
 		$s = DoAction_Care_Api_Client::get_settings();
 		$r = isset( $s['plugin_release'] ) && is_array( $s['plugin_release'] ) ? $s['plugin_release'] : null;
 		if ( ! $r || empty( $r['version'] ) || empty( $r['package'] ) || empty( $r['signature'] ) ) {

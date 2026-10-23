@@ -16,7 +16,9 @@ class DoAction_Care_Runner {
 
 	const LOCK           = 'doaction_care_runner_lock';
 	const BACKUP_DIR     = 'doaction-care-backup';
-	const MAX_RUN_TIME   = 240;
+	const MAX_RUN_TIME   = 60;   // no new job starts after this; keeps runs inside host PHP timeouts
+	const PENDING        = 'doaction_care_pending_restore';
+	const SELF           = 'doaction-care/doaction-care.php';
 	const BACKUP_MAX_AGE = 86400; // core updates need a backup newer than this
 
 	/** @var string[] */
@@ -32,15 +34,18 @@ class DoAction_Care_Runner {
 		if ( ! WP_Upgrader::create_lock( 'auto_updater', 15 * MINUTE_IN_SECONDS ) ) {
 			return;
 		}
-		set_transient( self::LOCK, time(), 10 * MINUTE_IN_SECONDS );
+		set_transient( self::LOCK, time(), 15 * MINUTE_IN_SECONDS );
 		ignore_user_abort( true );
 		if ( function_exists( 'set_time_limit' ) ) {
 			@set_time_limit( 600 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 		}
-		$started = time();
-		$ran     = 0;
+		$started      = time();
+		$ran          = 0;
+		$self_updated = false;
 		try {
+			self::recover_interrupted();
 			while ( time() - $started < self::MAX_RUN_TIME ) {
+				set_transient( self::LOCK, time(), 15 * MINUTE_IN_SECONDS );
 				$res = DoAction_Care_Api_Client::signed_post( 'jobs/next', array() );
 				if ( is_wp_error( $res ) || 200 !== $res['status'] || empty( $res['data']['job'] ) || ! is_array( $res['data']['job'] ) ) {
 					break;
@@ -58,12 +63,17 @@ class DoAction_Care_Runner {
 					)
 				);
 				++$ran;
+				// Our own files were just replaced; stop before old and new code mix.
+				if ( self::SELF === (string) $job['slug'] ) {
+					$self_updated = true;
+					break;
+				}
 			}
 		} finally {
 			delete_transient( self::LOCK );
 			WP_Upgrader::release_lock( 'auto_updater' );
 		}
-		if ( $ran > 0 ) {
+		if ( $ran > 0 && ! $self_updated ) {
 			wp_clean_plugins_cache( true );
 			wp_clean_themes_cache( true );
 			delete_site_transient( 'update_plugins' );
@@ -88,6 +98,10 @@ class DoAction_Care_Runner {
 		$slug = isset( $job['slug'] ) ? (string) $job['slug'] : '';
 		try {
 			$this->load_admin();
+			if ( is_multisite() ) {
+				$this->note( 'เว็บแบบ multisite: อัปเดตมีผลทั้ง network ซึ่งระบบตรวจไม่ครบ — ไม่ได้ทำอะไร ให้อัปเดตด้วยตนเอง' );
+				return $this->result( 'failed' );
+			}
 			if ( ! $this->file_mods_allowed() ) {
 				$this->note( 'เว็บนี้ปิดการแก้ไขไฟล์ (DISALLOW_FILE_MODS / FS_METHOD) — ไม่ได้ทำอะไร' );
 				return $this->result( 'failed' );
@@ -180,7 +194,8 @@ class DoAction_Care_Runner {
 				$p = get_plugins();
 				return isset( $p[ $file ] ) ? (string) $p[ $file ]['Version'] : null;
 			},
-			$from
+			$from,
+			$file
 		);
 	}
 
@@ -231,7 +246,7 @@ class DoAction_Care_Runner {
 	 * @param callable():?string  $version
 	 * @return array{status:string,version:?string}
 	 */
-	private function guarded_update( $target, callable $update, callable $version, $from ) {
+	private function guarded_update( $target, callable $update, callable $version, $from, $plugin_file = null ) {
 		$before = $this->check_site();
 		if ( ! $before['ok'] ) {
 			$this->note( 'เว็บมีปัญหาอยู่แล้วก่อนอัปเดต: ' . $before['detail'] . ' — ไม่ได้อัปเดต' );
@@ -241,10 +256,29 @@ class DoAction_Care_Runner {
 
 		$backup = $this->backup( $target );
 		if ( ! $backup ) {
-			$this->note( 'สำรองไฟล์เดิมไม่สำเร็จ — ไม่ได้อัปเดต' );
+			$this->note( 'สำรองไฟล์เดิมไม่สำเร็จ (หรือพื้นที่ดิสก์ไม่พอ) — ไม่ได้อัปเดต' );
 			return $this->result( 'failed' );
 		}
 		$this->note( 'สำรองไฟล์เดิมไว้แล้ว' );
+		// If PHP is killed from here on, the next run restores from this zip.
+		update_option(
+			self::PENDING,
+			array(
+				'target'     => $target,
+				'zip'        => $backup,
+				'from'       => $from,
+				'plugin'     => $plugin_file,
+				'was_active' => $plugin_file ? is_plugin_active( $plugin_file ) : false,
+				'at'         => time(),
+			),
+			false
+		);
+		$result = $this->update_and_verify( $target, $update, $version, $from, $backup );
+		delete_option( self::PENDING );
+		return $result;
+	}
+
+	private function update_and_verify( $target, callable $update, callable $version, $from, $backup ) {
 
 		try {
 			$ok = call_user_func( $update );
@@ -269,9 +303,7 @@ class DoAction_Care_Runner {
 	}
 
 	private function restore( $backup, $target, $from ) {
-		global $wp_filesystem;
-		$wp_filesystem->delete( $target, true );
-		$ok = true === unzip_file( $backup, dirname( $target ) );
+		$ok = self::restore_files( $backup, $target );
 		for ( $try = 0; $try < 3; $try++ ) {
 			$this->settle( $target );
 			$check = $this->check_site();
@@ -285,6 +317,66 @@ class DoAction_Care_Runner {
 		}
 		$this->note( '!!! ย้อนกลับแล้วแต่เว็บยังมีปัญหา: ' . $check['detail'] . ' — ต้องตรวจด่วน' );
 		return $this->result( 'failed', $from );
+	}
+
+	/**
+	 * Unzips into a scratch folder first and only then swaps it in, so a
+	 * failed unzip (disk full, memory) never leaves the plugin missing.
+	 */
+	public static function restore_files( $zip, $target ) {
+		global $wp_filesystem;
+		if ( ! $wp_filesystem ) {
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+			WP_Filesystem();
+		}
+		$scratch = self::backup_root() . '/restore-' . wp_generate_password( 12, false );
+		if ( ! wp_mkdir_p( $scratch ) || true !== unzip_file( $zip, $scratch ) ) {
+			$wp_filesystem->delete( $scratch, true );
+			return false;
+		}
+		$fresh = $scratch . '/' . basename( $target );
+		if ( ! file_exists( $fresh ) ) {
+			$wp_filesystem->delete( $scratch, true );
+			return false;
+		}
+		$wp_filesystem->delete( $target, true );
+		$ok = @rename( $fresh, $target ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.rename_rename
+		if ( ! $ok ) {
+			$ok = is_dir( $fresh ) ? ( wp_mkdir_p( $target ) && true === copy_dir( $fresh, $target ) ) : $wp_filesystem->copy( $fresh, $target, true );
+		}
+		$wp_filesystem->delete( $scratch, true );
+		return $ok;
+	}
+
+	/** A previous run was killed between backup and verification: put the old files back if they are gone. */
+	private static function recover_interrupted() {
+		$p = get_option( self::PENDING );
+		if ( ! is_array( $p ) || empty( $p['target'] ) || empty( $p['zip'] ) ) {
+			return;
+		}
+		delete_option( self::PENDING );
+		$file = ABSPATH . '.maintenance';
+		if ( file_exists( $file ) ) {
+			wp_delete_file( $file );
+		}
+		// We cannot know how far the killed run got (files half-copied, plugin
+		// left deactivated, new version never checked), so go back to the
+		// version we saved and to the activation state it had.
+		if ( ! file_exists( $p['zip'] ) ) {
+			return;
+		}
+		require_once ABSPATH . 'wp-admin/includes/admin.php';
+		$ok = self::restore_files( $p['zip'], $p['target'] );
+		if ( $ok && ! empty( $p['plugin'] ) && ! empty( $p['was_active'] ) && ! is_plugin_active( (string) $p['plugin'] ) ) {
+			$active   = (array) get_option( 'active_plugins', array() );
+			$active[] = (string) $p['plugin'];
+			update_option( 'active_plugins', array_values( array_unique( $active ) ) );
+		}
+		wp_clean_plugins_cache( true );
+		$s                  = DoAction_Care_Api_Client::get_settings();
+		$s['last_error']    = ( $ok ? 'กู้คืน ' : 'กู้คืนไม่สำเร็จ: ' ) . basename( $p['target'] ) . ' ' . $p['from'] . ' หลังการอัปเดตถูกตัดกลางคัน';
+		$s['last_error_at'] = time();
+		DoAction_Care_Api_Client::save_settings( $s );
 	}
 
 	// ── Core ──────────────────────────────────────────────────────────────────
@@ -359,8 +451,13 @@ class DoAction_Care_Runner {
 
 	/** @return array{ok:bool,detail:string} */
 	public function check_site() {
+		// The marker request loads every plugin and the theme but skips page
+		// caches (unique token, nocache headers): it proves PHP still boots.
+		$token = wp_generate_password( 20, false );
+		set_transient( 'doaction_care_check_token', $token, 120 );
 		$urls = array(
-			add_query_arg( 'doaction_care_check', (string) time(), home_url( '/' ) ),
+			add_query_arg( 'doaction_care_check', $token, home_url( '/' ) ),
+			add_query_arg( 'doaction_care_nc', (string) time(), home_url( '/' ) ),
 			wp_login_url(),
 		);
 		$parts = array();
@@ -389,7 +486,13 @@ class DoAction_Care_Runner {
 					'detail' => $path . ' HTTP ' . $code . ( self::looks_fatal( $body ) ? ' มีข้อความ fatal error' : '' ),
 				);
 			}
-			$parts[] = $path . ' ' . $code;
+			if ( false !== strpos( $url, 'doaction_care_check=' ) && false === strpos( $body, 'DOACTION_CARE_OK:' . $token ) ) {
+				return array(
+					'ok'     => false,
+					'detail' => 'ตรวจการทำงานของ PHP ไม่ผ่าน (HTTP ' . $code . ')',
+				);
+			}
+			$parts[] = ( false !== strpos( $url, 'doaction_care_check=' ) ? 'php-ok' : $path ) . ' ' . $code;
 		}
 		return array(
 			'ok'     => true,
@@ -398,7 +501,7 @@ class DoAction_Care_Runner {
 	}
 
 	private static function looks_fatal( $body ) {
-		foreach ( array( 'There has been a critical error', 'Fatal error</b>', 'PHP Fatal error', 'เกิดข้อผิดพลาดร้ายแรง' ) as $needle ) {
+		foreach ( array( 'There has been a critical error', 'Fatal error</b>', 'เกิดข้อผิดพลาดร้ายแรง' ) as $needle ) {
 			if ( false !== stripos( $body, $needle ) ) {
 				return true;
 			}
@@ -441,6 +544,10 @@ class DoAction_Care_Runner {
 			$wp_filesystem->put_contents( $root . '/.htaccess', "Require all denied\nDeny from all\n" );
 		}
 		$dest = $root . '/' . gmdate( 'Ymd-His' ) . '-' . wp_generate_password( 12, false ) . '-' . basename( $target ) . '.zip';
+		if ( ! self::enough_disk( $target ) ) {
+			$this->note( 'พื้นที่ดิสก์ว่างไม่พอสำหรับสำรองและอัปเดต' );
+			return false;
+		}
 		$base = dirname( $target );
 		$files = is_dir( $target )
 			? iterator_to_array( new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $target, FilesystemIterator::SKIP_DOTS ) ), false )
@@ -476,6 +583,26 @@ class DoAction_Care_Runner {
 			wp_opcache_invalidate( $target, true );
 		}
 		sleep( 3 );
+	}
+
+	/** Room for the zip, the new version and the scratch restore, plus 50 MB headroom. */
+	private static function enough_disk( $target ) {
+		if ( ! function_exists( 'disk_free_space' ) ) {
+			return true;
+		}
+		$free = @disk_free_space( WP_CONTENT_DIR ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		if ( false === $free ) {
+			return true;
+		}
+		$size = 0;
+		if ( is_dir( $target ) ) {
+			foreach ( new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $target, FilesystemIterator::SKIP_DOTS ) ) as $f ) {
+				$size += $f->getSize();
+			}
+		} elseif ( is_file( $target ) ) {
+			$size = filesize( $target );
+		}
+		return $free > 3 * $size + 50 * 1048576;
 	}
 
 	private function clear_maintenance() {

@@ -3,7 +3,7 @@
  * Plugin Name:       Do Action: Care
  * Plugin URI:        https://doaction.co.th
  * Description:       Connects this site to the do action client portal: reports versions and available updates, runs updates the do action team starts (with checks and automatic rollback), and shows a care summary on the dashboard.
- * Version:           0.4.1
+ * Version:           0.4.2
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            do action
@@ -16,7 +16,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'DOACTION_CARE_VERSION', '0.4.1' );
+define( 'DOACTION_CARE_VERSION', '0.4.2' );
 define( 'DOACTION_CARE_FILE', __FILE__ );
 if ( ! defined( 'DOACTION_CARE_PORTAL' ) ) {
 	define( 'DOACTION_CARE_PORTAL', 'https://portal.doaction.co.th' );
@@ -57,6 +57,26 @@ function doaction_care_ensure_schedule() {
 	}
 }
 add_action( 'init', 'doaction_care_ensure_schedule' );
+
+// Health probe used by the runner around updates: answers only to the
+// one-time token it just stored, after every plugin and the theme loaded.
+add_action(
+	'template_redirect',
+	static function () {
+		if ( ! isset( $_GET['doaction_care_check'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return;
+		}
+		$token = (string) get_transient( 'doaction_care_check_token' );
+		if ( '' === $token || ! hash_equals( $token, (string) wp_unslash( $_GET['doaction_care_check'] ) ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+			return;
+		}
+		nocache_headers();
+		header( 'Content-Type: text/plain; charset=utf-8' );
+		echo 'DOACTION_CARE_OK:' . esc_html( $token );
+		exit;
+	},
+	0
+);
 
 add_action( DOACTION_CARE_CRON_HOOK, array( 'DoAction_Care_Api_Client', 'send_heartbeat' ) );
 add_action( DOACTION_CARE_CRON_HOOK, array( 'DoAction_Care_Runner', 'poll' ), 20 );
