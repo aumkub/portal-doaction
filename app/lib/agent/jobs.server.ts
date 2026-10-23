@@ -91,7 +91,9 @@ export async function wakeSite(env: CloudflareEnv, site: { id: string; secret_en
     await recordWake(env, site.id, ok, detail);
     return ok;
   } catch (e) {
-    await recordWake(env, site.id, false, e instanceof Error && e.name === "TimeoutError" ? "ไม่ตอบใน 25 วินาที" : "เชื่อมต่อไม่ได้");
+    const why = e instanceof Error && e.name === "TimeoutError" ? "ไม่ตอบใน 25 วินาที" : "เชื่อมต่อไม่ได้";
+    const msg = e instanceof Error ? e.message.slice(0, 120) : "";
+    await recordWake(env, site.id, false, `${why}${env.WAKE_RELAY_URL ? " (ผ่าน relay)" : ""}${msg ? ` · ${msg}` : ""}`);
     return false;
   }
 }
