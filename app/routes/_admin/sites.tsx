@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Form, Link, useLoaderData, useRevalidator, useSearchParams } from "react-router";
+import { Form, Link, useActionData, useLoaderData, useNavigation, useRevalidator, useSearchParams } from "react-router";
 import { backupIssues } from "~/lib/agent/backup-health";
 import { pendingUpdates as offeredUpdates } from "~/lib/agent/update-level";
 import type { Route } from "./+types/sites";
@@ -92,6 +92,31 @@ export async function action({ request, context }: Route.ActionArgs) {
     const home = invRow ? (JSON.parse(invRow.json) as { home_url?: string }).home_url : site.site_url;
     const ok = await wakeSite(env, site, home ?? site.site_url);
     return ok ? { ok: "ขอข้อมูลใหม่แล้ว รอสักครู่แล้วรีเฟรชหน้า" } : { error: "ติดต่อเว็บไม่ได้" };
+  }
+  if (intent === "wake_queued") {
+    if (await env.SESSIONPORTAL.get(CARE_PAUSED_KEY)) return { error: "ระบบถูกหยุดอยู่ กด “เปิดการอัปเดต” ก่อน" };
+    // Manual nudge for every site that has due jobs waiting; same 1-per-minute limit as a single refresh.
+    const { results } = await env.DB
+      .prepare(
+        `SELECT DISTINCT s.id, s.secret_enc, s.site_url, i.json FROM site_jobs j
+         JOIN sites s ON s.id = j.site_id LEFT JOIN site_inventory i ON i.site_id = s.id
+         WHERE j.status = 'queued' AND j.not_before <= ? AND s.revoked_at IS NULL`
+      )
+      .bind(Math.floor(Date.now() / 1000))
+      .all<{ id: string; secret_enc: string; site_url: string; json: string | null }>();
+    if (results.length === 0) return { error: "ไม่มีเว็บที่มีงานรอคิว" };
+    const outcome = await Promise.all(results.map(async (r) => {
+      const rlKey = `wake-rl:${r.id}`;
+      if (await env.SESSIONPORTAL.get(rlKey)) return "skipped";
+      await env.SESSIONPORTAL.put(rlKey, "1", { expirationTtl: 60 });
+      const home = r.json ? (JSON.parse(r.json) as { home_url?: string }).home_url : undefined;
+      return (await wakeSite(env, r, home ?? r.site_url)) ? "ok" : "failed";
+    }));
+    const ok = outcome.filter((o) => o === "ok").length;
+    const failed = outcome.filter((o) => o === "failed").length;
+    const skipped = outcome.length - ok - failed;
+    const msg = `ปลุกสำเร็จ ${ok} เว็บ${failed ? ` · ไม่สำเร็จ ${failed}` : ""}${skipped ? ` · ข้าม ${skipped} (เพิ่งปลุกไป)` : ""}`;
+    return failed && !ok ? { error: msg } : { ok: msg };
   }
   if (intent === "jobs_queue") {
     if (await env.SESSIONPORTAL.get(CARE_PAUSED_KEY)) return { error: "ระบบถูกหยุดอยู่ กด “เปิดการอัปเดต” ก่อน" };
@@ -274,6 +299,10 @@ export default function AdminSitesPage() {
   const rank = (id: string) => (activity.get(id)?.running ? 0 : activity.get(id)?.queued ? 1 : 2);
   const shown = matched.slice().sort((a, b) => rank(a.id) - rank(b.id));
   const busy = [...activity.values()].some((a) => a.running || a.queued);
+  const waitingSites = [...activity.values()].filter((a) => a.queued && !a.running).length;
+  const result = useActionData<typeof action>();
+  const navigation = useNavigation();
+  const waking = navigation.state !== "idle" && navigation.formData?.get("intent") === "wake_queued";
 
   // While anything is updating, refresh every 4 s so progress shows live.
   const revalidator = useRevalidator();
@@ -325,6 +354,15 @@ export default function AdminSitesPage() {
               : "กด “หยุดทั้งหมด” เมื่อเกิดปัญหา งานที่รอคิวจะถูกยกเลิกทันที"}
           </p>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+        {!paused && waitingSites > 0 && (
+          <button
+            name="intent" value="wake_queued" type="submit" disabled={waking}
+            className="inline-flex h-9 items-center rounded-full bg-ink px-4 text-[13px] font-semibold text-white hover:bg-ink/90 disabled:opacity-60 transition-colors"
+          >
+            {waking ? "กำลังปลุก…" : `ปลุกเว็บที่รอคิว (${waitingSites})`}
+          </button>
+        )}
         {paused ? (
           <button
             name="intent" value="care_resume" type="submit"
@@ -341,7 +379,13 @@ export default function AdminSitesPage() {
             หยุดทั้งหมด
           </ConfirmButton>
         )}
+        </div>
       </Form>
+      )}
+      {result && (
+        <p className={`-mt-3 px-1 text-sm ${"error" in result ? "text-destructive" : "text-ink-soft"}`}>
+          {"error" in result ? result.error : result.ok}
+        </p>
       )}
 
       {sites.length === 0 ? (
