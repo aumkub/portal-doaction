@@ -40,7 +40,22 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const now = Math.floor(Date.now() / 1000);
   const jobs = await db.listSiteJobs({ site_ids: sites.map((x) => x.id), since: now - 30 * 86400, limit: 300 });
   const paused = Boolean(await env.SESSIONPORTAL.get(CARE_PAUSED_KEY));
-  return { sites, jobs, paused, now, canManage: user.role === "admin" };
+  // Clients and in-house records with no connected site yet (plugin not installed or paired).
+  let unconnected = (
+    await env.DB.prepare(
+      `SELECT c.id, c.company_name, c.website_url, c.kind, c.contract_end FROM clients c
+       WHERE c.deleted_at IS NULL AND NOT EXISTS (SELECT 1 FROM sites s WHERE s.client_id = c.id AND s.revoked_at IS NULL)
+       ORDER BY c.kind DESC, c.company_name`
+    ).all<{ id: string; company_name: string; website_url: string | null; kind: string; contract_end: string | null }>()
+  ).results;
+  if (user.role !== "admin") {
+    const assigned = new Set((await db.listCoAdminClients(user.id)).map((a) => a.client_id));
+    unconnected = unconnected.filter((c) => assigned.has(c.id));
+  }
+  return {
+    sites, jobs, paused, now, canManage: user.role === "admin",
+    unconnected: unconnected.map((c) => ({ ...c, expired: clientSupportExpired(c) })),
+  };
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -213,7 +228,7 @@ function SiteRow({ site, now, activity, open, onToggle, children }: {
 }
 
 export default function AdminSitesPage() {
-  const { sites, jobs, paused, now, canManage } = useLoaderData<typeof loader>();
+  const { sites, jobs, paused, now, canManage, unconnected } = useLoaderData<typeof loader>();
   const [searchParams] = useSearchParams();
   const initial = searchParams.get("filter") as Filter | null;
   const [filter, setFilter] = useState<Filter>(initial && FILTERS.includes(initial) ? initial : "all");
@@ -371,6 +386,32 @@ export default function AdminSitesPage() {
             เชื่อมเว็บใหม่หรือตัดการเชื่อมต่อได้ที่หน้ารายละเอียดลูกค้า
           </p>
         </>
+      )}
+
+      {unconnected.length > 0 && (
+        <section className="overflow-hidden rounded-[20px] border border-dashed border-line bg-white">
+          <div className="border-b border-line-soft px-5 py-3.5">
+            <p className="text-sm font-semibold text-ink">ยังไม่ได้เชื่อมปลั๊กอิน ({unconnected.length})</p>
+            <p className="mt-0.5 text-xs text-muted-ink">ติดตั้ง Do Action: Care บนเว็บ แล้วจับคู่จากหน้าลูกค้า → แท็บเว็บไซต์ → “เชื่อมเว็บไซต์”</p>
+          </div>
+          <ul className="divide-y divide-line-soft">
+            {unconnected.map((c) => (
+              <li key={c.id}>
+                <Link to={`/admin/clients/${c.id}?tab=sites`} className="flex items-center justify-between gap-3 px-5 py-3 hover:bg-paper/60">
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-1.5 text-sm font-medium text-ink">
+                      <span className="truncate">{c.company_name}</span>
+                      {c.kind === "internal" && <span className="shrink-0 rounded-full bg-brand-yellow/40 px-1.5 text-[10px] font-semibold text-ink">ในเครือ</span>}
+                      {c.expired && <span className="shrink-0 rounded-full bg-[#FDE7DA] px-1.5 text-[10px] font-semibold text-[#B4541A]">หมดสัญญา</span>}
+                    </span>
+                    <span className="block truncate text-xs text-muted-ink">{c.website_url?.replace(/^https?:\/\//, "").replace(/\/$/, "") || "ยังไม่ระบุเว็บไซต์"}</span>
+                  </span>
+                  <span className="shrink-0 text-xs font-semibold text-ink-soft">เชื่อมเว็บไซต์ ›</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
     </div>
   );
