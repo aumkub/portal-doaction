@@ -71,33 +71,58 @@ export async function wakeSite(env: CloudflareEnv, site: { id: string; secret_en
     // Sites saved as http:// usually 301 to https, and a redirected POST loses its body.
     url.protocol = "https:";
     url.searchParams.set("rest_route", "/doaction-care/v1/wake");
-    const res = await fetch(url.toString(), {
-      method: "POST",
-      redirect: "manual",
-      headers: {
-        "Content-Type": "application/json",
-        "X-DA-Site": site.id, "X-DA-Timestamp": ts, "X-DA-Nonce": nonce,
-        "X-DA-Signature": await signPayload(secret, ts, nonce, body),
-      },
-      body,
-      signal: AbortSignal.timeout(25_000),
-    });
-    let detail = `HTTP ${res.status}`;
-    if (!res.ok) {
+    const headers = {
+      "X-DA-Site": site.id, "X-DA-Timestamp": ts, "X-DA-Nonce": nonce,
+      "X-DA-Signature": await signPayload(secret, ts, nonce, body),
+    };
+    const r = env.WAKE_RELAY_URL && env.WAKE_RELAY_SECRET
+      ? await viaRelay(env.WAKE_RELAY_URL, env.WAKE_RELAY_SECRET, url.toString(), headers, body)
+      : await direct(url.toString(), headers, body);
+    let detail = r.status ? `HTTP ${r.status}` : r.error === "timeout" ? "ไม่ตอบใน 25 วินาที" : r.error?.startsWith("relay") ? r.error : "เชื่อมต่อไม่ได้";
+    const ok = r.status >= 200 && r.status < 300;
+    if (!ok && r.status) {
       // Say who refused: Cloudflare (challenge/WAF on the site's zone) or the site itself.
-      const mitigated = res.headers.get("cf-mitigated");
-      const body = (await res.text().catch(() => "")).slice(0, 2000);
-      const title = body.match(/<title>([^<]{1,80})<\/title>/i)?.[1]?.trim();
-      const code = body.match(/"code"\s*:\s*"([\w-]{1,40})"/)?.[1];
-      const by = mitigated ? `Cloudflare ${mitigated}` : title ?? code;
+      const title = r.body.match(/<title>([^<]{1,80})<\/title>/i)?.[1]?.trim();
+      const code = r.body.match(/"code"\s*:\s*"([\w-]{1,40})"/)?.[1];
+      const by = r.mitigated ? `Cloudflare ${r.mitigated}` : title ?? code;
       if (by) detail += ` · ${by}`;
     }
-    await recordWake(env, site.id, res.ok, detail);
-    return res.ok;
+    if (env.WAKE_RELAY_URL) detail += " (ผ่าน relay)";
+    await recordWake(env, site.id, ok, detail);
+    return ok;
   } catch (e) {
     await recordWake(env, site.id, false, e instanceof Error && e.name === "TimeoutError" ? "ไม่ตอบใน 25 วินาที" : "เชื่อมต่อไม่ได้");
     return false;
   }
+}
+
+type WakeResult = { status: number; mitigated: string | null; body: string; error?: string };
+
+async function direct(url: string, headers: Record<string, string>, body: string): Promise<WakeResult> {
+  const res = await fetch(url, {
+    method: "POST", redirect: "manual",
+    headers: { "Content-Type": "application/json", ...headers },
+    body, signal: AbortSignal.timeout(25_000),
+  });
+  const text = res.ok ? "" : (await res.text().catch(() => "")).slice(0, 2000);
+  return { status: res.status, mitigated: res.headers.get("cf-mitigated"), body: text };
+}
+
+/** Same call sent from relay/wake-relay.mjs on a normal server; the relay only adds transport. */
+async function viaRelay(relayUrl: string, relaySecret: string, url: string, headers: Record<string, string>, body: string): Promise<WakeResult> {
+  const payload = JSON.stringify({ url, headers: Object.fromEntries(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v])), body });
+  const ts = String(Math.floor(Date.now() / 1000));
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(relaySecret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const mac = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${ts}.${payload}`)));
+  const res = await fetch(relayUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Relay-Ts": ts, "X-Relay-Signature": [...mac].map((b) => b.toString(16).padStart(2, "0")).join("") },
+    body: payload,
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!res.ok) return { status: 0, mitigated: null, body: "", error: `relay HTTP ${res.status}` };
+  const j = (await res.json()) as Partial<WakeResult>;
+  return { status: Number(j.status) || 0, mitigated: j.mitigated ?? null, body: String(j.body ?? ""), error: j.error };
 }
 
 export type WakeRecord = { at: number; ok: boolean; detail: string };

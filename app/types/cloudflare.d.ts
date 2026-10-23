@@ -15,6 +15,9 @@ interface CloudflareEnv {
   APP_URL: string;
   // Secret used for HMAC signing (magic link tokens, etc.)
   SESSION_SECRET: string;
+  /** Optional wake relay on a normal server (relay/wake-relay.mjs), for sites whose Cloudflare blocks Workers. */
+  WAKE_RELAY_URL?: string;
+  WAKE_RELAY_SECRET?: string;
   // File attachments bucket
   ATTACHMENTS: R2Bucket;
   // Legacy var from Cloudflare template
