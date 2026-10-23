@@ -34,13 +34,32 @@ const JOB_STATUS: Record<SiteJobView["status"], { label: string; cls: string }> 
   cancelled: { label: "ยกเลิก", cls: "bg-[#ECEAE3] text-muted-ink" },
 };
 
-function JobList({ jobs }: { jobs: SiteJobView[] }) {
+function JobList({ jobs, siteId, canStop }: { jobs: SiteJobView[]; siteId: string; canStop: boolean }) {
   const fetcher = useFetcher();
+  const stopper = useFetcher();
   const [openLog, setOpenLog] = useState<string | null>(null);
   if (jobs.length === 0) return null;
+  const queued = jobs.filter((j) => j.status === "queued").length;
+  const running = jobs.some((j) => j.status === "running");
   return (
     <div className="mt-3 rounded-xl border border-line-soft bg-white">
-      <p className="border-b border-line-soft px-3.5 py-2 text-xs font-semibold text-ink">ประวัติการอัปเดต (30 วัน)</p>
+      <div className="flex items-center justify-between gap-2 border-b border-line-soft px-3.5 py-2">
+        <p className="text-xs font-semibold text-ink">ประวัติการอัปเดต (30 วัน)</p>
+        {canStop && queued > 0 && (
+          <button
+            type="button"
+            disabled={stopper.state !== "idle"}
+            onClick={() => {
+              if (confirm(`หยุดการอัปเดตของเว็บนี้ และยกเลิกงานที่รอคิว ${queued} รายการ?${running ? " (งานที่กำลังทำอยู่จะทำต่อจนจบ และย้อนกลับถ้าพัง)" : ""}`)) {
+                stopper.submit({ intent: "site_stop", site_id: siteId }, { method: "post", action: "/admin/sites" });
+              }
+            }}
+            className="inline-flex h-7 items-center rounded-full border border-line bg-white px-3 text-[11px] font-semibold text-destructive hover:bg-[#FFF7EE] disabled:opacity-60 transition-colors"
+          >
+            {stopper.state !== "idle" ? "กำลังหยุด…" : `หยุดเว็บนี้ (${queued})`}
+          </button>
+        )}
+      </div>
       <ul className="max-h-72 divide-y divide-line-soft overflow-y-auto">
         {jobs.map((j) => (
           <li key={j.id} className="px-3.5 py-2 text-xs">
@@ -336,7 +355,7 @@ export function SiteCard({
           {canUpdate && !site.revoked_at && !isReachable(site) && (inv.core_update || pluginUpdates.length > 0 || themeUpdates.length > 0) && (
             <p className="mt-3 text-xs text-muted-ink">อัปเดตได้เมื่อเว็บกลับมาส่งข้อมูล (ขาดการติดต่อเกิน 3 ชม.)</p>
           )}
-          <JobList jobs={jobs} />
+          <JobList jobs={jobs} siteId={site.id} canStop={canUpdate} />
 
           {!inv.file_mods_allowed && (
             <p className="mt-3 rounded-xl border border-[#F6D3B0] bg-[#FFF7EE] px-3.5 py-2.5 text-xs text-[#7A3410]">

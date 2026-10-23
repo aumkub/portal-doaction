@@ -81,6 +81,12 @@ export async function action({ request, context }: Route.ActionArgs) {
     await db.cancelSiteJob(String(form.get("job_id") ?? ""));
     return { ok: "ยกเลิกแล้ว" };
   }
+  if (intent === "site_stop") {
+    const site = await db.getSiteById(String(form.get("site_id") ?? ""));
+    if (!site) return { error: "ไม่พบเว็บไซต์" };
+    const n = await db.cancelQueuedSiteJobsForSite(site.id, "หยุดโดยแอดมิน");
+    return { ok: `หยุด ${new URL(site.site_url).host} แล้ว ยกเลิกงานที่รอคิว ${n} รายการ` };
+  }
   if (intent === "site_refresh") {
     const site = await db.getSiteById(String(form.get("site_id") ?? ""));
     if (!site || site.revoked_at) return { error: "ไม่พบเว็บไซต์" };
