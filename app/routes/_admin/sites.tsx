@@ -114,11 +114,80 @@ function pendingUpdates(site: ConnectedSite) {
   );
 }
 
+function ago(seconds: number): string {
+  if (seconds < 3600) return `${Math.max(1, Math.floor(seconds / 60))} นาที`;
+  if (seconds < 172800) return `${Math.floor(seconds / 3600)} ชม.`;
+  return `${Math.floor(seconds / 86400)} วัน`;
+}
+
+/** One compact line per site; the full card opens inline on click. */
+function SiteRow({ site, now, open, onToggle, children }: {
+  site: SiteWithClient; now: number; open: boolean; onToggle: () => void; children: React.ReactNode;
+}) {
+  const inv = site.inventory;
+  const offered = inv ? offeredUpdates(inv) : [];
+  const majors = offered.filter((u) => u.level === "major").length;
+  const silentFor = site.last_seen_at ? now - site.last_seen_at : null;
+  const online = silentFor !== null && silentFor < SILENT_AFTER_S;
+  const backup = backupIssues(inv, now);
+  const lastBackup = inv?.backup?.last_at ? now - inv.backup.last_at : null;
+  return (
+    <li className={open ? "bg-paper/40" : ""}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="grid w-full grid-cols-[minmax(0,1fr)_24px] items-center gap-3 px-5 py-3 text-left transition-colors hover:bg-paper/60 md:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1.3fr)_minmax(0,0.9fr)_24px]"
+      >
+        <span className="flex min-w-0 items-center gap-3">
+          <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${online ? "bg-emerald-500" : "bg-[#E0622A]"}`} title={online ? "ออนไลน์" : "ขาดการติดต่อ"} />
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-semibold text-ink">{new URL(site.site_url).host}</span>
+            <span className="flex items-center gap-1.5 truncate text-xs text-muted-ink">
+              {site.client.name}
+              {site.internal && <span className="rounded-full bg-brand-yellow/40 px-1.5 text-[10px] font-semibold text-ink">ในเครือ</span>}
+            </span>
+            {/* Compact summary for phones, where the other columns are hidden. */}
+            <span className="mt-1 flex flex-wrap gap-1.5 text-[11px] md:hidden">
+              {offered.length > 0 && <span className="text-ink-soft">อัปเดต {offered.length}</span>}
+              {majors > 0 && <span className="font-semibold text-[#B4541A]">Major {majors}</span>}
+              {backup.length > 0 && <span className="text-[#B4541A]">backup มีปัญหา</span>}
+            </span>
+          </span>
+        </span>
+        <span className="hidden text-xs tabular-nums text-ink-soft md:block">{site.wp_version ?? "—"} / {site.php_version?.split(".").slice(0, 2).join(".") ?? "—"}</span>
+        <span className="hidden items-center gap-1.5 text-xs md:flex">
+          {offered.length === 0 ? (
+            <span className="text-emerald-700">ล่าสุดแล้ว</span>
+          ) : (
+            <>
+              <span className="tabular-nums text-ink">{offered.length} รายการ</span>
+              {majors > 0 && <span className="rounded-full bg-[#FDE7DA] px-1.5 py-px text-[10px] font-bold text-[#B4541A]">MAJOR {majors}</span>}
+            </>
+          )}
+        </span>
+        <span className={`hidden truncate text-xs md:block ${backup.length ? "text-[#B4541A]" : "text-ink-soft"}`}>
+          {!inv?.backup ? "—" : lastBackup === null ? "ไม่พบ backup" : `${ago(lastBackup)}ที่แล้ว`}
+          {backup.includes("no_drive") && lastBackup !== null && " · ไม่ขึ้น Drive"}
+          {backup.includes("failed") && " · ล้ม"}
+        </span>
+        <span className={`hidden text-xs md:block ${online ? "text-ink-soft" : "text-[#B4541A]"}`}>
+          {silentFor === null ? "ยังไม่ส่งข้อมูล" : `${ago(silentFor)}ที่แล้ว`}
+        </span>
+        <span className={`text-faint-ink transition-transform ${open ? "rotate-90" : ""}`} aria-hidden="true">›</span>
+      </button>
+      {open && <div className="px-3 pb-4 sm:px-5">{children}</div>}
+    </li>
+  );
+}
+
 export default function AdminSitesPage() {
   const { sites, jobs, paused, now, canManage } = useLoaderData<typeof loader>();
   const [searchParams] = useSearchParams();
   const initial = searchParams.get("filter") as Filter | null;
   const [filter, setFilter] = useState<Filter>(initial && FILTERS.includes(initial) ? initial : "all");
+  const [query, setQuery] = useState("");
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const isSilent = (s: ConnectedSite) => !s.last_seen_at || now - s.last_seen_at >= SILENT_AFTER_S;
   const silent = sites.filter(isSilent);
@@ -126,7 +195,9 @@ export default function AdminSitesPage() {
   const totalUpdates = sites.reduce((n, s) => n + pendingUpdates(s), 0);
   const backupBad = sites.filter((x) => backupIssues(x.inventory, now).length > 0);
   const majorSites = sites.filter((x) => x.inventory && offeredUpdates(x.inventory).some((u) => u.level === "major"));
-  const shown = filter === "major" ? majorSites : filter === "backup" ? backupBad : filter === "updates" ? needUpdates : filter === "silent" ? silent : filter === "internal" ? sites.filter((x) => x.internal) : sites;
+  const byFilter = filter === "major" ? majorSites : filter === "backup" ? backupBad : filter === "updates" ? needUpdates : filter === "silent" ? silent : filter === "internal" ? sites.filter((x) => x.internal) : sites;
+  const q = query.trim().toLowerCase();
+  const shown = q ? byFilter.filter((x) => x.site_url.toLowerCase().includes(q) || x.client.name.toLowerCase().includes(q)) : byFilter;
 
   const chips: { key: Filter; label: string; count: number }[] = [
     { key: "all", label: "ทั้งหมด", count: sites.length },
@@ -194,7 +265,14 @@ export default function AdminSitesPage() {
         </div>
       ) : (
         <>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="ค้นหาเว็บหรือลูกค้า…"
+              className="h-9 w-full rounded-full border border-line bg-white px-4 text-[13px] text-ink placeholder:text-faint-ink focus:outline-none focus:ring-2 focus:ring-ink/10 sm:w-56"
+            />
             {chips.map((c) => (
               <button
                 key={c.key}
@@ -208,14 +286,27 @@ export default function AdminSitesPage() {
               </button>
             ))}
           </div>
-          <div className="space-y-3">
-            {shown.length === 0 && <p className="text-sm text-muted-ink">ไม่มีเว็บไซต์ในกลุ่มนี้</p>}
-            {shown.map((s) => (
-              <SiteCard
-                key={s.id} site={s} client={s.client} canManage={false}
-                canUpdate={canManage} paused={paused} jobs={jobs.filter((j) => j.site_id === s.id)}
-              />
-            ))}
+          <div className="overflow-hidden rounded-[20px] border border-line bg-white">
+            <div className="hidden grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1.3fr)_minmax(0,0.9fr)_24px] gap-3 border-b border-line-soft bg-paper/60 px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-ink md:grid">
+              <span>เว็บไซต์</span><span>WP / PHP</span><span>อัปเดต</span><span>Backup</span><span>ล่าสุด</span><span />
+            </div>
+            {shown.length === 0 && <p className="px-5 py-6 text-sm text-muted-ink">ไม่มีเว็บไซต์ในกลุ่มนี้</p>}
+            <ul className="divide-y divide-line-soft">
+              {shown.map((s) => (
+                <SiteRow
+                  key={s.id}
+                  site={s}
+                  now={now}
+                  open={openId === s.id}
+                  onToggle={() => setOpenId(openId === s.id ? null : s.id)}
+                >
+                  <SiteCard
+                    site={s} client={s.client} canManage={false}
+                    canUpdate={canManage} paused={paused} jobs={jobs.filter((j) => j.site_id === s.id)}
+                  />
+                </SiteRow>
+              ))}
+            </ul>
           </div>
           <p className="text-xs text-muted-ink">
             เชื่อมเว็บใหม่หรือตัดการเชื่อมต่อได้ที่หน้ารายละเอียดลูกค้า
