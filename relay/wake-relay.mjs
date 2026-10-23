@@ -14,6 +14,7 @@ import { isIP } from "node:net";
 
 const SECRET = process.env.RELAY_SECRET;
 const PORT = Number(process.env.PORT ?? 8787);
+const HOST = process.env.HOST ?? "127.0.0.1"; // 0.0.0.0 inside a container
 if (!SECRET || SECRET.length < 32) throw new Error("RELAY_SECRET (32+ chars) is required");
 
 const WAKE_ROUTE = "/doaction-care/v1/wake";
@@ -80,4 +81,4 @@ createServer(async (req, res) => {
   } catch (e) {
     send(res, 200, { status: 0, error: e?.name === "TimeoutError" ? "timeout" : "connect_failed" });
   }
-}).listen(PORT, "127.0.0.1", () => console.log(`wake relay on 127.0.0.1:${PORT}`));
+}).listen(PORT, HOST, () => console.log(`wake relay on ${HOST}:${PORT}`));
