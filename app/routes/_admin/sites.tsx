@@ -201,7 +201,7 @@ function SiteRow({ site, now, activity, wake, oldestQueued, open, onToggle, chil
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="group grid w-full grid-cols-[minmax(0,1fr)_24px] items-center gap-3 px-5 py-3 text-left transition-colors hover:bg-paper/60 md:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1.3fr)_minmax(0,0.9fr)_24px]"
+        className="group grid w-full grid-cols-[minmax(0,1fr)_24px] items-center gap-3 px-5 py-3 text-left transition-colors hover:bg-paper/60 md:grid-cols-[minmax(0,1.9fr)_minmax(0,0.7fr)_minmax(0,2.1fr)_minmax(0,1.3fr)_minmax(0,0.8fr)_24px]"
       >
         <span className="flex min-w-0 items-center gap-3">
           <span className="relative flex h-2.5 w-2.5 shrink-0">
@@ -231,12 +231,23 @@ function SiteRow({ site, now, activity, wake, oldestQueued, open, onToggle, chil
         <span className="hidden text-xs tabular-nums text-ink-soft md:block">{site.wp_version ?? "—"} / {site.php_version?.split(".").slice(0, 2).join(".") ?? "—"}</span>
         <span className="hidden items-center gap-1.5 text-xs md:flex">
           {working ? (
-            <span className="flex min-w-0 items-center gap-1.5 font-semibold text-ink">
-              <Spinner />
-              <span className="truncate">
-                {activity!.running ? activity!.running : "รอคิว"}
-                <span className="font-normal text-muted-ink"> · เหลือ {activity!.queued + (activity!.running ? 1 : 0)}{activity!.done ? ` · เสร็จ ${activity!.done}` : ""}</span>
+            <span className="flex w-full min-w-0 flex-col gap-1">
+              <span className="flex min-w-0 items-center gap-1.5 font-semibold text-ink">
+                <Spinner />
+                <span className="truncate" title={activity!.running ?? undefined}>{activity!.running ? activity!.running : "รอคิว"}</span>
               </span>
+              {(() => {
+                const left = activity!.queued + (activity!.running ? 1 : 0);
+                const total = left + activity!.done;
+                return (
+                  <span className="flex items-center gap-2">
+                    <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-ink/10">
+                      <span className="block h-full rounded-full bg-brand-yellow-deep transition-[width] duration-500" style={{ width: `${total ? (activity!.done / total) * 100 : 0}%` }} />
+                    </span>
+                    <span className="shrink-0 tabular-nums text-[11px] text-muted-ink">{activity!.done}/{total}</span>
+                  </span>
+                );
+              })()}
             </span>
           ) : offered.length === 0 ? (
             <span className="text-emerald-700">ล่าสุดแล้ว</span>
