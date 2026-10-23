@@ -6,7 +6,7 @@
 // (~/.config/doaction-care/signing.key); the plugin ships the public key.
 import { execFileSync } from "node:child_process";
 import { createHash, createPrivateKey, sign } from "node:crypto";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -27,6 +27,8 @@ const file = `doaction-care-${version}.zip`;
 const zipPath = join(out, file);
 execFileSync("zip", ["-qrX", zipPath, "doaction-care", "-x", "*.DS_Store"], { cwd: pluginDir });
 const zip = readFileSync(zipPath);
+// Keep a copy in git for manual installs.
+copyFileSync(zipPath, join(pluginDir, "doaction-care.zip"));
 
 const key = createPrivateKey(readFileSync(keyPath));
 const sha256 = createHash("sha256").update(zip).digest("hex");
