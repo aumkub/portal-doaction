@@ -92,6 +92,8 @@ class DoAction_Care_Widget {
 			</form>
 			<?php if ( 'mismatch' === $notice ) : ?>
 				<div class="dac-notice is-error">อีเมลของบัญชี WordPress นี้ไม่ตรงกับบัญชีลูกค้าในพอร์ทัล — เข้าสู่ระบบด้วยอีเมลตามปกติ หรือส่งเรื่องจากฟอร์มด้านล่าง</div>
+			<?php elseif ( 'verify_sent' === $notice ) : ?>
+				<div class="dac-notice is-success">ครั้งแรกจากเว็บนี้: ส่งอีเมลยืนยันไปที่ <?php echo esc_html( wp_get_current_user()->user_email ); ?> แล้ว เปิดลิงก์ในอีเมลเพื่อเข้าสู่ระบบ ครั้งต่อไปกดปุ่มนี้ได้เลย</div>
 			<?php elseif ( 'sso_error' === $notice ) : ?>
 				<div class="dac-notice is-error">เปิดพอร์ทัลอัตโนมัติไม่ได้ในตอนนี้ ลองใหม่ หรือเข้าสู่ระบบตามปกติ</div>
 			<?php endif; ?>
@@ -146,7 +148,7 @@ class DoAction_Care_Widget {
 		}
 		$data = $res['data'];
 		if ( empty( $data['ok'] ) || empty( $data['token'] ) || empty( $data['url'] ) ) {
-			$reason = isset( $data['reason'] ) && 'email_mismatch' === $data['reason'] ? 'mismatch' : 'sso_error';
+			$reason = isset( $data['reason'] ) && 'email_mismatch' === $data['reason'] ? 'mismatch' : ( isset( $data['reason'] ) && 'verify_sent' === $data['reason'] ? 'verify_sent' : 'sso_error' );
 			wp_safe_redirect( add_query_arg( 'doaction_care_ticket', $reason, $back ) );
 			exit;
 		}

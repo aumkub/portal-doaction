@@ -13,18 +13,41 @@ const requestHandler = createRequestHandler(
   import.meta.env.MODE,
 );
 
+const SECURITY_HEADERS: Record<string, string> = {
+  "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Content-Security-Policy": "frame-ancestors 'none'",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+};
+
+function withSecurityHeaders(res: Response): Response {
+  const out = new Response(res.body, res);
+  for (const [k, v] of Object.entries(SECURITY_HEADERS)) {
+    if (!out.headers.has(k)) out.headers.set(k, v);
+  }
+  return out;
+}
+
 export default {
-  fetch(request: Request, env: CloudflareEnv, ctx: ExecutionContext) {
-    const { pathname } = new URL(request.url);
+  async fetch(request: Request, env: CloudflareEnv, ctx: ExecutionContext) {
+    const url = new URL(request.url);
+    // Plain http on the real domain goes to https (local dev stays on http).
+    if (url.protocol === "http:" && !import.meta.env.DEV) {
+      url.protocol = "https:";
+      return Response.redirect(url.toString(), 301);
+    }
+    const { pathname } = url;
     if (pathname === "/mcp") {
-      return handleMcpRequest(request, env);
+      return withSecurityHeaders(await handleMcpRequest(request, env));
     }
     if (isAgentPath(pathname)) {
-      return handleAgentRequest(request, env);
+      return withSecurityHeaders(await handleAgentRequest(request, env));
     }
-    return requestHandler(request, {
+    return withSecurityHeaders(await requestHandler(request, {
       cloudflare: { env, ctx },
-    });
+    }));
   },
   async scheduled(_controller: ScheduledController, env: CloudflareEnv, ctx: ExecutionContext) {
     // Runs every 15 minutes; each job decides for itself whether it is due.
@@ -34,5 +57,9 @@ export default {
     const now = Math.floor(Date.now() / 1000);
     ctx.waitUntil(createDB(env.DB).failStaleSiteJobs(now - JOB_STALE_AFTER_S));
     ctx.waitUntil(createDB(env.DB).expireUnclaimedSiteJobs(now - 86400));
+    ctx.waitUntil(env.DB.batch([
+      env.DB.prepare("DELETE FROM sso_tokens WHERE expires_at < ?").bind(now),
+      env.DB.prepare("DELETE FROM agent_nonces WHERE expires_at < ?").bind(now),
+    ]));
   },
 } satisfies ExportedHandler<CloudflareEnv>;

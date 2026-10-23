@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Form, Link, useLoaderData, useSearchParams } from "react-router";
 import { backupIssues } from "~/lib/agent/backup-health";
 import type { Route } from "./+types/sites";
-import { requireCoAdminOrAdmin } from "~/lib/auth.server";
+import { requireAdmin, requireCoAdminOrAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { ONLINE_WINDOW_S, SILENT_AFTER_S, SiteCard, type ConnectedSite } from "~/components/admin/connected-sites";
 import { CARE_PAUSED_KEY, nextNightWindow, queueJobs, wakeSite, type JobRequest } from "~/lib/agent/jobs.server";
@@ -17,9 +17,14 @@ type SiteWithClient = ConnectedSite & { client: { id: string; name: string }; in
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = context.cloudflare.env;
-  await requireCoAdminOrAdmin(request, env.DB, env.SESSIONPORTAL);
+  const user = await requireCoAdminOrAdmin(request, env.DB, env.SESSIONPORTAL);
   const db = createDB(env.DB);
-  const rows = await db.listAllSitesWithInventory();
+  let rows = await db.listAllSitesWithInventory();
+  // Co-admins see only the clients assigned to them, read-only.
+  if (user.role !== "admin") {
+    const assigned = new Set((await db.listCoAdminClients(user.id)).map((a) => a.client_id));
+    rows = rows.filter((r) => assigned.has(r.client_id));
+  }
   const sites: SiteWithClient[] = rows.map(
     ({ secret_enc: _s, inventory_json, client_id, client_company, client_kind, ...row }) => {
       let inventory = null;
@@ -30,12 +35,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const now = Math.floor(Date.now() / 1000);
   const jobs = await db.listSiteJobs({ site_ids: sites.map((x) => x.id), since: now - 30 * 86400, limit: 300 });
   const paused = Boolean(await env.SESSIONPORTAL.get(CARE_PAUSED_KEY));
-  return { sites, jobs, paused, now };
+  return { sites, jobs, paused, now, canManage: user.role === "admin" };
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
   const env = context.cloudflare.env;
-  const user = await requireCoAdminOrAdmin(request, env.DB, env.SESSIONPORTAL);
+  // Remote updates, the fleet-wide stop switch and wakes are admin-only.
+  const user = await requireAdmin(request, env.DB, env.SESSIONPORTAL);
   const db = createDB(env.DB);
   const form = await request.formData();
   const intent = String(form.get("intent") ?? "");
@@ -108,7 +114,7 @@ function pendingUpdates(site: ConnectedSite) {
 }
 
 export default function AdminSitesPage() {
-  const { sites, jobs, paused, now } = useLoaderData<typeof loader>();
+  const { sites, jobs, paused, now, canManage } = useLoaderData<typeof loader>();
   const [searchParams] = useSearchParams();
   const initial = searchParams.get("filter") as Filter | null;
   const [filter, setFilter] = useState<Filter>(initial && FILTERS.includes(initial) ? initial : "all");
@@ -142,6 +148,7 @@ export default function AdminSitesPage() {
         )}
       </div>
 
+      {canManage && (
       <Form
         method="post"
         className={`flex flex-wrap items-center justify-between gap-3 rounded-[20px] border px-5 py-4 ${
@@ -175,6 +182,7 @@ export default function AdminSitesPage() {
           </ConfirmButton>
         )}
       </Form>
+      )}
 
       {sites.length === 0 ? (
         <div className="rounded-[20px] border border-line bg-white p-6 text-sm text-ink-soft">
@@ -202,7 +210,7 @@ export default function AdminSitesPage() {
             {shown.map((s) => (
               <SiteCard
                 key={s.id} site={s} client={s.client} canManage={false}
-                canUpdate paused={paused} jobs={jobs.filter((j) => j.site_id === s.id)}
+                canUpdate={canManage} paused={paused} jobs={jobs.filter((j) => j.site_id === s.id)}
               />
             ))}
           </div>

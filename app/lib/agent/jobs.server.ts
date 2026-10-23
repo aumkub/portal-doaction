@@ -40,12 +40,12 @@ export async function queueJobs(opts: {
   const now = Math.floor(Date.now() / 1000);
   const jobs = items.flatMap((it) => {
     if (it.kind === "core") {
-      return inventory.core_update
+      return inventory.core_update && !inventory.core_update_blocked
         ? [{ kind: it.kind, slug: "wordpress", name: "WordPress", from: inventory.wp_version, to: inventory.core_update }]
         : [];
     }
     const list = it.kind === "plugin" ? inventory.plugins : inventory.themes;
-    const found = list.find((p) => p.slug === it.slug && p.update_version);
+    const found = list.find((p) => p.slug === it.slug && p.update_version && !p.update_blocked);
     return found ? [{ kind: it.kind, slug: found.slug, name: found.name, from: found.version, to: found.update_version }] : [];
   });
   return createDB(env.DB).queueSiteJobs(

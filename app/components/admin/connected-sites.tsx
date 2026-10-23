@@ -128,11 +128,11 @@ function UpdateForm({ site, paused }: { site: ConnectedSite; paused: boolean }) 
   const fetcher = useFetcher<{ ok?: string; error?: string }>();
   const inv = site.inventory!;
   const items = [
-    ...(inv.core_update ? [{ key: "core:wordpress", name: "WordPress core", from: inv.wp_version, to: inv.core_update, active: true }] : []),
-    ...inv.plugins.filter((p) => p.update_version).map((p) => ({ key: `plugin:${p.slug}`, name: p.name, from: p.version, to: p.update_version!, active: p.active })),
-    ...inv.themes.filter((t) => t.update_version).map((t) => ({ key: `theme:${t.slug}`, name: `${t.name} (ธีม)`, from: t.version, to: t.update_version!, active: t.active })),
+    ...(inv.core_update ? [{ key: "core:wordpress", name: "WordPress core", from: inv.wp_version, to: inv.core_update, active: true, blocked: inv.core_update_blocked }] : []),
+    ...inv.plugins.filter((p) => p.update_version).map((p) => ({ key: `plugin:${p.slug}`, name: p.name, from: p.version, to: p.update_version!, active: p.active, blocked: p.update_blocked })),
+    ...inv.themes.filter((t) => t.update_version).map((t) => ({ key: `theme:${t.slug}`, name: `${t.name} (ธีม)`, from: t.version, to: t.update_version!, active: t.active, blocked: t.update_blocked })),
   ];
-  const [selected, setSelected] = useState<Set<string>>(() => new Set(items.filter((i) => i.key !== "core:wordpress").map((i) => i.key)));
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(items.filter((i) => i.key !== "core:wordpress" && !i.blocked).map((i) => i.key)));
   if (items.length === 0) return null;
   const busy = fetcher.state !== "idle";
   const toggle = (k: string) => setSelected((s) => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; });
@@ -146,8 +146,11 @@ function UpdateForm({ site, paused }: { site: ConnectedSite; paused: boolean }) 
         {items.map((it) => (
           <li key={it.key}>
             <label className="flex cursor-pointer items-center gap-2.5 px-3.5 py-2 text-xs">
-              <input type="checkbox" name="item" value={it.key} checked={selected.has(it.key)} onChange={() => toggle(it.key)} className="h-4 w-4 accent-ink" />
-              <span className={`min-w-0 flex-1 truncate ${it.active ? "text-ink" : "text-muted-ink"}`}>{it.name}{!it.active && " (ปิดอยู่)"}</span>
+              <input type="checkbox" name="item" value={it.key} disabled={Boolean(it.blocked)} checked={!it.blocked && selected.has(it.key)} onChange={() => toggle(it.key)} className="h-4 w-4 accent-ink disabled:opacity-40" />
+              <span className={`min-w-0 flex-1 ${it.active ? "text-ink" : "text-muted-ink"}`}>
+                <span className="block truncate">{it.name}{!it.active && " (ปิดอยู่)"}</span>
+                {it.blocked && <span className="block text-[11px] text-[#B4541A]">ไม่รองรับ: {it.blocked}</span>}
+              </span>
               <span className="shrink-0 tabular-nums text-ink-soft">{it.from} → <span className="font-semibold text-[#B4541A]">{it.to}</span></span>
             </label>
           </li>
@@ -381,7 +384,7 @@ export function ConnectedSitesSection({
           <p className="text-sm text-muted-ink">ยังไม่มีเว็บไซต์ที่เชื่อมต่อ</p>
         )}
         {sites.map((s) => (
-          <SiteCard key={s.id} site={s} canManage={canManage} canUpdate paused={paused} jobs={jobs.filter((j) => j.site_id === s.id)} />
+          <SiteCard key={s.id} site={s} canManage={canManage} canUpdate={canManage} paused={paused} jobs={jobs.filter((j) => j.site_id === s.id)} />
         ))}
       </div>
     </div>

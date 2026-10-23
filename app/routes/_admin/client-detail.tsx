@@ -359,6 +359,8 @@ const SSO_OUTCOME: Record<string, string> = {
   disabled: "ปิดอยู่ — ปฏิเสธ",
   not_client: "ไม่ใช่ลูกค้า — ปฏิเสธ",
   rate_limited: "ขอถี่เกิน — ปฏิเสธ",
+  verify_sent: "ส่งอีเมลยืนยันครั้งแรกแล้ว",
+  verified: "ยืนยันอีเมลแล้ว — เข้าสู่ระบบ",
 };
 
 function SsoCard({ enabled, log }: { enabled: boolean; log: Array<{ wp_email: string; outcome: string; created_at: number; site_url: string }> }) {
@@ -383,7 +385,7 @@ function SsoCard({ enabled, log }: { enabled: boolean; log: Array<{ wp_email: st
           {log.map((l, i) => (
             <li key={i} className="flex flex-wrap items-center justify-between gap-2 py-2">
               <span className="min-w-0 truncate text-ink">{l.wp_email} <span className="text-muted-ink">· {new URL(l.site_url).host}</span></span>
-              <span className={l.outcome === "used" || l.outcome === "issued" ? "text-emerald-700" : "text-[#B4541A]"}>
+              <span className={["used", "issued", "verified", "verify_sent"].includes(l.outcome) ? "text-emerald-700" : "text-[#B4541A]"}>
                 {SSO_OUTCOME[l.outcome] ?? l.outcome} · {new Date(l.created_at * 1000).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Bangkok" })}
               </span>
             </li>

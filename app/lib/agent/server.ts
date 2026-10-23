@@ -16,7 +16,7 @@ import { InventorySchema, JobReportSchema, PairSchema, SsoRequestSchema, WidgetT
 import { parseClientCcEmails } from "~/lib/client-cc";
 import { CARE_PAUSED_KEY, addJobToDraftReport } from "./jobs.server";
 import type { SiteRow } from "~/lib/db.server";
-import { emailTeamNewTicket, emailTicketReceipt } from "~/lib/email-alerts.server";
+import { emailSsoVerification, emailTeamNewTicket, emailTicketReceipt } from "~/lib/email-alerts.server";
 import { sendTelegramNotificationForClient } from "~/lib/telegram.server";
 import type { Client } from "~/types";
 import { fetchAllMonitors, hostOf } from "~/lib/uptime.server";
@@ -73,10 +73,14 @@ async function pluginRelease(env: CloudflareEnv, origin: string) {
   const obj = await env.ATTACHMENTS.get("care-plugin/latest.json").catch(() => null);
   if (!obj) return null;
   try {
-    const m = (await obj.json()) as { version: string; file: string; signature: string; size: number; requires_wp?: string; requires_php?: string };
+    const m = (await obj.json()) as {
+      version: string; file: string; signature: string; size: number; sha256?: string; version_signature?: string;
+      requires_wp?: string; requires_php?: string;
+    };
     if (!/^\d+\.\d+\.\d+$/.test(m.version) || !PLUGIN_FILE_RE.test(`/agent/v1/plugin/${m.file}`)) return null;
     return {
       version: m.version, signature: m.signature, size: m.size,
+      sha256: m.sha256 ?? null, version_signature: m.version_signature ?? null,
       requires_wp: m.requires_wp ?? null, requires_php: m.requires_php ?? null,
       package: `${origin}/agent/v1/plugin/${m.file}`,
     };
@@ -180,9 +184,12 @@ async function authenticate(request: Request, env: CloudflareEnv): Promise<Authe
   const verdict = await verifySignature({ secret, timestamp, nonce, signature, body: raw });
   if (verdict !== "ok") return json(401, { error: verdict });
 
-  const nonceKey = `agent-nonce:${siteId}:${nonce}`;
-  if (await env.SESSIONPORTAL.get(nonceKey)) return json(401, { error: "replay" });
-  await env.SESSIONPORTAL.put(nonceKey, "1", { expirationTtl: 600 });
+  // Primary-key insert: of two concurrent requests with the same nonce, one fails.
+  const fresh = await env.DB
+    .prepare("INSERT OR IGNORE INTO agent_nonces (nonce_key, expires_at) VALUES (?, ?)")
+    .bind(`${siteId}:${nonce}`, Math.floor(Date.now() / 1000) + 600)
+    .run();
+  if (!fresh.meta.changes) return json(401, { error: "replay" });
   return { site, secret, raw };
 }
 
@@ -339,6 +346,16 @@ async function clientEmails(db: ReturnType<typeof createDB>, client: Client): Pr
 }
 
 export const SSO_TOKEN_TTL_S = 60;
+const SSO_VERIFY_TTL_S = 30 * 60;
+
+async function issueSsoToken(env: CloudflareEnv, kind: "login" | "verify", grant: unknown, ttl: number): Promise<string> {
+  const token = randomHex(32);
+  await env.DB
+    .prepare("INSERT INTO sso_tokens (hash, kind, data, expires_at) VALUES (?, ?, ?, ?)")
+    .bind(await sha256hex(token), kind, JSON.stringify(grant), Math.floor(Date.now() / 1000) + ttl)
+    .run();
+  return token;
+}
 const SSO_PER_SITE_PER_HOUR = 10;
 
 /**
@@ -377,12 +394,22 @@ async function handleSso(request: Request, env: CloudflareEnv): Promise<Response
   const user = await db.getUserById(client.user_id);
   if (!user || user.role !== "client" || !(await clientEmails(db, client)).has(parsed.data.email)) return refuse("email_mismatch");
 
-  const token = randomHex(32);
-  await env.SESSIONPORTAL.put(
-    `sso:${await sha256hex(token)}`,
-    JSON.stringify({ user_id: user.id, client_id: client.id, site_id: auth.site.id, email: parsed.data.email, path: parsed.data.path }),
-    { expirationTtl: SSO_TOKEN_TTL_S },
-  );
+  const origin = new URL(request.url).origin;
+  const grant = { user_id: user.id, client_id: client.id, site_id: auth.site.id, email: parsed.data.email, path: parsed.data.path };
+  const verified = await env.DB
+    .prepare("SELECT 1 FROM sso_verified WHERE site_id = ? AND email = ?")
+    .bind(auth.site.id, parsed.data.email)
+    .first();
+  if (!verified) {
+    // First use of this email from this site: prove the person can read the
+    // inbox. A WordPress admin who only changed a user's email cannot.
+    const verifyToken = await issueSsoToken(env, "verify", grant, SSO_VERIFY_TTL_S);
+    await emailSsoVerification(env, db, { email: parsed.data.email, name: user.name }, `${origin}/sso/verify?t=${verifyToken}`, new URL(auth.site.site_url).host);
+    await log("verify_sent");
+    return signedJson(auth.secret, 200, { ok: false, reason: "verify_sent", email: parsed.data.email });
+  }
+
+  const token = await issueSsoToken(env, "login", grant, SSO_TOKEN_TTL_S);
   await log("issued");
-  return signedJson(auth.secret, 200, { ok: true, token, url: `${new URL(request.url).origin}/sso` });
+  return signedJson(auth.secret, 200, { ok: true, token, url: `${origin}/sso` });
 }

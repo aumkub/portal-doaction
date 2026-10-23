@@ -34,6 +34,7 @@ class DoAction_Care_Inventory {
 				'version'        => (string) $data['Version'],
 				'active'         => is_plugin_active( $file ),
 				'update_version' => $update,
+				'update_blocked' => $update ? DoAction_Care_Runner::incompatibility( (array) $plugin_updates->response[ $file ] ) : null,
 				'auto_update'    => in_array( $file, $auto_plugins, true ),
 			);
 		}
@@ -49,13 +50,18 @@ class DoAction_Care_Inventory {
 				'version'        => (string) $theme->get( 'Version' ),
 				'active'         => ( $slug === $active_theme || $slug === get_template() ),
 				'update_version' => $update,
+				'update_blocked' => $update ? DoAction_Care_Runner::incompatibility( (array) $theme_updates->response[ $slug ] ) : null,
 			);
 		}
 
-		$core_update = null;
-		$core        = get_core_updates();
+		$core_update  = null;
+		$core_blocked = null;
+		$core         = get_core_updates();
 		if ( is_array( $core ) && isset( $core[0]->response ) && 'upgrade' === $core[0]->response ) {
 			$core_update = (string) $core[0]->current;
+			if ( ! empty( $core[0]->php_version ) && ! is_php_version_compatible( (string) $core[0]->php_version ) ) {
+				$core_blocked = 'WordPress ' . $core_update . ' ต้องใช้ PHP ' . $core[0]->php_version . ' ขึ้นไป แต่เว็บนี้ใช้ PHP ' . PHP_VERSION;
+			}
 		}
 
 		$disk_free = null;
@@ -104,6 +110,7 @@ class DoAction_Care_Inventory {
 			'plugins'           => $plugins,
 			'themes'            => $themes,
 			'core_update'       => $core_update,
+			'core_update_blocked' => $core_blocked,
 			'disk_free_mb'      => $disk_free,
 			'db_size_mb'        => $db_size,
 			'file_mods_allowed' => $file_mods,

@@ -7,6 +7,8 @@ export const PluginItem = z.object({
   slug: str(200), name: str(300), version: ver,
   active: z.boolean(),
   update_version: ver.nullable().default(null),
+  /** Why the offered update cannot run here (PHP/WordPress too old), from the plugin. */
+  update_blocked: str(300).nullable().default(null),
   auto_update: z.boolean().default(false),
 });
 
@@ -14,6 +16,7 @@ export const ThemeItem = z.object({
   slug: str(200), name: str(300), version: ver,
   active: z.boolean(),
   update_version: ver.nullable().default(null),
+  update_blocked: str(300).nullable().default(null),
 });
 
 const BackupSource = z.object({
@@ -41,6 +44,7 @@ export const InventorySchema = z.object({
   plugins: z.array(PluginItem).max(1000),
   themes: z.array(ThemeItem).max(300),
   core_update: ver.nullable().default(null),
+  core_update_blocked: str(300).nullable().default(null),
   disk_free_mb: z.number().finite().nonnegative().nullable().default(null),
   db_size_mb: z.number().finite().nonnegative().nullable().default(null),
   file_mods_allowed: z.boolean(),

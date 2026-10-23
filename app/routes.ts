@@ -12,6 +12,7 @@ export default [
   route("reports/:reportId", "routes/reports.$reportId.tsx"),
   route("public/report/:reportId", "routes/public.report.$reportId.tsx"),
   route("sso", "routes/sso.tsx"),
+  route("sso/verify", "routes/sso.verify.tsx"),
 
   // ── Auth routes ─────────────────────────────────────────────────────────────
   layout("routes/_auth/layout.tsx", [

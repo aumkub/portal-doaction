@@ -28,11 +28,17 @@ const zipPath = join(out, file);
 execFileSync("zip", ["-qrX", zipPath, "doaction-care", "-x", "*.DS_Store"], { cwd: pluginDir });
 const zip = readFileSync(zipPath);
 
-const signature = sign(null, zip, createPrivateKey(readFileSync(keyPath))).toString("base64");
+const key = createPrivateKey(readFileSync(keyPath));
+const sha256 = createHash("sha256").update(zip).digest("hex");
+const signature = sign(null, zip, key).toString("base64");
+// Binds the version to these exact bytes, so an old signed zip cannot be
+// advertised as a newer version (downgrade).
+const version_signature = sign(null, Buffer.from(`doaction-care|${version}|${sha256}`), key).toString("base64");
 const manifest = {
   version, file, size: zip.length,
-  sha256: createHash("sha256").update(zip).digest("hex"),
+  sha256,
   signature,
+  version_signature,
   requires_wp: field("Requires at least"), requires_php: field("Requires PHP"),
   released_at: Math.floor(Date.now() / 1000),
 };

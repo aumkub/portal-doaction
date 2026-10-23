@@ -240,7 +240,8 @@ export function createAuth(d1: D1Database, kv: KVNamespace) {
     sessionCookie: {
       name: "doaction_session",
       attributes: {
-        secure: process.env.NODE_ENV === "production",
+        // Always Secure outside `vite dev` (the Worker has no reliable NODE_ENV).
+        secure: !import.meta.env.DEV,
         sameSite: "lax",
       },
     },

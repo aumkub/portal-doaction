@@ -191,6 +191,30 @@ export async function emailTicketReceipt(
   });
 }
 
+/** One-time confirmation before one-click sign-in from a site's wp-admin. */
+export async function emailSsoVerification(
+  env: CloudflareEnv,
+  db: DB,
+  to: { email: string; name: string },
+  url: string,
+  site: string
+): Promise<void> {
+  if (!env.SEND_EMAIL) return;
+  await sendEmail({
+    to: to.email,
+    toName: to.name,
+    subject: `ยืนยันการเข้าสู่ระบบจาก ${site}`,
+    text: `มีการขอเข้าสู่ระบบ do action portal จากหน้า wp-admin ของ ${site} ด้วยอีเมลนี้\n\nถ้าเป็นคุณ เปิดลิงก์นี้ภายใน 30 นาทีเพื่อยืนยัน (ทำครั้งเดียว ครั้งต่อไปกดปุ่มเดียวได้เลย):\n${url}\n\nถ้าไม่ใช่คุณ ไม่ต้องทำอะไร และแจ้งทีม do action`,
+    html: emailShell(
+      `<p style="margin:0">มีการขอเข้าสู่ระบบ do action portal จากหน้า wp-admin ของ <b>${escapeHtml(site)}</b> ด้วยอีเมลนี้</p><p style="margin:12px 0 0;color:#6F6D66;font-size:13px">ถ้าเป็นคุณ กดปุ่มด้านล่างภายใน 30 นาที ทำครั้งเดียว ครั้งต่อไปกดปุ่มในเว็บไซต์ได้เลย ถ้าไม่ใช่คุณ ไม่ต้องทำอะไร และแจ้งทีม do action</p>${button("ยืนยันและเข้าสู่ระบบ", url)}`,
+      env.APP_URL
+    ),
+    sendEmail: env.SEND_EMAIL,
+    db,
+    source: "sso_verify",
+  });
+}
+
 // ── Daily team digest + contract warnings ───────────────────────────────────
 
 const DEFAULT_DIGEST_HOUR = 8; // Bangkok time

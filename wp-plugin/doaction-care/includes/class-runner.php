@@ -149,6 +149,11 @@ class DoAction_Care_Runner {
 			return $this->result( 'succeeded', $from );
 		}
 		$this->note( 'ปลั๊กอิน ' . $plugins[ $file ]['Name'] . ' ' . $from . ' → ' . $updates->response[ $file ]->new_version );
+		$why = self::incompatibility( (array) $updates->response[ $file ] );
+		if ( $why ) {
+			$this->note( 'ไม่อัปเดต: ' . $why );
+			return $this->result( 'failed' );
+		}
 
 		$dir    = dirname( $file );
 		$target = '.' === $dir ? WP_PLUGIN_DIR . '/' . $file : WP_PLUGIN_DIR . '/' . $dir;
@@ -195,6 +200,11 @@ class DoAction_Care_Runner {
 			return $this->result( 'succeeded', $from );
 		}
 		$this->note( 'ธีม ' . $theme->get( 'Name' ) . ' ' . $from . ' → ' . $updates->response[ $slug ]['new_version'] );
+		$why = self::incompatibility( (array) $updates->response[ $slug ] );
+		if ( $why ) {
+			$this->note( 'ไม่อัปเดต: ' . $why );
+			return $this->result( 'failed' );
+		}
 
 		return $this->guarded_update(
 			$theme->get_stylesheet_directory(),
@@ -261,7 +271,7 @@ class DoAction_Care_Runner {
 	private function restore( $backup, $target, $from ) {
 		global $wp_filesystem;
 		$wp_filesystem->delete( $target, true );
-		$ok = is_dir( $backup ) ? $this->copy_tree( $backup, $target ) : $wp_filesystem->copy( $backup, $target, true );
+		$ok = true === unzip_file( $backup, dirname( $target ) );
 		for ( $try = 0; $try < 3; $try++ ) {
 			$this->settle( $target );
 			$check = $this->check_site();
@@ -297,6 +307,10 @@ class DoAction_Care_Runner {
 		wp_version_check( array(), true );
 		$updates = get_core_updates();
 		$update  = ( is_array( $updates ) && isset( $updates[0] ) && 'upgrade' === $updates[0]->response ) ? $updates[0] : null;
+		if ( $update && ! empty( $update->php_version ) && ! is_php_version_compatible( (string) $update->php_version ) ) {
+			$this->note( 'ไม่อัปเดต: WordPress ' . $update->current . ' ต้องใช้ PHP ' . $update->php_version . ' ขึ้นไป แต่เว็บนี้ใช้ PHP ' . PHP_VERSION );
+			return $this->result( 'failed' );
+		}
 		if ( ! $update ) {
 			$this->note( 'ไม่มีอัปเดต WordPress core แล้ว' );
 			return $this->result( 'succeeded', get_bloginfo( 'version' ) );
@@ -316,6 +330,24 @@ class DoAction_Care_Runner {
 		}
 		$this->note( '!!! ตรวจหลังอัปเดต: ' . $after['detail'] . ' — core ย้อนกลับอัตโนมัติไม่ได้ ต้องกู้จาก backup' );
 		return $this->result( 'failed' );
+	}
+
+	/**
+	 * Why an update offer (from the update_plugins / update_themes transient)
+	 * cannot run on this site, or null when it can.
+	 *
+	 * @param array<string,mixed> $offer
+	 */
+	public static function incompatibility( array $offer ) {
+		$php = isset( $offer['requires_php'] ) ? (string) $offer['requires_php'] : '';
+		$wp  = isset( $offer['requires'] ) ? (string) $offer['requires'] : '';
+		if ( '' !== $php && ! is_php_version_compatible( $php ) ) {
+			return 'รุ่นใหม่ต้องใช้ PHP ' . $php . ' ขึ้นไป แต่เว็บนี้ใช้ PHP ' . PHP_VERSION;
+		}
+		if ( '' !== $wp && ! is_wp_version_compatible( $wp ) ) {
+			return 'รุ่นใหม่ต้องใช้ WordPress ' . $wp . ' ขึ้นไป แต่เว็บนี้ใช้ ' . get_bloginfo( 'version' );
+		}
+		return null;
 	}
 
 	/** Seconds since the newest backup any supported tool recorded, or null. */
@@ -395,7 +427,11 @@ class DoAction_Care_Runner {
 		return WP_CONTENT_DIR . '/' . self::BACKUP_DIR;
 	}
 
-	/** Copies $target aside. Returns the backup path or false. */
+	/**
+	 * Zips $target aside. A zip is not executable, so the old (possibly
+	 * vulnerable) PHP code is never reachable over the web, even on servers
+	 * that ignore .htaccess. Returns the zip path or false.
+	 */
 	private function backup( $target ) {
 		global $wp_filesystem;
 		$root = self::backup_root();
@@ -404,21 +440,30 @@ class DoAction_Care_Runner {
 			$wp_filesystem->put_contents( $root . '/index.php', "<?php\n// Silence is golden.\n" );
 			$wp_filesystem->put_contents( $root . '/.htaccess', "Require all denied\nDeny from all\n" );
 		}
-		$dest = $root . '/' . gmdate( 'Ymd-His' ) . '-' . wp_generate_password( 6, false ) . '-' . basename( $target );
-		if ( is_dir( $target ) ) {
-			return $this->copy_tree( $target, $dest ) ? $dest : false;
+		$dest = $root . '/' . gmdate( 'Ymd-His' ) . '-' . wp_generate_password( 12, false ) . '-' . basename( $target ) . '.zip';
+		$base = dirname( $target );
+		$files = is_dir( $target )
+			? iterator_to_array( new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $target, FilesystemIterator::SKIP_DOTS ) ), false )
+			: array( new SplFileInfo( $target ) );
+
+		if ( class_exists( 'ZipArchive' ) ) {
+			$zip = new ZipArchive();
+			if ( true !== $zip->open( $dest, ZipArchive::CREATE | ZipArchive::OVERWRITE ) ) {
+				return false;
+			}
+			foreach ( $files as $file ) {
+				if ( $file->isFile() && ! $zip->addFile( $file->getPathname(), ltrim( substr( $file->getPathname(), strlen( $base ) ), '/' ) ) ) {
+					$zip->close();
+					return false;
+				}
+			}
+			return $zip->close() && is_file( $dest ) ? $dest : false;
 		}
-		return $wp_filesystem->copy( $target, $dest, true ) ? $dest : false;
+		require_once ABSPATH . 'wp-admin/includes/class-pclzip.php';
+		$zip = new PclZip( $dest );
+		return 0 !== $zip->create( $target, PCLZIP_OPT_REMOVE_PATH, $base ) && is_file( $dest ) ? $dest : false;
 	}
 
-	private function copy_tree( $from, $to ) {
-		global $wp_filesystem;
-		if ( ! wp_mkdir_p( $to ) ) {
-			return false;
-		}
-		$res = copy_dir( $from, $to );
-		return true === $res;
-	}
 
 	/**
 	 * Lets the web server see the files just written: PHP's opcache may keep

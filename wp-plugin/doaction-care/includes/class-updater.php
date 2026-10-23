@@ -33,7 +33,27 @@ class DoAction_Care_Updater {
 		if ( '' === $portal || 0 !== strpos( (string) $r['package'], $portal . '/agent/v1/plugin/' ) ) {
 			return null;
 		}
+		// The version must be signed together with the zip's hash: an old signed
+		// zip advertised as a newer version is rejected.
+		$sha = isset( $r['sha256'] ) ? (string) $r['sha256'] : '';
+		if ( ! preg_match( '/^[0-9a-f]{64}$/', $sha ) || ! self::verify( 'doaction-care|' . $r['version'] . '|' . $sha, isset( $r['version_signature'] ) ? (string) $r['version_signature'] : '' ) ) {
+			return null;
+		}
 		return $r;
+	}
+
+	/** Ed25519 check against the public key shipped in this plugin. */
+	private static function verify( $message, $signature_b64 ) {
+		$sig = base64_decode( $signature_b64, true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode
+		$key = base64_decode( DOACTION_CARE_PUBKEY, true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode
+		if ( false === $sig || false === $key || 64 !== strlen( $sig ) || 32 !== strlen( $key ) || ! function_exists( 'sodium_crypto_sign_verify_detached' ) ) {
+			return false;
+		}
+		try {
+			return sodium_crypto_sign_verify_detached( $sig, $message, $key );
+		} catch ( Throwable $e ) {
+			return false;
+		}
 	}
 
 	/**
@@ -86,16 +106,7 @@ class DoAction_Care_Updater {
 			return $tmp;
 		}
 		$zip = (string) file_get_contents( $tmp ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
-		$sig = base64_decode( (string) $r['signature'], true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode
-		$key = base64_decode( DOACTION_CARE_PUBKEY, true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode
-		$ok  = false;
-		if ( false !== $sig && false !== $key && 64 === strlen( $sig ) && 32 === strlen( $key ) && function_exists( 'sodium_crypto_sign_verify_detached' ) ) {
-			try {
-				$ok = sodium_crypto_sign_verify_detached( $sig, $zip, $key );
-			} catch ( Throwable $e ) {
-				$ok = false;
-			}
-		}
+		$ok  = hash_equals( (string) $r['sha256'], hash( 'sha256', $zip ) ) && self::verify( $zip, (string) $r['signature'] );
 		if ( ! $ok ) {
 			wp_delete_file( $tmp );
 			return new WP_Error( 'doaction_care_signature', 'ลายเซ็นของไฟล์อัปเดต Do Action: Care ไม่ถูกต้อง — ไม่ติดตั้ง' );
