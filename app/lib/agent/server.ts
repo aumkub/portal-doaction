@@ -241,10 +241,16 @@ async function handleHeartbeat(request: Request, env: CloudflareEnv): Promise<Re
       from_version: inv.plugin_version, to_version: release.version, not_before: 0, created_by: "system", created_at: now,
     }]);
   }
+  // Lets the site check back in 15 minutes instead of an hour while work is waiting.
+  const jobsWaiting = !(await env.SESSIONPORTAL.get(CARE_PAUSED_KEY)) && !!(await env.DB
+    .prepare("SELECT 1 FROM site_jobs WHERE site_id = ? AND status = 'queued' AND not_before <= ? LIMIT 1")
+    .bind(siteId, now)
+    .first());
   return signedJson(secret, 200, {
     ok: true, server_time: now,
     widget: await widgetData(env, site, now),
     plugin_release: release,
+    jobs_waiting: jobsWaiting,
   });
 }
 

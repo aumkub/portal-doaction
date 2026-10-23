@@ -260,6 +260,11 @@ class DoAction_Care_Api_Client {
 			$s['plugin_release'] = is_array( $res['data']['plugin_release'] ) ? $res['data']['plugin_release'] : null;
 		}
 		self::save_settings( $s );
+		// Jobs still queued (e.g. the portal's wake didn't get through): check back in
+		// 15 minutes instead of waiting for the hourly heartbeat. One event at a time.
+		if ( ! empty( $res['data']['jobs_waiting'] ) && ! wp_next_scheduled( DOACTION_CARE_WAKE_HOOK ) ) {
+			wp_schedule_single_event( time() + 15 * MINUTE_IN_SECONDS, DOACTION_CARE_WAKE_HOOK );
+		}
 		return true;
 	}
 
