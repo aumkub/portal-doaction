@@ -2,6 +2,7 @@ import { Form, Link, useFetcher } from "react-router";
 import { useEffect, useState } from "react";
 import { ConfirmButton } from "~/components/ui/confirm-button";
 import { NativeSelect } from "~/components/ui/native-select";
+import { pendingUpdates, updateLevel, type UpdateLevel } from "~/lib/agent/update-level";
 import type { SiteInventory } from "~/lib/agent/inventory";
 
 export type ConnectedSite = {
@@ -124,15 +125,23 @@ function RefreshButton({ siteId }: { siteId: string }) {
   );
 }
 
+function LevelBadge({ level }: { level: UpdateLevel }) {
+  return level === "major" ? (
+    <span className="shrink-0 rounded-full bg-[#FDE7DA] px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-[#B4541A]">Major</span>
+  ) : (
+    <span className="shrink-0 rounded-full bg-paper px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-muted-ink">{level === "minor" ? "Minor" : "Patch"}</span>
+  );
+}
+
 function UpdateForm({ site, paused }: { site: ConnectedSite; paused: boolean }) {
   const fetcher = useFetcher<{ ok?: string; error?: string }>();
   const inv = site.inventory!;
   const items = [
-    ...(inv.core_update ? [{ key: "core:wordpress", name: "WordPress core", from: inv.wp_version, to: inv.core_update, active: true, blocked: inv.core_update_blocked }] : []),
-    ...inv.plugins.filter((p) => p.update_version).map((p) => ({ key: `plugin:${p.slug}`, name: p.name, from: p.version, to: p.update_version!, active: p.active, blocked: p.update_blocked })),
-    ...inv.themes.filter((t) => t.update_version).map((t) => ({ key: `theme:${t.slug}`, name: `${t.name} (ธีม)`, from: t.version, to: t.update_version!, active: t.active, blocked: t.update_blocked })),
+    ...(inv.core_update ? [{ key: "core:wordpress", name: "WordPress core", from: inv.wp_version, to: inv.core_update, active: true, blocked: inv.core_update_blocked, level: updateLevel("core", inv.wp_version, inv.core_update) }] : []),
+    ...inv.plugins.filter((p) => p.update_version).map((p) => ({ key: `plugin:${p.slug}`, name: p.name, from: p.version, to: p.update_version!, active: p.active, blocked: p.update_blocked, level: updateLevel("plugin", p.version, p.update_version!) })),
+    ...inv.themes.filter((t) => t.update_version).map((t) => ({ key: `theme:${t.slug}`, name: `${t.name} (ธีม)`, from: t.version, to: t.update_version!, active: t.active, blocked: t.update_blocked, level: updateLevel("theme", t.version, t.update_version!) })),
   ];
-  const [selected, setSelected] = useState<Set<string>>(() => new Set(items.filter((i) => i.key !== "core:wordpress" && !i.blocked).map((i) => i.key)));
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(items.filter((i) => i.level !== "major" && !i.blocked).map((i) => i.key)));
   if (items.length === 0) return null;
   const busy = fetcher.state !== "idle";
   const toggle = (k: string) => setSelected((s) => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; });
@@ -148,7 +157,13 @@ function UpdateForm({ site, paused }: { site: ConnectedSite; paused: boolean }) 
             <label className="flex cursor-pointer items-center gap-2.5 px-3.5 py-2 text-xs">
               <input type="checkbox" name="item" value={it.key} disabled={Boolean(it.blocked)} checked={!it.blocked && selected.has(it.key)} onChange={() => toggle(it.key)} className="h-4 w-4 accent-ink disabled:opacity-40" />
               <span className={`min-w-0 flex-1 ${it.active ? "text-ink" : "text-muted-ink"}`}>
-                <span className="block truncate">{it.name}{!it.active && " (ปิดอยู่)"}</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="truncate">{it.name}{!it.active && " (ปิดอยู่)"}</span>
+                  <LevelBadge level={it.level} />
+                </span>
+                {it.level === "major" && !it.blocked && (
+                  <span className="block text-[11px] text-[#B4541A]">เวอร์ชันใหญ่ อาจเปลี่ยนการทำงานหรือหน้าตา ควรเช็กหน้าเว็บหลังอัปเดต</span>
+                )}
                 {it.blocked && <span className="block text-[11px] text-[#B4541A]">ไม่รองรับ: {it.blocked}</span>}
               </span>
               <span className="shrink-0 tabular-nums text-ink-soft">{it.from} → <span className="font-semibold text-[#B4541A]">{it.to}</span></span>
@@ -274,6 +289,11 @@ export function SiteCard({
             {inv.core_update && (
               <span className="rounded-full bg-brand-yellow px-2.5 py-1 font-semibold text-ink">
                 WordPress {inv.wp_version} → {inv.core_update}
+              </span>
+            )}
+            {pendingUpdates(inv).some((u) => u.level === "major") && (
+              <span className="rounded-full bg-[#FDE7DA] px-2.5 py-1 font-semibold text-[#B4541A]">
+                Major {pendingUpdates(inv).filter((u) => u.level === "major").length} รายการ
               </span>
             )}
             <span className={`rounded-full px-2.5 py-1 font-medium ${pluginUpdates.length ? "bg-[#FFF7EE] text-[#B4541A]" : "bg-white text-ink-soft"}`}>

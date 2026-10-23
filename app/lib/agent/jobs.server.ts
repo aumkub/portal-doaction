@@ -8,6 +8,7 @@ import { generateId } from "~/lib/utils";
 import { decryptSecret, randomHex, signPayload } from "./crypto";
 import { InventorySchema, type SiteInventory } from "./inventory";
 import { backupIssues, type BackupIssue } from "./backup-health";
+import { pendingUpdates, type PendingUpdate } from "./update-level";
 
 export const CARE_PAUSED_KEY = "care:paused";
 /** A running job with no report after this long is marked failed. */
@@ -146,6 +147,27 @@ export async function listBackupProblems(env: CloudflareEnv, now = Math.floor(Da
     if (!inv.success) continue;
     const issues = backupIssues(inv.data, now);
     if (issues.length) out.push({ site_id: r.id, host: new URL(r.site_url).host, company_name: r.company_name, issues });
+  }
+  return out;
+}
+
+/** Pending updates per connected site (clients and in-house), with their level. */
+export async function listPendingUpdatesBySite(env: CloudflareEnv) {
+  const { results } = await env.DB
+    .prepare(
+      `SELECT s.site_url, i.json FROM sites s
+       JOIN clients c ON c.id = s.client_id
+       JOIN site_inventory i ON i.site_id = s.id
+       WHERE s.revoked_at IS NULL AND c.deleted_at IS NULL`
+    )
+    .all<{ site_url: string; json: string }>();
+  const out: Array<{ host: string; updates: PendingUpdate[] }> = [];
+  for (const r of results) {
+    let inv;
+    try { inv = InventorySchema.safeParse(JSON.parse(r.json)); } catch { continue; }
+    if (!inv.success) continue;
+    const updates = pendingUpdates(inv.data);
+    if (updates.length) out.push({ host: new URL(r.site_url).host, updates });
   }
   return out;
 }

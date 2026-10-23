@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Form, Link, useLoaderData, useSearchParams } from "react-router";
 import { backupIssues } from "~/lib/agent/backup-health";
+import { pendingUpdates as offeredUpdates } from "~/lib/agent/update-level";
 import type { Route } from "./+types/sites";
 import { requireAdmin, requireCoAdminOrAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
@@ -100,8 +101,8 @@ export async function action({ request, context }: Route.ActionArgs) {
   return { error: "unknown intent" };
 }
 
-type Filter = "all" | "updates" | "silent" | "backup" | "internal";
-const FILTERS: Filter[] = ["all", "updates", "silent", "backup", "internal"];
+type Filter = "all" | "updates" | "major" | "silent" | "backup" | "internal";
+const FILTERS: Filter[] = ["all", "updates", "major", "silent", "backup", "internal"];
 
 function pendingUpdates(site: ConnectedSite) {
   const inv = site.inventory;
@@ -124,11 +125,13 @@ export default function AdminSitesPage() {
   const needUpdates = sites.filter((s) => pendingUpdates(s) > 0);
   const totalUpdates = sites.reduce((n, s) => n + pendingUpdates(s), 0);
   const backupBad = sites.filter((x) => backupIssues(x.inventory, now).length > 0);
-  const shown = filter === "backup" ? backupBad : filter === "updates" ? needUpdates : filter === "silent" ? silent : filter === "internal" ? sites.filter((x) => x.internal) : sites;
+  const majorSites = sites.filter((x) => x.inventory && offeredUpdates(x.inventory).some((u) => u.level === "major"));
+  const shown = filter === "major" ? majorSites : filter === "backup" ? backupBad : filter === "updates" ? needUpdates : filter === "silent" ? silent : filter === "internal" ? sites.filter((x) => x.internal) : sites;
 
   const chips: { key: Filter; label: string; count: number }[] = [
     { key: "all", label: "ทั้งหมด", count: sites.length },
     { key: "updates", label: "รออัปเดต", count: needUpdates.length },
+    { key: "major", label: "มี Major", count: majorSites.length },
     { key: "silent", label: "ขาดการติดต่อ", count: silent.length },
     { key: "backup", label: "backup มีปัญหา", count: backupBad.length },
     { key: "internal", label: "เว็บในเครือ", count: sites.filter((x) => x.internal).length },

@@ -12,6 +12,8 @@ import { generateId } from "~/lib/utils";
 import {
   decryptSecret, encryptSecret, normalizePairCode, randomHex, sha256hex, signPayload, verifySignature,
 } from "./crypto";
+import { pendingUpdates } from "./update-level";
+import type { SiteInventory } from "./inventory";
 import { InventorySchema, JobReportSchema, PairSchema, SsoRequestSchema, WidgetTicketSchema } from "./inventory";
 import { parseClientCcEmails } from "~/lib/client-cc";
 import { ticketGate } from "~/lib/ticket-guard.server";
@@ -220,6 +222,8 @@ async function handleHeartbeat(request: Request, env: CloudflareEnv): Promise<Re
     site_id: siteId, now, json: JSON.stringify(inv), site_url: inv.site_url,
     plugin_version: inv.plugin_version, wp_version: inv.wp_version, php_version: inv.php_version,
   });
+  await notifyNewMajorUpdates(env, site, inv).catch((e) => console.error("[agent] major notify failed", e));
+
   const release = await pluginRelease(env, new URL(request.url).origin);
   // Our own agent is kept current without waiting for the team: queue a
   // self-update (same backup/rollback path) when a newer signed release exists.
@@ -240,6 +244,31 @@ async function handleHeartbeat(request: Request, env: CloudflareEnv): Promise<Re
     widget: await widgetData(env, site, now),
     plugin_release: release,
   });
+}
+
+/**
+ * In-app notification to admins the first time a site is offered a major
+ * update (new major version of a plugin/theme, or a WordPress x.y release).
+ * Minor and patch updates only show as small badges and in the daily digest.
+ */
+async function notifyNewMajorUpdates(env: CloudflareEnv, site: SiteRow, inv: SiteInventory) {
+  const majors = pendingUpdates(inv).filter((u) => u.level === "major");
+  if (majors.length === 0) return;
+  const fresh: typeof majors = [];
+  for (const u of majors) {
+    const key = `major-seen:${site.id}:${u.kind}:${u.slug}:${u.to}`;
+    if (await env.SESSIONPORTAL.get(key)) continue;
+    await env.SESSIONPORTAL.put(key, "1", { expirationTtl: 180 * 86400 });
+    fresh.push(u);
+  }
+  if (fresh.length === 0) return;
+  const db = createDB(env.DB);
+  const host = new URL(site.site_url).host;
+  const body = fresh.map((u) => `${u.name} ${u.from} → ${u.to}`).join(", ").slice(0, 400);
+  const admins = await db.listAdminUsers();
+  await Promise.all(admins.map((a) => db.createNotification({
+    id: generateId(), user_id: a.id, type: "system", title: `อัปเดตใหญ่ (Major) ที่ ${host}`, body, link: "/admin/sites?filter=major", read: 0,
+  })));
 }
 
 /** What the wp-admin dashboard widget shows. Only this client's own data. */

@@ -2,7 +2,7 @@ import { createDB, type DB } from "~/lib/db.server";
 import { sendEmail } from "~/lib/email.server";
 import { parseClientCcEmails } from "~/lib/client-cc";
 import { bangkokToday, isContractExpired, isInternal, needsMonthlyReport } from "~/lib/contract";
-import { listBackupProblems } from "~/lib/agent/jobs.server";
+import { listBackupProblems, listPendingUpdatesBySite } from "~/lib/agent/jobs.server";
 import { BACKUP_ISSUE_LABEL } from "~/lib/agent/backup-health";
 import { generateId } from "~/lib/utils";
 
@@ -361,6 +361,15 @@ async function sendTeamDigest(
   );
   add(`รายงานที่เผยแพร่แล้วแต่ยังไม่ส่งอีเมล`, unsent.map((r) => `${r.company_name} — ${r.title}`));
   if (showMissing) add(`ยังไม่สร้างรายงานเดือนนี้ (${missing.length} ราย)`, missing.map((c) => c.company_name));
+  const updates = await listPendingUpdatesBySite(env).catch(() => []);
+  add(
+    `อัปเดตใหญ่ (Major) รอทำ`,
+    updates.flatMap((s) => s.updates.filter((u) => u.level === "major").map((u) => `${s.host} — ${u.name} ${u.from} → ${u.to}`))
+  );
+  const minorCount = updates.reduce((n, s) => n + s.updates.filter((u) => u.level !== "major").length, 0);
+  if (minorCount > 0) {
+    add(`อัปเดตย่อย (Minor/patch)`, [`${minorCount} รายการใน ${updates.filter((s) => s.updates.some((u) => u.level !== "major")).length} เว็บ — ดูที่หน้าเว็บไซต์`]);
+  }
   const backupProblems = await listBackupProblems(env, now).catch(() => []);
   add(
     `Backup มีปัญหา (${backupProblems.length} เว็บ)`,
