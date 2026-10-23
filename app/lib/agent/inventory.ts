@@ -73,6 +73,8 @@ export const JobReportSchema = z.object({
   status: z.enum(["succeeded", "rolled_back", "failed"]),
   result_version: ver.nullable().default(null),
   log: z.string().max(8000),
+  /** The site is broken after this run (or already was): stop its queue and alert. */
+  site_broken: z.boolean().default(false),
 });
 
 export const WidgetTicketSchema = z.object({

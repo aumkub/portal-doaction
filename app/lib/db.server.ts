@@ -1187,32 +1187,45 @@ export function createDB(d1: D1Database) {
     },
 
     /** Claims the next due job for a site, or null. Never more than one running per site. */
-    async claimNextSiteJob(site_id: string, now: number): Promise<SiteJobRow | null> {
+    async listDueSiteJobs(site_id: string, now: number): Promise<SiteJobRow[]> {
+      const { results } = await d1
+        .prepare("SELECT * FROM site_jobs WHERE site_id = ? AND status = 'queued' AND not_before <= ? ORDER BY created_at")
+        .bind(site_id, now)
+        .all<SiteJobRow>();
+      return results;
+    },
+
+    /** Marks one queued job running, unless the site already has a running job. */
+    async claimSiteJob(id: string, site_id: string, now: number): Promise<SiteJobRow | null> {
       try {
         return await d1
           .prepare(
             `UPDATE site_jobs SET status = 'running', started_at = ?
-             WHERE id = (
-               SELECT id FROM site_jobs
-               WHERE site_id = ? AND status = 'queued' AND not_before <= ?
-                 AND NOT EXISTS (SELECT 1 FROM site_jobs WHERE site_id = ? AND status = 'running')
-               ORDER BY slug = 'doaction-care/doaction-care.php' DESC, CASE kind WHEN 'plugin' THEN 0 WHEN 'theme' THEN 1 ELSE 2 END, created_at
-               LIMIT 1
-             )
+             WHERE id = ? AND site_id = ? AND status = 'queued'
+               AND NOT EXISTS (SELECT 1 FROM site_jobs WHERE site_id = ? AND status = 'running')
              RETURNING *`
           )
-          .bind(now, site_id, now, site_id)
+          .bind(now, id, site_id, site_id)
           .first<SiteJobRow>();
       } catch {
         return null; // lost a race against the one-running index
       }
     },
 
+    /** Queue stops after the site broke: nothing else may touch it until a person looks. */
+    async cancelQueuedSiteJobsForSite(site_id: string, reason: string): Promise<number> {
+      const r = await d1
+        .prepare("UPDATE site_jobs SET status = 'cancelled', finished_at = unixepoch(), log = ? WHERE site_id = ? AND status = 'queued'")
+        .bind(reason, site_id)
+        .run();
+      return r.meta.changes ?? 0;
+    },
+
     async finishSiteJob(p: { id: string; site_id: string; status: SiteJobStatus; result_version: string | null; log: string; now: number }): Promise<boolean> {
       const r = await d1
         .prepare(
           `UPDATE site_jobs SET status = ?, result_version = ?, log = ?, finished_at = ?
-           WHERE id = ? AND site_id = ? AND status = 'running'`
+           WHERE id = ? AND site_id = ? AND status IN ('running', 'queued')`
         )
         .bind(p.status, p.result_version, p.log, p.now, p.id, p.site_id)
         .run();

@@ -17,6 +17,7 @@ import type { SiteInventory } from "./inventory";
 import { InventorySchema, JobReportSchema, PairSchema, SsoRequestSchema, WidgetTicketSchema } from "./inventory";
 import { parseClientCcEmails } from "~/lib/client-cc";
 import { RENEWAL_TITLE, ticketGate } from "~/lib/ticket-guard.server";
+import { familyRoot } from "./families";
 import { clientSupportExpired } from "~/lib/contract";
 import { CARE_PAUSED_KEY, addJobToDraftReport, wakeSite } from "./jobs.server";
 import type { SiteRow } from "~/lib/db.server";
@@ -279,6 +280,30 @@ async function notifyNewMajorUpdates(env: CloudflareEnv, site: SiteRow, inv: Sit
   })));
 }
 
+/**
+ * The site is down after an update (rollback didn't bring it back) or was down
+ * before one: cancel everything else queued for it and alert the team once an hour.
+ */
+async function haltBrokenSite(env: CloudflareEnv, site: SiteRow, log: string) {
+  const db = createDB(env.DB);
+  const cancelled = await db.cancelQueuedSiteJobsForSite(site.id, "หยุดคิว: เว็บพังระหว่างอัปเดต — ตรวจเว็บก่อนสั่งใหม่");
+  const key = `site-broken:${site.id}`;
+  if (await env.SESSIONPORTAL.get(key)) return;
+  await env.SESSIONPORTAL.put(key, "1", { expirationTtl: 3600 });
+  const host = new URL(site.site_url).host;
+  const detail = log.split("\n").filter((l) => /พัง|ปัญหา|!!!/.test(l)).slice(-2).join("\n").slice(0, 600);
+  const notification = {
+    title: `🚨 ${host} เว็บพังระหว่างอัปเดต`,
+    body: `${detail}${cancelled ? `\nยกเลิกงานที่เหลือในคิว ${cancelled} รายการแล้ว` : ""}\nตรวจเว็บด่วน`,
+    link: "/admin/sites",
+  };
+  const admins = await db.listAdminUsers();
+  await Promise.all(admins.map((a) => db.createNotification({
+    id: generateId(), user_id: a.id, type: "system", title: notification.title, body: notification.body, link: notification.link, read: 0,
+  })));
+  await sendTelegramNotificationForClient({ db, appUrl: env.APP_URL, notification, clientId: site.client_id });
+}
+
 /** What the wp-admin dashboard widget shows. Only this client's own data. */
 async function widgetData(env: CloudflareEnv, site: SiteRow, now: number) {
   const db = createDB(env.DB);
@@ -317,10 +342,47 @@ async function handleJobsNext(request: Request, env: CloudflareEnv): Promise<Res
       .bind(auth.site.id)
       .run();
   }
-  const job = await db.claimNextSiteJob(auth.site.id, Math.floor(Date.now() / 1000));
-  return signedJson(auth.secret, 200, {
-    job: job && { id: job.id, kind: job.kind, slug: job.slug, to_version: job.to_version },
-  });
+  const now = Math.floor(Date.now() / 1000);
+  const due = await db.listDueSiteJobs(auth.site.id, now);
+  if (due.length === 0) return signedJson(auth.secret, 200, { job: null });
+  const invRow = await env.DB.prepare("SELECT json FROM site_inventory WHERE site_id = ?").bind(auth.site.id).first<{ json: string }>();
+  let installed: string[] = [];
+  try { installed = invRow ? ((JSON.parse(invRow.json) as { plugins?: { slug: string }[] }).plugins ?? []).map((p) => p.slug) : []; } catch { /* no inventory yet */ }
+  const known = [...new Set([...installed, ...due.filter((j) => j.kind === "plugin").map((j) => j.slug)])];
+  const ordered = orderJobs(due, known);
+  const job = await db.claimSiteJob(ordered[0].id, auth.site.id, now);
+  if (!job) return signedJson(auth.secret, 200, { job: null });
+
+  // Plugins that understand groups get the lead's add-ons (or parent) in the same run.
+  const wantsGroup = (parseBody(auth.raw) as { group?: unknown } | null)?.group === true;
+  const root = job.kind === "plugin" && job.slug !== SELF_SLUG ? familyRoot(job.slug, known) : null;
+  const group = wantsGroup && root
+    ? ordered.filter((j) => j.id !== job.id && j.kind === "plugin" && j.slug !== SELF_SLUG && familyRoot(j.slug, known) === root)
+    : [];
+  const wire = (j: { id: string; kind: string; slug: string; to_version: string | null }) => ({ id: j.id, kind: j.kind, slug: j.slug, to_version: j.to_version });
+  return signedJson(auth.secret, 200, { job: wire(job), group: group.map(wire) });
+}
+
+const SELF_SLUG = "doaction-care/doaction-care.php";
+
+/**
+ * Run order: our own plugin first, then plugins with each family together
+ * (parent before add-ons), then themes, then core.
+ */
+function orderJobs<T extends { kind: string; slug: string; created_at: number }>(jobs: T[], known: string[]): T[] {
+  const kindRank = (j: T) => (j.slug === SELF_SLUG ? -1 : j.kind === "plugin" ? 0 : j.kind === "theme" ? 1 : 2);
+  const rootOf = new Map(jobs.map((j) => [j, j.kind === "plugin" ? familyRoot(j.slug, known) : j.slug]));
+  const firstSeen = new Map<string, number>();
+  for (const j of jobs) {
+    const r = rootOf.get(j)!;
+    firstSeen.set(r, Math.min(firstSeen.get(r) ?? Infinity, j.created_at));
+  }
+  return jobs.slice().sort((a, b) =>
+    kindRank(a) - kindRank(b)
+    || firstSeen.get(rootOf.get(a)!)! - firstSeen.get(rootOf.get(b)!)!
+    || rootOf.get(a)!.localeCompare(rootOf.get(b)!)
+    || Number(rootOf.get(a) !== a.slug) - Number(rootOf.get(b) !== b.slug)
+    || a.created_at - b.created_at);
 }
 
 /**
@@ -361,6 +423,9 @@ async function handleJobReport(request: Request, env: CloudflareEnv): Promise<Re
   if (ok && parsed.data.status === "succeeded") {
     await addJobToDraftReport(env, auth.site.client_id, now).catch((e) => console.error("[agent] report fill failed", e));
   }
+  // Older plugins don't send site_broken; their logs carry the same markers.
+  const broken = parsed.data.site_broken || /!!! ย้อนกลับ|เว็บมีปัญหาอยู่แล้วก่อนอัปเดต/.test(parsed.data.log);
+  if (ok && broken) await haltBrokenSite(env, auth.site, parsed.data.log).catch((e) => console.error("[agent] halt failed", e));
   return signedJson(auth.secret, ok ? 200 : 409, { ok });
 }
 
