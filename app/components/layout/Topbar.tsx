@@ -41,7 +41,8 @@ function usePolledNotifications(
 
   useEffect(() => {
     const id = setInterval(() => {
-      if (fetcher.state === "idle") fetcher.load("/api/notifications");
+      // Background tabs don't poll: each call is a Worker request + D1 read.
+      if (fetcher.state === "idle" && document.visibilityState === "visible") fetcher.load("/api/notifications");
     }, intervalMs);
     return () => clearInterval(id);
   }, [fetcher, intervalMs]);
