@@ -49,7 +49,7 @@ relay.doaction.co.th {
 ## Portal
 
 ```bash
-npx wrangler secret put WAKE_RELAY_URL      # https://relay.doaction.co.th/wake
+npx wrangler secret put WAKE_RELAY_URL      # https://51-79-223-252.sslip.io/wake (not a doaction.co.th name: same-zone Worker fetches loop)
 npx wrangler secret put WAKE_RELAY_SECRET   # same value as RELAY_SECRET
 ```
 
