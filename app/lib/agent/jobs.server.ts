@@ -82,7 +82,17 @@ export async function wakeSite(env: CloudflareEnv, site: { id: string; secret_en
       body,
       signal: AbortSignal.timeout(25_000),
     });
-    await recordWake(env, site.id, res.ok, `HTTP ${res.status}`);
+    let detail = `HTTP ${res.status}`;
+    if (!res.ok) {
+      // Say who refused: Cloudflare (challenge/WAF on the site's zone) or the site itself.
+      const mitigated = res.headers.get("cf-mitigated");
+      const body = (await res.text().catch(() => "")).slice(0, 2000);
+      const title = body.match(/<title>([^<]{1,80})<\/title>/i)?.[1]?.trim();
+      const code = body.match(/"code"\s*:\s*"([\w-]{1,40})"/)?.[1];
+      const by = mitigated ? `Cloudflare ${mitigated}` : title ?? code;
+      if (by) detail += ` · ${by}`;
+    }
+    await recordWake(env, site.id, res.ok, detail);
     return res.ok;
   } catch (e) {
     await recordWake(env, site.id, false, e instanceof Error && e.name === "TimeoutError" ? "ไม่ตอบใน 25 วินาที" : "เชื่อมต่อไม่ได้");
