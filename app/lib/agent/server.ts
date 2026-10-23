@@ -16,7 +16,8 @@ import { pendingUpdates } from "./update-level";
 import type { SiteInventory } from "./inventory";
 import { InventorySchema, JobReportSchema, PairSchema, SsoRequestSchema, WidgetTicketSchema } from "./inventory";
 import { parseClientCcEmails } from "~/lib/client-cc";
-import { ticketGate } from "~/lib/ticket-guard.server";
+import { RENEWAL_TITLE, ticketGate } from "~/lib/ticket-guard.server";
+import { clientSupportExpired } from "~/lib/contract";
 import { CARE_PAUSED_KEY, addJobToDraftReport } from "./jobs.server";
 import type { SiteRow } from "~/lib/db.server";
 import { emailSsoVerification, emailTeamNewTicket, emailTicketReceipt } from "~/lib/email-alerts.server";
@@ -288,7 +289,8 @@ async function widgetData(env: CloudflareEnv, site: SiteRow, now: number) {
   return {
     uptime30: monitor?.uptime30 ?? null,
     company: client?.company_name ?? "",
-    contract_end: client?.contract_end ?? null,
+    contract_end: client?.kind === "internal" ? null : client?.contract_end ?? null,
+    support_expired: client ? clientSupportExpired(client) : false,
     open_tickets: open?.n ?? 0,
     updates_this_month: await db.countSiteJobsSince(site.id, monthStart),
     portal_url: env.APP_URL,
@@ -299,7 +301,16 @@ async function handleJobsNext(request: Request, env: CloudflareEnv): Promise<Res
   const auth = await authenticate(request, env);
   if (auth instanceof Response) return auth;
   if (await env.SESSIONPORTAL.get(CARE_PAUSED_KEY)) return signedJson(auth.secret, 200, { job: null, paused: true });
-  const job = await createDB(env.DB).claimNextSiteJob(auth.site.id, Math.floor(Date.now() / 1000));
+  const db = createDB(env.DB);
+  const client = await db.getClientById(auth.site.client_id);
+  if (client && clientSupportExpired(client)) {
+    // Support ended: remote work stops (our own plugin's self-update still runs).
+    await env.DB
+      .prepare("UPDATE site_jobs SET status = 'cancelled', finished_at = unixepoch(), log = 'สัญญาดูแลหมดอายุ — ไม่ได้ดำเนินการ' WHERE site_id = ? AND status = 'queued' AND slug != 'doaction-care/doaction-care.php'")
+      .bind(auth.site.id)
+      .run();
+  }
+  const job = await db.claimNextSiteJob(auth.site.id, Math.floor(Date.now() / 1000));
   return signedJson(auth.secret, 200, {
     job: job && { id: job.id, kind: job.kind, slug: job.slug, to_version: job.to_version },
   });
@@ -336,8 +347,10 @@ async function handleWidgetTicket(request: Request, env: CloudflareEnv): Promise
   const db = createDB(env.DB);
   const client = await db.getClientById(auth.site.client_id);
   if (!client) return signedJson(auth.secret, 404, { error: "no_client" });
-  const gate = await ticketGate(env, client);
-  if (!gate.ok) return signedJson(auth.secret, 429, { error: gate.reason, message: gate.message });
+  const renewal = parsed.data.renewal;
+  const gate = await ticketGate(env, client, { renewal });
+  if (!gate.ok) return signedJson(auth.secret, gate.reason === "expired" ? 403 : 429, { error: gate.reason, message: gate.message });
+  if (renewal) parsed.data.title = RENEWAL_TITLE;
 
   const ticketId = generateId();
   const site = new URL(auth.site.site_url).host;
@@ -416,6 +429,7 @@ async function handleSso(request: Request, env: CloudflareEnv): Promise<Response
   };
 
   if (!client || client.deleted_at || client.kind !== "client") return refuse("not_client");
+  if (clientSupportExpired(client)) return refuse("disabled");
   if (!client.sso_enabled) return refuse("disabled");
 
   const rlKey = `sso-rl:${auth.site.id}`;

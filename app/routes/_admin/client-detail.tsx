@@ -3,7 +3,7 @@ import type { FormEvent as ReactFormEvent } from "react";
 import { ConfirmButton } from "~/components/ui/confirm-button";
 import { CARE_PAUSED_KEY } from "~/lib/agent/jobs.server";
 import { BACKUP_ISSUE_LABEL, backupIssues } from "~/lib/agent/backup-health";
-import { isContractExpired } from "~/lib/contract";
+import { clientSupportExpired, isContractExpired } from "~/lib/contract";
 import { ConnectedSitesSection, type ConnectedSite } from "~/components/admin/connected-sites";
 import { generatePairCode, sha256hex } from "~/lib/agent/crypto";
 import { z } from "zod";
@@ -855,6 +855,7 @@ export default function AdminClientDetailPage({ loaderData }: any) {
           appUrl={appUrl}
           jobs={siteJobs}
           paused={carePaused}
+          supportExpired={clientSupportExpired(client)}
         />
       )}
 

@@ -43,17 +43,36 @@ class DoAction_Care_Widget {
 		}
 	}
 
+	/**
+	 * Support contract state from the last heartbeat reply. The portal decides
+	 * (support_expired); the date only drives the label and the 30-day warning.
+	 *
+	 * @param array<string,mixed> $w
+	 * @return array{expired:bool,soon:bool,days:int|null,label:string}
+	 */
+	public static function support_status( array $w ) {
+		$expired = ! empty( $w['support_expired'] );
+		$end     = ! empty( $w['contract_end'] ) ? strtotime( (string) $w['contract_end'] . ' 23:59:59' ) : false;
+		$days    = $end ? (int) ceil( ( $end - time() ) / DAY_IN_SECONDS ) : null;
+		$label   = '';
+		if ( $end ) {
+			$label = ( $expired ? 'สัญญาหมดเมื่อ ' : 'ซัพพอร์ตถึง ' ) . date_i18n( 'j M Y', $end );
+		}
+		return array(
+			'expired' => $expired,
+			'soon'    => ! $expired && null !== $days && $days <= 30,
+			'days'    => $days,
+			'label'   => $label,
+		);
+	}
+
 	public static function render() {
 		$s = DoAction_Care_Api_Client::get_settings();
 		$w = isset( $s['widget'] ) && is_array( $s['widget'] ) ? $s['widget'] : array();
 
-		$contract = '—';
-		$expired  = false;
-		if ( ! empty( $w['contract_end'] ) ) {
-			$end      = strtotime( (string) $w['contract_end'] . ' 23:59:59' );
-			$expired  = $end && $end < time();
-			$contract = $end ? date_i18n( 'j M Y', $end ) : '—';
-		}
+		$support  = self::support_status( $w );
+		$expired  = $support['expired'];
+		$contract = $support['label'];
 		$age    = DoAction_Care_Runner::latest_backup_age();
 		$backup = null === $age ? 'ไม่พบ' : ( $age < 3600 ? '< 1 ชม.' : ( $age >= 2 * DAY_IN_SECONDS ? floor( $age / DAY_IN_SECONDS ) . ' วัน' : round( $age / 3600 ) . ' ชม.' ) );
 		$uptime = isset( $w['uptime30'] ) && is_numeric( $w['uptime30'] ) ? number_format( (float) $w['uptime30'], 2 ) . '%' : '—';
@@ -72,10 +91,25 @@ class DoAction_Care_Widget {
 			<div class="dac-whead">
 				<img src="<?php echo esc_url( plugins_url( 'assets/logo.svg', DOACTION_CARE_FILE ) ); ?>" alt="do action">
 				<span class="dac-tag">Care</span>
-				<?php if ( ! empty( $w['contract_end'] ) ) : ?>
-					<span class="dac-wcontract<?php echo $expired ? ' is-bad' : ''; ?>"><?php echo esc_html( ( $expired ? 'สัญญาหมดแล้ว ' : 'ดูแลถึง ' ) . $contract ); ?></span>
+				<?php if ( $contract ) : ?>
+					<span class="dac-wcontract<?php echo $expired || $support['soon'] ? ' is-bad' : ''; ?>"><?php echo esc_html( $contract ); ?></span>
 				<?php endif; ?>
 			</div>
+
+			<?php if ( $expired ) : ?>
+				<div class="dac-expired">
+					<strong>สัญญาดูแลเว็บไซต์หมดอายุแล้ว</strong>
+					<span>ปิดการอัปเดตจากระยะไกลและการแจ้งปัญหาแล้ว เว็บไซต์ของคุณยังทำงานตามปกติ ติดต่อทีม do action เพื่อต่ออายุ</span>
+					<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+						<input type="hidden" name="action" value="doaction_care_ticket">
+						<input type="hidden" name="renewal" value="1">
+						<?php wp_nonce_field( 'doaction_care_ticket' ); ?>
+						<button type="submit" class="dac-btn is-primary">ขอต่ออายุสัญญา</button>
+					</form>
+				</div>
+			<?php elseif ( $support['soon'] ) : ?>
+				<div class="dac-notice is-error">สัญญาดูแลจะหมดใน <?php echo esc_html( (string) $support['days'] ); ?> วัน — ติดต่อทีม do action เพื่อต่ออายุ</div>
+			<?php endif; ?>
 
 			<?php if ( 'ok' === $notice ) : ?>
 				<div class="dac-notice is-success">
@@ -91,6 +125,10 @@ class DoAction_Care_Widget {
 						— ทีมจะติดต่อกลับผ่านบัญชีลูกค้าของเว็บไซต์นี้
 					<?php endif; ?>
 				</div>
+			<?php elseif ( 'renewal' === $notice ) : ?>
+				<div class="dac-notice is-success">ส่งคำขอต่ออายุถึงทีม do action แล้ว ทีมจะติดต่อกลับโดยเร็ว</div>
+			<?php elseif ( 'expired' === $notice ) : ?>
+				<div class="dac-notice is-error">สัญญาดูแลหมดอายุแล้ว กด “ขอต่ออายุสัญญา” เพื่อติดต่อทีม</div>
 			<?php elseif ( 'blocked' === $notice ) : ?>
 				<div class="dac-notice is-error">การแจ้งปัญหาจากเว็บไซต์นี้ถูกระงับชั่วคราว กรุณาติดต่อทีม do action ทางอื่น</div>
 			<?php elseif ( 'rate' === $notice ) : ?>
@@ -99,6 +137,7 @@ class DoAction_Care_Widget {
 				<div class="dac-notice is-error">ส่งเรื่องไม่สำเร็จ ลองใหม่ หรือแจ้งผ่านพอร์ทัล</div>
 			<?php endif; ?>
 
+			<?php if ( ! $expired ) : ?>
 			<form class="dac-wsso" method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 				<input type="hidden" name="action" value="doaction_care_sso">
 				<?php wp_nonce_field( 'doaction_care_sso' ); ?>
@@ -111,6 +150,7 @@ class DoAction_Care_Widget {
 			<?php elseif ( 'sso_error' === $notice ) : ?>
 				<div class="dac-notice is-error">เปิดพอร์ทัลอัตโนมัติไม่ได้ในตอนนี้ ลองใหม่ หรือเข้าสู่ระบบตามปกติ</div>
 			<?php endif; ?>
+			<?php endif; ?>
 
 			<div class="dac-stats dac-wstats">
 				<?php foreach ( $stats as $st ) : ?>
@@ -118,6 +158,7 @@ class DoAction_Care_Widget {
 				<?php endforeach; ?>
 			</div>
 
+			<?php if ( ! $expired ) : ?>
 			<form class="dac-wform" method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 				<input type="hidden" name="action" value="doaction_care_ticket">
 				<?php wp_nonce_field( 'doaction_care_ticket' ); ?>
@@ -128,6 +169,7 @@ class DoAction_Care_Widget {
 					<button type="submit" class="dac-btn is-primary">ส่งเรื่อง</button>
 				</div>
 			</form>
+			<?php endif; ?>
 		</div>
 		<?php
 	}
@@ -194,8 +236,9 @@ class DoAction_Care_Widget {
 			wp_die( 'forbidden', 403 );
 		}
 		check_admin_referer( 'doaction_care_ticket' );
-		$title = sanitize_text_field( wp_unslash( isset( $_POST['title'] ) ? $_POST['title'] : '' ) );
-		$desc  = sanitize_textarea_field( wp_unslash( isset( $_POST['description'] ) ? $_POST['description'] : '' ) );
+		$renewal = ! empty( $_POST['renewal'] );
+		$title   = $renewal ? 'renewal' : sanitize_text_field( wp_unslash( isset( $_POST['title'] ) ? $_POST['title'] : '' ) );
+		$desc    = $renewal ? 'ลูกค้าขอต่ออายุสัญญาดูแลจากหน้า wp-admin' : sanitize_textarea_field( wp_unslash( isset( $_POST['description'] ) ? $_POST['description'] : '' ) );
 		$user  = wp_get_current_user();
 		$ok    = false;
 		$res   = null;
@@ -205,15 +248,17 @@ class DoAction_Care_Widget {
 				array(
 					'title'       => $title,
 					'description' => $desc,
+					'renewal'        => $renewal,
 					'reporter_name'  => (string) $user->display_name,
 					'reporter_email' => (string) $user->user_email,
 				)
 			);
 			$ok  = ! is_wp_error( $res ) && 200 === $res['status'];
 		}
-		$args = array( 'doaction_care_ticket' => $ok ? 'ok' : 'error' );
-		if ( ! $ok && ! is_wp_error( $res ) && is_array( $res ) && 429 === $res['status'] && is_array( $res['data'] ) ) {
-			$args['doaction_care_ticket'] = isset( $res['data']['error'] ) && 'blocked' === $res['data']['error'] ? 'blocked' : 'rate';
+		$args = array( 'doaction_care_ticket' => $ok ? ( $renewal ? 'renewal' : 'ok' ) : 'error' );
+		if ( ! $ok && ! is_wp_error( $res ) && is_array( $res ) && in_array( $res['status'], array( 403, 429 ), true ) && is_array( $res['data'] ) ) {
+			$err = isset( $res['data']['error'] ) ? (string) $res['data']['error'] : '';
+			$args['doaction_care_ticket'] = in_array( $err, array( 'blocked', 'expired' ), true ) ? $err : 'rate';
 		}
 		if ( $ok && is_array( $res['data'] ) && ! empty( $res['data']['can_open'] ) && preg_match( '/^[A-Za-z0-9_-]{8,64}$/', (string) $res['data']['ticket_id'] ) ) {
 			$args['doaction_care_open'] = (string) $res['data']['ticket_id'];

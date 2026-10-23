@@ -256,10 +256,10 @@ function Status({ site }: { site: ConnectedSite }) {
 }
 
 export function SiteCard({
-  site, canManage, client, jobs = [], canUpdate = false, paused = false,
+  site, canManage, client, jobs = [], canUpdate = false, paused = false, supportExpired = false,
 }: {
   site: ConnectedSite; canManage: boolean; client?: { id: string; name: string };
-  jobs?: SiteJobView[]; canUpdate?: boolean; paused?: boolean;
+  jobs?: SiteJobView[]; canUpdate?: boolean; paused?: boolean; supportExpired?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const inv = site.inventory;
@@ -327,7 +327,12 @@ export function SiteCard({
             )}
           </div>
 
-          {canUpdate && !site.revoked_at && inv.file_mods_allowed && isReachable(site) && <UpdateForm site={site} paused={paused} jobs={jobs} />}
+          {supportExpired && (
+            <p className="mt-3 rounded-xl border border-[#F6D3B0] bg-[#FFF7EE] px-3.5 py-2.5 text-xs text-[#7A3410]">
+              สัญญาดูแลหมดอายุ — ปิดการอัปเดตจากระยะไกล การแจ้งปัญหา และการเข้าระบบจาก wp-admin แล้ว (ยังเห็นสถานะเว็บได้ตามปกติ)
+            </p>
+          )}
+          {canUpdate && !supportExpired && !site.revoked_at && inv.file_mods_allowed && isReachable(site) && <UpdateForm site={site} paused={paused} jobs={jobs} />}
           {canUpdate && !site.revoked_at && !isReachable(site) && (inv.core_update || pluginUpdates.length > 0 || themeUpdates.length > 0) && (
             <p className="mt-3 text-xs text-muted-ink">อัปเดตได้เมื่อเว็บกลับมาส่งข้อมูล (ขาดการติดต่อเกิน 3 ชม.)</p>
           )}
@@ -376,9 +381,10 @@ export function SiteCard({
 }
 
 export function ConnectedSitesSection({
-  sites, canManage, pairCode, appUrl, jobs = [], paused = false,
+  sites, canManage, pairCode, appUrl, jobs = [], paused = false, supportExpired = false,
 }: {
   sites: ConnectedSite[];
+  supportExpired?: boolean;
   jobs?: SiteJobView[];
   paused?: boolean;
   canManage: boolean;
@@ -421,7 +427,7 @@ export function ConnectedSitesSection({
           <p className="text-sm text-muted-ink">ยังไม่มีเว็บไซต์ที่เชื่อมต่อ</p>
         )}
         {sites.map((s) => (
-          <SiteCard key={s.id} site={s} canManage={canManage} canUpdate={canManage} paused={paused} jobs={jobs.filter((j) => j.site_id === s.id)} />
+          <SiteCard key={s.id} site={s} canManage={canManage} canUpdate={canManage} paused={paused} supportExpired={supportExpired} jobs={jobs.filter((j) => j.site_id === s.id)} />
         ))}
       </div>
     </div>

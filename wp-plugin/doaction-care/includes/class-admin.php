@@ -151,19 +151,16 @@ class DoAction_Care_Admin {
 	 * @param array<string,mixed> $w
 	 */
 	private static function render_paired( array $s, array $w, $cut, $fmt, $post ) {
-		$contract = '—';
-		$expired  = false;
-		if ( ! empty( $w['contract_end'] ) ) {
-			$end      = strtotime( (string) $w['contract_end'] . ' 23:59:59' );
-			$expired  = $end && $end < time();
-			$contract = $end ? date_i18n( get_option( 'date_format' ), $end ) : '—';
-		}
+		$support  = DoAction_Care_Widget::support_status( $w );
+		$expired  = $support['expired'];
+		$soon     = $support['soon'];
+		$contract = ! empty( $w['contract_end'] ) ? date_i18n( get_option( 'date_format' ), strtotime( (string) $w['contract_end'] ) ) . ( $expired ? ' (หมดแล้ว)' : ( $soon ? ' (อีก ' . $support['days'] . ' วัน)' : '' ) ) : 'ไม่มีกำหนด';
 		$age    = DoAction_Care_Runner::latest_backup_age();
 		$backup = null === $age ? 'ไม่พบ' : ( $age < 3600 ? '< 1 ชม.' : round( $age / 3600 ) . ' ชม.' );
 		$uptime = isset( $w['uptime30'] ) && is_numeric( $w['uptime30'] ) ? number_format( (float) $w['uptime30'], 2 ) . '%' : '—';
 		$portal = isset( $w['portal_url'] ) ? (string) $w['portal_url'] : (string) $s['portal_url'];
 		$stats  = array(
-			array( 'สัญญาดูแลถึง', $contract, $expired ),
+			array( 'ซัพพอร์ตถึง', $contract, $expired || $soon ),
 			array( 'อัปเดตเดือนนี้', ( isset( $w['updates_this_month'] ) ? (int) $w['updates_this_month'] : 0 ) . ' รายการ', false ),
 			array( 'Uptime 30 วัน', $uptime, false ),
 			array( 'เรื่องที่ดำเนินการ', ( isset( $w['open_tickets'] ) ? (int) $w['open_tickets'] : 0 ) . ' เรื่อง', false ),
@@ -171,6 +168,9 @@ class DoAction_Care_Admin {
 		);
 		$mods   = ! ( defined( 'DISALLOW_FILE_MODS' ) && DISALLOW_FILE_MODS ) && ( ! defined( 'FS_METHOD' ) || 'direct' === FS_METHOD );
 		?>
+		<?php if ( $expired ) : ?>
+			<div class="dac-err">สัญญาดูแลเว็บไซต์หมดอายุแล้ว — ปิดการอัปเดตจากระยะไกลและการแจ้งปัญหา เว็บไซต์ยังทำงานตามปกติ ติดต่อทีม do action เพื่อต่ออายุ</div>
+		<?php endif; ?>
 		<?php if ( $cut ) : ?>
 			<div class="dac-err">Portal ไม่รับการเชื่อมต่อนี้แล้ว (ถูกตัดการเชื่อมต่อหรือจับคู่ใหม่ที่อื่น) — ยกเลิกการเชื่อมต่อด้านล่าง แล้วขอรหัสจับคู่ใหม่จาก do action</div>
 		<?php endif; ?>

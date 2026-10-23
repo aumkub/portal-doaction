@@ -7,7 +7,7 @@ import { generateId } from "~/lib/utils";
 import { useT } from "~/lib/i18n";
 import { NativeSelect } from "~/components/ui/native-select";
 import { sendTelegramNotificationForClient } from "~/lib/telegram.server";
-import { ticketGate } from "~/lib/ticket-guard.server";
+import { RENEWAL_TITLE, ticketGate } from "~/lib/ticket-guard.server";
 
 const TicketSchema = z.object({
   title: z.string().min(1, "กรุณากรอกหัวข้อ"),
@@ -24,7 +24,7 @@ export async function loader({ request, context }: any) {
   const user = await requireUser(request, env.DB, env.SESSIONPORTAL);
   const client = await createDB(env.DB).getClientByUserId(user.id);
   const gate = client ? await ticketGate(env, client) : { ok: true as const };
-  return { blocked: gate.ok ? null : gate.message };
+  return { blocked: gate.ok ? null : gate.message, expired: !gate.ok && gate.reason === "expired" };
 }
 
 export async function action({ request, context }: any) {
@@ -36,10 +36,15 @@ export async function action({ request, context }: any) {
   const db = createDB(context.cloudflare.env.DB);
   const client = await db.getClientByUserId(user.id);
   if (!client) return { error: "Client not found" };
-  const gate = await ticketGate(context.cloudflare.env, client);
-  if (!gate.ok) return { error: gate.message, errors: { title: [gate.message] } };
-
   const formData = await request.formData();
+  const renewal = formData.get("intent") === "renewal";
+  const gate = await ticketGate(context.cloudflare.env, client, { renewal });
+  if (!gate.ok) return { error: gate.message, errors: { title: [gate.message] } };
+  if (renewal) {
+    formData.set("title", RENEWAL_TITLE);
+    formData.set("description", String(formData.get("description") || "").trim() || "ลูกค้าต้องการต่ออายุสัญญาดูแลเว็บไซต์");
+    formData.set("priority", "medium");
+  }
   const parsed = TicketSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
     return { errors: parsed.error.flatten().fieldErrors };
@@ -97,7 +102,7 @@ export async function action({ request, context }: any) {
 export default function NewTicketPage({ actionData }: any) {
   const errors = actionData?.errors;
   const { t } = useT();
-  const { blocked } = useLoaderData() as { blocked: string | null };
+  const { blocked, expired } = useLoaderData() as { blocked: string | null; expired: boolean };
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -108,6 +113,16 @@ export default function NewTicketPage({ actionData }: any) {
 
       {blocked && (
         <div className="rounded-[20px] border border-[#F6D3B0] bg-[#FFF7EE] px-5 py-4 text-sm text-[#7A3410]">{blocked}</div>
+      )}
+
+      {expired && (
+        <Form method="post" className="rounded-[20px] border border-line bg-white p-5 md:p-6 space-y-3">
+          <input type="hidden" name="intent" value="renewal" />
+          <p className="text-[15px] font-semibold text-ink">ขอต่ออายุสัญญาดูแล</p>
+          <textarea name="description" rows={3} maxLength={2000} placeholder="ข้อความถึงทีม (ไม่บังคับ) เช่น ช่วงเวลาที่สะดวกให้ติดต่อ"
+            className="w-full rounded-[14px] border border-line bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-faint-ink focus:outline-none focus:ring-2 focus:ring-ink/10 focus:border-ink/40 resize-none" />
+          <button type="submit" className="inline-flex h-11 items-center rounded-full bg-ink px-6 text-[14px] font-semibold text-white hover:bg-black">ส่งคำขอต่ออายุ</button>
+        </Form>
       )}
 
       <div className={`rounded-[20px] border border-line bg-white p-5 md:p-6 ${blocked ? "pointer-events-none opacity-50" : ""}`} aria-disabled={Boolean(blocked)}>

@@ -1,17 +1,28 @@
 import type { Client } from "~/types";
+import { clientSupportExpired } from "~/lib/contract";
 
 /** New tickets a client may open before being asked to wait. */
 const PER_HOUR = 5;
 const PER_DAY = 15;
 
-export type TicketGate = { ok: true } | { ok: false; reason: "blocked" | "rate"; message: string };
+export type TicketGate = { ok: true } | { ok: false; reason: "blocked" | "rate" | "expired"; message: string };
+
+export const RENEWAL_TITLE = "ขอต่ออายุสัญญาดูแล";
 
 /**
  * Whether a client may open a new ticket now: not suspended by an admin and
  * under the hourly/daily caps (counted in D1, from every source: portal,
  * wp-admin widget).
  */
-export async function ticketGate(env: CloudflareEnv, client: Pick<Client, "id" | "ticket_block">): Promise<TicketGate> {
+export async function ticketGate(
+  env: CloudflareEnv,
+  client: Pick<Client, "id" | "ticket_block" | "kind" | "contract_end">,
+  opts: { renewal?: boolean } = {}
+): Promise<TicketGate> {
+  // Support ended: only a renewal request may be opened; replies to old tickets still work.
+  if (!opts.renewal && clientSupportExpired(client)) {
+    return { ok: false, reason: "expired", message: "สัญญาดูแลหมดอายุแล้ว เปิดเรื่องใหม่ไม่ได้ — กด “ขอต่ออายุสัญญา” เพื่อติดต่อทีม do action" };
+  }
   if (client.ticket_block) {
     return { ok: false, reason: "blocked", message: "การเปิด ticket ถูกระงับชั่วคราว กรุณาติดต่อทีม do action ทางอื่น" };
   }

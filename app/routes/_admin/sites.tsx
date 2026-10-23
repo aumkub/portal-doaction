@@ -8,13 +8,14 @@ import { createDB } from "~/lib/db.server";
 import { ONLINE_WINDOW_S, SILENT_AFTER_S, SiteCard, type ConnectedSite } from "~/components/admin/connected-sites";
 import { CARE_PAUSED_KEY, nextNightWindow, queueJobs, wakeSite, type JobRequest } from "~/lib/agent/jobs.server";
 import { InventorySchema } from "~/lib/agent/inventory";
+import { clientSupportExpired } from "~/lib/contract";
 import { ConfirmButton } from "~/components/ui/confirm-button";
 
 export function meta() {
   return [{ title: "เว็บไซต์ — Admin" }];
 }
 
-type SiteWithClient = ConnectedSite & { client: { id: string; name: string }; internal: boolean };
+type SiteWithClient = ConnectedSite & { client: { id: string; name: string }; internal: boolean; expired: boolean };
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = context.cloudflare.env;
@@ -27,10 +28,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     rows = rows.filter((r) => assigned.has(r.client_id));
   }
   const sites: SiteWithClient[] = rows.map(
-    ({ secret_enc: _s, inventory_json, client_id, client_company, client_kind, ...row }) => {
+    ({ secret_enc: _s, inventory_json, client_id, client_company, client_kind, client_contract_end, ...row }) => {
       let inventory = null;
       try { inventory = inventory_json ? JSON.parse(inventory_json) : null; } catch { inventory = null; }
-      return { ...row, inventory, client: { id: client_id, name: client_company }, internal: client_kind === "internal" };
+      return {
+        ...row, inventory, client: { id: client_id, name: client_company }, internal: client_kind === "internal",
+        expired: clientSupportExpired({ kind: client_kind, contract_end: client_contract_end }),
+      };
     },
   );
   const now = Math.floor(Date.now() / 1000);
@@ -84,6 +88,8 @@ export async function action({ request, context }: Route.ActionArgs) {
     const inv = invRow ? InventorySchema.safeParse(JSON.parse(invRow.json)) : null;
     if (!inv?.success) return { error: "ยังไม่มีข้อมูลเว็บไซต์" };
     if (!inv.data.file_mods_allowed) return { error: "เว็บนี้ปิดการแก้ไขไฟล์ อัปเดตจากระยะไกลไม่ได้" };
+    const owner = await db.getClientById(site.client_id);
+    if (owner && clientSupportExpired(owner)) return { error: "สัญญาดูแลของลูกค้ารายนี้หมดอายุแล้ว — ต่ออายุก่อนจึงอัปเดตได้" };
     const items: JobRequest[] = form.getAll("item").flatMap((v) => {
       const [kind, ...rest] = String(v).split(":");
       const slug = rest.join(":");
@@ -157,6 +163,7 @@ function SiteRow({ site, now, activity, open, onToggle, children }: {
             <span className="flex items-center gap-1.5 truncate text-xs text-muted-ink">
               {site.client.name}
               {site.internal && <span className="rounded-full bg-brand-yellow/40 px-1.5 text-[10px] font-semibold text-ink">ในเครือ</span>}
+              {site.expired && <span className="rounded-full bg-[#FDE7DA] px-1.5 text-[10px] font-semibold text-[#B4541A]">หมดสัญญา</span>}
             </span>
             {/* Compact summary for phones, where the other columns are hidden. */}
             {working && (
@@ -354,7 +361,7 @@ export default function AdminSitesPage() {
                 >
                   <SiteCard
                     site={s} client={s.client} canManage={false}
-                    canUpdate={canManage} paused={paused} jobs={jobs.filter((j) => j.site_id === s.id)}
+                    canUpdate={canManage} paused={paused} jobs={jobs.filter((j) => j.site_id === s.id)} supportExpired={s.expired}
                   />
                 </SiteRow>
               ))}

@@ -76,6 +76,8 @@ export const JobReportSchema = z.object({
 });
 
 export const WidgetTicketSchema = z.object({
+  /** Renewal request: allowed after support expired; the server sets the title. */
+  renewal: z.boolean().default(false),
   title: z.string().trim().min(1).max(200),
   description: z.string().trim().min(1).max(5000),
   reporter: str(200).nullable().default(null),

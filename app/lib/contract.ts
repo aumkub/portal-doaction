@@ -27,3 +27,8 @@ export function bangkokYearMonth(): { year: number; month: number } {
   const [y, m] = bangkokToday().split("-").map(Number);
   return { year: y, month: m };
 }
+
+/** A paying client whose support contract has ended (in-house sites never expire). */
+export function clientSupportExpired(client: { kind?: string | null; contract_end: string | null }): boolean {
+  return !isInternal(client) && isContractExpired(client.contract_end);
+}

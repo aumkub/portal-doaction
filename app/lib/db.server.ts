@@ -1136,14 +1136,14 @@ export function createDB(d1: D1Database) {
     async listAllSitesWithInventory() {
       const { results } = await d1
         .prepare(
-          `SELECT s.*, i.json AS inventory_json, c.company_name AS client_company, c.kind AS client_kind
+          `SELECT s.*, i.json AS inventory_json, c.company_name AS client_company, c.kind AS client_kind, c.contract_end AS client_contract_end
            FROM sites s
            LEFT JOIN site_inventory i ON i.site_id = s.id
            JOIN clients c ON c.id = s.client_id
            WHERE s.revoked_at IS NULL AND c.deleted_at IS NULL
            ORDER BY s.last_seen_at IS NULL, s.site_url`
         )
-        .all<SiteRow & { inventory_json: string | null; client_company: string; client_kind: "client" | "internal" }>();
+        .all<SiteRow & { inventory_json: string | null; client_company: string; client_kind: "client" | "internal"; client_contract_end: string | null }>();
       return results;
     },
 
