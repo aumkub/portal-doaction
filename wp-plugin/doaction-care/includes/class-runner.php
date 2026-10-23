@@ -19,7 +19,6 @@ class DoAction_Care_Runner {
 	const MAX_RUN_TIME   = 60;   // no new job starts after this; keeps runs inside host PHP timeouts
 	const PENDING        = 'doaction_care_pending_restore';
 	const SELF           = 'doaction-care/doaction-care.php';
-	const BACKUP_MAX_AGE = 86400; // core updates need a backup newer than this
 
 	/** @var string[] */
 	private $log = array();
@@ -618,10 +617,6 @@ class DoAction_Care_Runner {
 			$this->note( 'ไม่พบข้อมูล backup (UpdraftPlus / All-in-One WP Migration) — ไม่อัปเดต core เพื่อความปลอดภัย' );
 			return $this->result( 'failed' );
 		}
-		if ( $age > self::BACKUP_MAX_AGE ) {
-			$this->note( 'backup ล่าสุดเก่า ' . round( $age / 3600 ) . ' ชม. (ต้องไม่เกิน 24 ชม.) — ไม่อัปเดต core' );
-			return $this->result( 'failed' );
-		}
 		$before = $this->check_site();
 		if ( ! $before['ok'] ) {
 			$this->note( 'เว็บมีปัญหาอยู่แล้วก่อนอัปเดต: ' . $before['detail'] . ' — ไม่ได้อัปเดต' );
@@ -639,7 +634,7 @@ class DoAction_Care_Runner {
 			$this->note( 'ไม่มีอัปเดต WordPress core แล้ว' );
 			return $this->result( 'succeeded', get_bloginfo( 'version' ) );
 		}
-		$this->note( 'WordPress ' . get_bloginfo( 'version' ) . ' → ' . $update->current . ' (backup อายุ ' . round( $age / 3600, 1 ) . ' ชม.)' );
+		$this->note( 'WordPress ' . get_bloginfo( 'version' ) . ' → ' . $update->current . ' (backup ล่าสุด ' . round( $age / 3600, 1 ) . ' ชม. ที่แล้ว)' );
 		$upgrader = new Core_Upgrader( new Automatic_Upgrader_Skin() );
 		$res      = $upgrader->upgrade( $update );
 		$this->clear_maintenance();
