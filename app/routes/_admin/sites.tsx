@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Form, Link, useLoaderData, useSearchParams } from "react-router";
+import { useEffect, useState } from "react";
+import { Form, Link, useLoaderData, useRevalidator, useSearchParams } from "react-router";
 import { backupIssues } from "~/lib/agent/backup-health";
 import { pendingUpdates as offeredUpdates } from "~/lib/agent/update-level";
 import type { Route } from "./+types/sites";
@@ -121,9 +121,16 @@ function ago(seconds: number): string {
 }
 
 /** One compact line per site; the full card opens inline on click. */
-function SiteRow({ site, now, open, onToggle, children }: {
-  site: SiteWithClient; now: number; open: boolean; onToggle: () => void; children: React.ReactNode;
+type SiteActivity = { running: string | null; queued: number; done: number };
+
+function Spinner() {
+  return <span className="inline-block h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-ink/20 border-t-ink" aria-hidden="true" />;
+}
+
+function SiteRow({ site, now, activity, open, onToggle, children }: {
+  site: SiteWithClient; now: number; activity: SiteActivity | null; open: boolean; onToggle: () => void; children: React.ReactNode;
 }) {
+  const working = Boolean(activity && (activity.running || activity.queued));
   const inv = site.inventory;
   const offered = inv ? offeredUpdates(inv) : [];
   const majors = offered.filter((u) => u.level === "major").length;
@@ -132,7 +139,8 @@ function SiteRow({ site, now, open, onToggle, children }: {
   const backup = backupIssues(inv, now);
   const lastBackup = inv?.backup?.last_at ? now - inv.backup.last_at : null;
   return (
-    <li className={open ? "bg-paper/40" : ""}>
+    <li className={`relative transition-colors ${working ? "bg-brand-yellow/15" : open ? "bg-paper/40" : ""}`}>
+      {working && <span className="absolute inset-y-0 left-0 w-1 animate-pulse bg-brand-yellow" aria-hidden="true" />}
       <button
         type="button"
         onClick={onToggle}
@@ -140,7 +148,10 @@ function SiteRow({ site, now, open, onToggle, children }: {
         className="grid w-full grid-cols-[minmax(0,1fr)_24px] items-center gap-3 px-5 py-3 text-left transition-colors hover:bg-paper/60 md:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1.3fr)_minmax(0,0.9fr)_24px]"
       >
         <span className="flex min-w-0 items-center gap-3">
-          <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${online ? "bg-emerald-500" : "bg-[#E0622A]"}`} title={online ? "ออนไลน์" : "ขาดการติดต่อ"} />
+          <span className="relative flex h-2.5 w-2.5 shrink-0">
+            {working && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-yellow opacity-80" />}
+            <span className={`relative h-2.5 w-2.5 rounded-full ${working ? "bg-brand-yellow-deep" : online ? "bg-emerald-500" : "bg-[#E0622A]"}`} title={working ? "กำลังอัปเดต" : online ? "ออนไลน์" : "ขาดการติดต่อ"} />
+          </span>
           <span className="min-w-0">
             <span className="block truncate text-sm font-semibold text-ink">{new URL(site.site_url).host}</span>
             <span className="flex items-center gap-1.5 truncate text-xs text-muted-ink">
@@ -148,6 +159,11 @@ function SiteRow({ site, now, open, onToggle, children }: {
               {site.internal && <span className="rounded-full bg-brand-yellow/40 px-1.5 text-[10px] font-semibold text-ink">ในเครือ</span>}
             </span>
             {/* Compact summary for phones, where the other columns are hidden. */}
+            {working && (
+              <span className="mt-1 flex items-center gap-1.5 text-[11px] font-semibold text-ink md:hidden">
+                <Spinner /> {activity!.running ? `กำลังอัปเดต ${activity!.running}` : "รอคิวอัปเดต"}
+              </span>
+            )}
             <span className="mt-1 flex flex-wrap gap-1.5 text-[11px] md:hidden">
               {offered.length > 0 && <span className="text-ink-soft">อัปเดต {offered.length}</span>}
               {majors > 0 && <span className="font-semibold text-[#B4541A]">Major {majors}</span>}
@@ -157,7 +173,15 @@ function SiteRow({ site, now, open, onToggle, children }: {
         </span>
         <span className="hidden text-xs tabular-nums text-ink-soft md:block">{site.wp_version ?? "—"} / {site.php_version?.split(".").slice(0, 2).join(".") ?? "—"}</span>
         <span className="hidden items-center gap-1.5 text-xs md:flex">
-          {offered.length === 0 ? (
+          {working ? (
+            <span className="flex min-w-0 items-center gap-1.5 font-semibold text-ink">
+              <Spinner />
+              <span className="truncate">
+                {activity!.running ? activity!.running : "รอคิว"}
+                <span className="font-normal text-muted-ink"> · เหลือ {activity!.queued + (activity!.running ? 1 : 0)}{activity!.done ? ` · เสร็จ ${activity!.done}` : ""}</span>
+              </span>
+            </span>
+          ) : offered.length === 0 ? (
             <span className="text-emerald-700">ล่าสุดแล้ว</span>
           ) : (
             <>
@@ -197,7 +221,34 @@ export default function AdminSitesPage() {
   const majorSites = sites.filter((x) => x.inventory && offeredUpdates(x.inventory).some((u) => u.level === "major"));
   const byFilter = filter === "major" ? majorSites : filter === "backup" ? backupBad : filter === "updates" ? needUpdates : filter === "silent" ? silent : filter === "internal" ? sites.filter((x) => x.internal) : sites;
   const q = query.trim().toLowerCase();
-  const shown = q ? byFilter.filter((x) => x.site_url.toLowerCase().includes(q) || x.client.name.toLowerCase().includes(q)) : byFilter;
+  const matched = q ? byFilter.filter((x) => x.site_url.toLowerCase().includes(q) || x.client.name.toLowerCase().includes(q)) : byFilter;
+
+  // Sites with work in progress go first: running, then queued.
+  const activity = new Map<string, SiteActivity>();
+  for (const j of jobs) {
+    if (j.status !== "running" && j.status !== "queued") continue;
+    const a = activity.get(j.site_id) ?? { running: null, queued: 0, done: 0 };
+    if (j.status === "running") a.running = j.name;
+    else if (j.not_before <= now) a.queued++;
+    activity.set(j.site_id, a);
+  }
+  for (const j of jobs) {
+    const a = activity.get(j.site_id);
+    if (a && j.finished_at && j.finished_at > now - 1800) a.done++;
+  }
+  const rank = (id: string) => (activity.get(id)?.running ? 0 : activity.get(id)?.queued ? 1 : 2);
+  const shown = matched.slice().sort((a, b) => rank(a.id) - rank(b.id));
+  const busy = [...activity.values()].some((a) => a.running || a.queued);
+
+  // While anything is updating, refresh every 4 s so progress shows live.
+  const revalidator = useRevalidator();
+  useEffect(() => {
+    if (!busy) return;
+    const t = setInterval(() => {
+      if (revalidator.state === "idle" && document.visibilityState === "visible") revalidator.revalidate();
+    }, 4000);
+    return () => clearInterval(t);
+  }, [busy, revalidator]);
 
   const chips: { key: Filter; label: string; count: number }[] = [
     { key: "all", label: "ทั้งหมด", count: sites.length },
@@ -297,6 +348,7 @@ export default function AdminSitesPage() {
                   key={s.id}
                   site={s}
                   now={now}
+                  activity={activity.get(s.id) ?? null}
                   open={openId === s.id}
                   onToggle={() => setOpenId(openId === s.id ? null : s.id)}
                 >

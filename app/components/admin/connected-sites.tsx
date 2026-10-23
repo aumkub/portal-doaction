@@ -18,7 +18,7 @@ export type ConnectedSite = {
 };
 
 export type SiteJobView = {
-  id: string; site_id: string; kind: "plugin" | "theme" | "core"; name: string;
+  id: string; site_id: string; kind: "plugin" | "theme" | "core"; slug: string; name: string;
   from_version: string | null; to_version: string | null; result_version: string | null;
   status: "queued" | "running" | "succeeded" | "rolled_back" | "failed" | "cancelled";
   not_before: number; created_at: number; finished_at: number | null;
@@ -49,7 +49,10 @@ function JobList({ jobs }: { jobs: SiteJobView[] }) {
                 {j.name} <span className="tabular-nums text-ink-soft">{j.from_version ?? ""} → {j.result_version ?? j.to_version ?? ""}</span>
               </span>
               <span className="flex shrink-0 items-center gap-2">
-                <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${JOB_STATUS[j.status].cls}`}>{JOB_STATUS[j.status].label}</span>
+                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${JOB_STATUS[j.status].cls} ${j.status === "running" ? "animate-pulse" : ""}`}>
+                  {j.status === "running" && <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border-2 border-ink/25 border-t-ink" aria-hidden="true" />}
+                  {JOB_STATUS[j.status].label}
+                </span>
                 {j.status === "queued" && (
                   <button
                     type="button"
@@ -133,7 +136,7 @@ function LevelBadge({ level }: { level: UpdateLevel }) {
   );
 }
 
-function UpdateForm({ site, paused }: { site: ConnectedSite; paused: boolean }) {
+function UpdateForm({ site, paused, jobs }: { site: ConnectedSite; paused: boolean; jobs: SiteJobView[] }) {
   const fetcher = useFetcher<{ ok?: string; error?: string }>();
   const inv = site.inventory!;
   const items = [
@@ -141,9 +144,14 @@ function UpdateForm({ site, paused }: { site: ConnectedSite; paused: boolean }) 
     ...inv.plugins.filter((p) => p.update_version).map((p) => ({ key: `plugin:${p.slug}`, name: p.name, from: p.version, to: p.update_version!, active: p.active, blocked: p.update_blocked, level: updateLevel("plugin", p.version, p.update_version!) })),
     ...inv.themes.filter((t) => t.update_version).map((t) => ({ key: `theme:${t.slug}`, name: `${t.name} (ธีม)`, from: t.version, to: t.update_version!, active: t.active, blocked: t.update_blocked, level: updateLevel("theme", t.version, t.update_version!) })),
   ];
+  // Items already queued or running are shown as such and cannot be picked again.
+  const inFlight = new Map(
+    jobs.filter((j) => j.status === "queued" || j.status === "running").map((j) => [`${j.kind}:${j.kind === "core" ? "wordpress" : j.slug}`, j.status])
+  );
   const [selected, setSelected] = useState<Set<string>>(() => new Set(items.filter((i) => i.level !== "major" && !i.blocked).map((i) => i.key)));
   if (items.length === 0) return null;
   const busy = fetcher.state !== "idle";
+  const pickable = [...selected].filter((k) => !inFlight.has(k));
   const toggle = (k: string) => setSelected((s) => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; });
 
   return (
@@ -155,11 +163,20 @@ function UpdateForm({ site, paused }: { site: ConnectedSite; paused: boolean }) 
         {items.map((it) => (
           <li key={it.key}>
             <label className="flex cursor-pointer items-center gap-2.5 px-3.5 py-2 text-xs">
-              <input type="checkbox" name="item" value={it.key} disabled={Boolean(it.blocked)} checked={!it.blocked && selected.has(it.key)} onChange={() => toggle(it.key)} className="h-4 w-4 accent-ink disabled:opacity-40" />
+              <input type="checkbox" name="item" value={it.key} disabled={Boolean(it.blocked) || inFlight.has(it.key)} checked={!it.blocked && !inFlight.has(it.key) && selected.has(it.key)} onChange={() => toggle(it.key)} className="h-4 w-4 accent-ink disabled:opacity-40" />
               <span className={`min-w-0 flex-1 ${it.active ? "text-ink" : "text-muted-ink"}`}>
                 <span className="flex items-center gap-1.5">
                   <span className="truncate">{it.name}{!it.active && " (ปิดอยู่)"}</span>
                   <LevelBadge level={it.level} />
+                  {inFlight.get(it.key) === "running" && (
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-brand-yellow px-1.5 py-px text-[10px] font-bold text-ink">
+                      <span className="inline-block h-2 w-2 animate-spin rounded-full border-2 border-ink/25 border-t-ink" aria-hidden="true" />
+                      กำลังอัปเดต
+                    </span>
+                  )}
+                  {inFlight.get(it.key) === "queued" && (
+                    <span className="shrink-0 rounded-full bg-[#ECEAE3] px-1.5 py-px text-[10px] font-bold text-ink-soft">รอคิว</span>
+                  )}
                 </span>
                 {it.level === "major" && !it.blocked && (
                   <span className="block text-[11px] text-[#B4541A]">เวอร์ชันใหญ่ อาจเปลี่ยนการทำงานหรือหน้าตา ควรเช็กหน้าเว็บหลังอัปเดต</span>
@@ -177,10 +194,10 @@ function UpdateForm({ site, paused }: { site: ConnectedSite; paused: boolean }) 
           <option value="night">ตอนกลางคืน (01:00–05:00)</option>
         </NativeSelect>
         <ConfirmButton
-          disabled={busy || paused || selected.size === 0}
+          disabled={busy || paused || pickable.length === 0}
           message={
             <>
-              อัปเดต {selected.size} รายการบน {site.site_url}?<br />
+              อัปเดต {pickable.length} รายการบน {site.site_url}?<br />
               ระบบจะอัปเดตทีละรายการ ตรวจหน้าเว็บหลังแต่ละรายการ และย้อนกลับเวอร์ชันเดิมอัตโนมัติถ้าเว็บพัง
               {selected.has("core:wordpress") && " — WordPress core ย้อนกลับอัตโนมัติไม่ได้ ระบบจะเช็กว่ามี backup ภายใน 24 ชม. ก่อน"}
             </>
@@ -188,7 +205,7 @@ function UpdateForm({ site, paused }: { site: ConnectedSite; paused: boolean }) 
           confirmLabel="เริ่มอัปเดต"
           className="inline-flex h-8 items-center rounded-full bg-ink px-4 text-[12px] font-semibold text-white hover:bg-ink/90 disabled:opacity-40 transition-colors"
         >
-          {busy ? "กำลังส่ง…" : `อัปเดต ${selected.size} รายการ`}
+          {busy ? "กำลังส่ง…" : `อัปเดต ${pickable.length} รายการ`}
         </ConfirmButton>
         {paused && <span className="text-[11px] text-[#B4541A]">ระบบหยุดอยู่</span>}
         {fetcher.data?.ok && <span className="text-[11px] text-emerald-700">{fetcher.data.ok}</span>}
@@ -310,7 +327,7 @@ export function SiteCard({
             )}
           </div>
 
-          {canUpdate && !site.revoked_at && inv.file_mods_allowed && isReachable(site) && <UpdateForm site={site} paused={paused} />}
+          {canUpdate && !site.revoked_at && inv.file_mods_allowed && isReachable(site) && <UpdateForm site={site} paused={paused} jobs={jobs} />}
           {canUpdate && !site.revoked_at && !isReachable(site) && (inv.core_update || pluginUpdates.length > 0 || themeUpdates.length > 0) && (
             <p className="mt-3 text-xs text-muted-ink">อัปเดตได้เมื่อเว็บกลับมาส่งข้อมูล (ขาดการติดต่อเกิน 3 ชม.)</p>
           )}
