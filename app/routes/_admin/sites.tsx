@@ -324,68 +324,64 @@ export default function AdminSitesPage() {
   ];
 
   return (
-    <div className="space-y-6">
-      <div>
-        <p className="text-sm text-muted-ink">เว็บไซต์ที่ดูแล</p>
-        <h1 className="mt-1.5 text-[28px] md:text-[32px] font-bold tracking-[-0.02em] text-ink">
-          {sites.length === 0
-            ? "ยังไม่มีเว็บไซต์ที่เชื่อมต่อ"
-            : `เชื่อมต่อ ${sites.length} เว็บ · รออัปเดต ${totalUpdates} รายการ`}
-        </h1>
-        {silent.length > 0 && (
-          <p className="mt-1 text-sm text-[#B4541A]">{silent.length} เว็บไม่ได้ส่งข้อมูลเกิน 3 ชม.</p>
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-sm text-muted-ink">เว็บไซต์ที่ดูแล</p>
+          <h1 className="mt-1 text-[28px] md:text-[32px] font-bold tracking-[-0.02em] text-ink">
+            {sites.length === 0 ? "ยังไม่มีเว็บไซต์ที่เชื่อมต่อ" : `${sites.length} เว็บไซต์`}
+          </h1>
+        </div>
+        {canManage && (
+          <Form method="post" className="flex flex-wrap items-center gap-2">
+            {!paused && waitingSites > 0 && (
+              <button
+                name="intent" value="wake_queued" type="submit" disabled={waking}
+                className="inline-flex h-9 items-center gap-2 rounded-full bg-ink px-4 text-[13px] font-semibold text-white hover:bg-ink/90 disabled:opacity-60 transition-colors"
+              >
+                {waking && <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden="true" />}
+                {waking ? "กำลังปลุก…" : `ปลุกเว็บที่รอคิว (${waitingSites})`}
+              </button>
+            )}
+            {paused ? (
+              <button
+                name="intent" value="care_resume" type="submit"
+                className="inline-flex h-9 items-center rounded-full bg-ink px-4 text-[13px] font-semibold text-white hover:bg-ink/90 transition-colors"
+              >
+                เปิดการอัปเดต
+              </button>
+            ) : (
+              <ConfirmButton
+                name="intent" value="care_pause" destructive confirmLabel="หยุดทั้งหมด"
+                message="หยุดการอัปเดตจากระยะไกลทุกเว็บ และยกเลิกงานที่รอคิวทั้งหมด?"
+                className="inline-flex h-9 items-center rounded-full border border-line bg-white px-4 text-[13px] font-semibold text-destructive hover:bg-[#FFF7EE] transition-colors"
+              >
+                หยุดทั้งหมด
+              </ConfirmButton>
+            )}
+          </Form>
         )}
       </div>
 
-      {canManage && (
-      <Form
-        method="post"
-        className={`flex flex-wrap items-center justify-between gap-3 rounded-[20px] border px-5 py-4 ${
-          paused ? "border-[#F6D3B0] bg-[#FFF7EE]" : "border-line bg-white"
-        }`}
-      >
-        <div className="min-w-0 text-sm">
-          <p className="font-semibold text-ink">
-            {paused ? "หยุดการอัปเดตจากระยะไกลทั้งหมดอยู่" : "การอัปเดตจากระยะไกล: เปิดอยู่"}
-          </p>
-          <p className="mt-0.5 text-xs text-muted-ink">
-            {paused
-              ? "เว็บไซต์จะไม่รับงานใหม่จนกว่าจะเปิดอีกครั้ง"
-              : "กด “หยุดทั้งหมด” เมื่อเกิดปัญหา งานที่รอคิวจะถูกยกเลิกทันที"}
-          </p>
+      {paused && (
+        <div className="rounded-[16px] border border-[#F6D3B0] bg-[#FFF7EE] px-4 py-3 text-sm">
+          <span className="font-semibold text-ink">หยุดการอัปเดตจากระยะไกลทั้งหมดอยู่</span>
+          <span className="text-muted-ink"> · เว็บไซต์จะไม่รับงานใหม่จนกว่าจะกด “เปิดการอัปเดต”</span>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-        {!paused && waitingSites > 0 && (
-          <button
-            name="intent" value="wake_queued" type="submit" disabled={waking}
-            className="inline-flex h-9 items-center rounded-full bg-ink px-4 text-[13px] font-semibold text-white hover:bg-ink/90 disabled:opacity-60 transition-colors"
-          >
-            {waking ? "กำลังปลุก…" : `ปลุกเว็บที่รอคิว (${waitingSites})`}
-          </button>
-        )}
-        {paused ? (
-          <button
-            name="intent" value="care_resume" type="submit"
-            className="inline-flex h-9 items-center rounded-full bg-ink px-4 text-[13px] font-semibold text-white hover:bg-ink/90 transition-colors"
-          >
-            เปิดการอัปเดต
-          </button>
-        ) : (
-          <ConfirmButton
-            name="intent" value="care_pause" destructive confirmLabel="หยุดทั้งหมด"
-            message="หยุดการอัปเดตจากระยะไกลทุกเว็บ และยกเลิกงานที่รอคิวทั้งหมด?"
-            className="inline-flex h-9 items-center rounded-full border border-line bg-white px-4 text-[13px] font-semibold text-destructive hover:bg-[#FFF7EE] transition-colors"
-          >
-            หยุดทั้งหมด
-          </ConfirmButton>
-        )}
-        </div>
-      </Form>
       )}
       {result && (
-        <p className={`-mt-3 px-1 text-sm ${"error" in result ? "text-destructive" : "text-ink-soft"}`}>
+        <p className={`px-1 text-sm ${"error" in result ? "text-destructive" : "text-ink-soft"}`}>
           {"error" in result ? result.error : result.ok}
         </p>
+      )}
+
+      {sites.length > 0 && (
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <Stat label="กำลังอัปเดต" value={[...activity.values()].filter((a) => a.running || a.queued).length} unit="เว็บ" live={busy} />
+          <Stat label="รออัปเดต" value={totalUpdates} unit="รายการ" sub={`${needUpdates.length} เว็บ`} />
+          <Stat label="backup มีปัญหา" value={backupBad.length} unit="เว็บ" warn={backupBad.length > 0} />
+          <Stat label="ขาดการติดต่อ" value={silent.length} unit="เว็บ" warn={silent.length > 0} sub="เกิน 3 ชม." />
+        </div>
       )}
 
       {sites.length === 0 ? (
@@ -472,6 +468,21 @@ export default function AdminSitesPage() {
           </ul>
         </section>
       )}
+    </div>
+  );
+}
+
+function Stat({ label, value, unit, sub, warn, live }: { label: string; value: number; unit: string; sub?: string; warn?: boolean; live?: boolean }) {
+  return (
+    <div className="rounded-[16px] border border-line bg-white px-4 py-3">
+      <p className="flex items-center gap-1.5 text-xs text-muted-ink">
+        {live && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#C9A227]" aria-hidden="true" />}
+        {label}
+      </p>
+      <p className={`mt-1 text-[22px] font-bold tabular-nums tracking-[-0.01em] ${warn ? "text-[#B4541A]" : "text-ink"}`}>
+        {value} <span className="text-xs font-medium text-muted-ink">{unit}</span>
+      </p>
+      {sub && <p className="text-[11px] text-faint-ink">{sub}</p>}
     </div>
   );
 }
