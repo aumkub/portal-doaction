@@ -38,7 +38,7 @@ export async function queueJobs(opts: {
 }): Promise<number> {
   const { env, siteId, inventory, items, userId, notBefore } = opts;
   const now = Math.floor(Date.now() / 1000);
-  const jobs = items.flatMap((it) => {
+  const jobs = items.flatMap((it): { kind: SiteJobKind; slug: string; name: string; from: string; to: string | null }[] => {
     if (it.kind === "core") {
       return inventory.core_update && !inventory.core_update_blocked
         ? [{ kind: it.kind, slug: "wordpress", name: "WordPress", from: inventory.wp_version, to: inventory.core_update }]

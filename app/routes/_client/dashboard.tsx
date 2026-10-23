@@ -66,7 +66,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const [ticketsResult, reportsResult, uptimeResult] = await Promise.allSettled([
     db.listTicketsByClient(client.id),
     db.listReportsByClient(client.id),
-    client.website_url
+    client.website_url && apiKey
       ? fetchUptimeForDomain(client.website_url, apiKey)
       : Promise.resolve({ uptimeRatio: null, isUp: null }),
   ]);

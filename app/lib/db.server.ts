@@ -179,7 +179,7 @@ export function createDB(d1: D1Database) {
     },
 
     async createClient(
-      client: Omit<Client, "created_at">
+      client: Omit<Client, "created_at" | "sso_enabled" | "ticket_block" | "deleted_at">
     ): Promise<void> {
       await d1
         .prepare(

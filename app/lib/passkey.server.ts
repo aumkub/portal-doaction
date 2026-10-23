@@ -6,7 +6,6 @@ import {
 } from "@simplewebauthn/server";
 import type {
   AuthenticationResponseJSON,
-  AuthenticatorTransportFuture,
   PublicKeyCredentialCreationOptionsJSON,
   PublicKeyCredentialRequestOptionsJSON,
   RegistrationResponseJSON,
@@ -38,9 +37,9 @@ export async function listPasskeys(d1: D1Database, userId: string): Promise<User
   return res.results ?? [];
 }
 
-function transportsOf(pk: UserPasskey): AuthenticatorTransportFuture[] | undefined {
+function transportsOf(pk: UserPasskey): AuthenticatorTransport[] | undefined {
   try {
-    return pk.transports ? (JSON.parse(pk.transports) as AuthenticatorTransportFuture[]) : undefined;
+    return pk.transports ? (JSON.parse(pk.transports) as AuthenticatorTransport[]) : undefined;
   } catch {
     return undefined;
   }

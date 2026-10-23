@@ -9,6 +9,7 @@ import {
 import { createDB } from "~/lib/db.server";
 import { formatDate } from "~/lib/utils";
 import { useT } from "~/lib/i18n";
+import type { TranslationKey } from "~/lib/translations";
 import type { IconType } from "react-icons";
 import { FaFile, FaFilePdf, FaImage, FaPaperclip, FaTrash, FaVideo } from "react-icons/fa6";
 import Pagination from "~/components/ui/Pagination";
@@ -144,7 +145,7 @@ function filterHref(cat: Kind | null, tempOnly: boolean): string {
   return `/admin/attachments${qs ? `?${qs}` : ""}`;
 }
 
-function StatusPill({ status, t }: { status: AttachmentStorageItem["status"]; t: (k: string) => string }) {
+function StatusPill({ status, t }: { status: AttachmentStorageItem["status"]; t: (k: TranslationKey) => string }) {
   return status === "temporary" ? (
     <span className="rounded-full bg-[#FFF6C2] px-2 py-0.5 text-[11px] font-semibold text-[#6B5B00]">
       {t("admin_attachments_status_temporary")}

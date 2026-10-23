@@ -14,6 +14,7 @@ import {
 } from "./crypto";
 import { InventorySchema, JobReportSchema, PairSchema, SsoRequestSchema, WidgetTicketSchema } from "./inventory";
 import { parseClientCcEmails } from "~/lib/client-cc";
+import { ticketGate } from "~/lib/ticket-guard.server";
 import { CARE_PAUSED_KEY, addJobToDraftReport } from "./jobs.server";
 import type { SiteRow } from "~/lib/db.server";
 import { emailSsoVerification, emailTeamNewTicket, emailTicketReceipt } from "~/lib/email-alerts.server";
@@ -306,6 +307,8 @@ async function handleWidgetTicket(request: Request, env: CloudflareEnv): Promise
   const db = createDB(env.DB);
   const client = await db.getClientById(auth.site.client_id);
   if (!client) return signedJson(auth.secret, 404, { error: "no_client" });
+  const gate = await ticketGate(env, client);
+  if (!gate.ok) return signedJson(auth.secret, 429, { error: gate.reason, message: gate.message });
 
   const ticketId = generateId();
   const site = new URL(auth.site.site_url).host;

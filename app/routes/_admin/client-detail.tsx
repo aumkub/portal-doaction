@@ -1,6 +1,9 @@
-import { Form, redirect, useActionData, useSearchParams, type FormEvent as ReactFormEvent } from "react-router";
+import { Form, redirect, useActionData, useSearchParams } from "react-router";
+import type { FormEvent as ReactFormEvent } from "react";
 import { ConfirmButton } from "~/components/ui/confirm-button";
 import { CARE_PAUSED_KEY } from "~/lib/agent/jobs.server";
+import { BACKUP_ISSUE_LABEL, backupIssues } from "~/lib/agent/backup-health";
+import { isContractExpired } from "~/lib/contract";
 import { ConnectedSitesSection, type ConnectedSite } from "~/components/admin/connected-sites";
 import { generatePairCode, sha256hex } from "~/lib/agent/crypto";
 import { z } from "zod";
@@ -20,6 +23,7 @@ import {
   FaFileLines,
   FaTicket,
   FaGlobe,
+  FaHouse,
   FaEnvelope,
   FaUserSecret,
   FaPaperPlane,
@@ -86,10 +90,31 @@ export async function loader({ request, params, context }: any) {
   const ssoLog = (
     await env.DB.prepare(
       "SELECT l.wp_email, l.outcome, l.created_at, s.site_url FROM sso_logins l JOIN sites s ON s.id = l.site_id WHERE l.client_id = ? ORDER BY l.created_at DESC LIMIT 8"
-    ).bind(client.id).all<{ wp_email: string; outcome: string; created_at: number; site_url: string }>()
+    ).bind(client.id).all() as D1Result<{ wp_email: string; outcome: string; created_at: number; site_url: string }>
   ).results;
 
+  const nowS = Math.floor(Date.now() / 1000);
+  const openTickets = tickets.filter((tk) => ["open", "in_progress", "waiting"].includes(tk.status));
+  const latestReport = reports.slice().sort((a, b) => b.year * 12 + b.month - (a.year * 12 + a.month))[0] ?? null;
+  const overview = {
+    openTickets: openTickets.length,
+    ticketsToday: tickets.filter((tk) => tk.created_at > nowS - 86400).length,
+    recentTickets: tickets
+      .slice()
+      .sort((a, b) => b.updated_at - a.updated_at)
+      .slice(0, 4)
+      .map((tk) => ({ id: tk.id, title: tk.title, status: tk.status, updated_at: tk.updated_at })),
+    latestReport: latestReport && { id: latestReport.id, year: latestReport.year, month: latestReport.month, status: latestReport.status },
+    sites: sites.filter((st) => !st.revoked_at).map((st) => ({
+      host: new URL(st.site_url).host,
+      online: st.last_seen_at != null && nowS - st.last_seen_at < 3 * 3600,
+      updates: st.inventory ? st.inventory.plugins.filter((pl) => pl.update_version).length + st.inventory.themes.filter((th) => th.update_version).length + (st.inventory.core_update ? 1 : 0) : 0,
+      backupIssues: backupIssues(st.inventory, nowS),
+    })),
+  };
+
   return {
+    overview,
     ssoLog,
     sites,
     siteJobs,
@@ -148,6 +173,11 @@ export async function action({ request, params, context }: any) {
       notes: String(formData.get("notes") ?? "").trim() || null,
     });
     await db.updateUser(client.user_id, { name: company_name });
+    return redirect(`/admin/clients/${params.clientId}`);
+  }
+
+  if (intent === "set_ticket_block") {
+    await env.DB.prepare("UPDATE clients SET ticket_block = ? WHERE id = ?").bind(formData.get("blocked") === "1" ? 1 : 0, client.id).run();
     return redirect(`/admin/clients/${params.clientId}`);
   }
 
@@ -352,6 +382,181 @@ function getInitials(name: string) {
   return name.split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 }
 
+const TICKET_STATUS_TH: Record<string, string> = {
+  open: "เปิด", in_progress: "กำลังดำเนินการ", waiting: "รอลูกค้า", resolved: "แก้ไขแล้ว", closed: "ปิดแล้ว",
+};
+
+type Overview = {
+  openTickets: number;
+  ticketsToday: number;
+  recentTickets: { id: string; title: string; status: string; updated_at: number }[];
+  latestReport: { id: string; year: number; month: number; status: string } | null;
+  sites: { host: string; online: boolean; updates: number; backupIssues: (keyof typeof BACKUP_ISSUE_LABEL)[] }[];
+};
+
+function StatCard({ label, value, hint, tone = "default", onClick }: {
+  label: string; value: string; hint?: string; tone?: "default" | "warn" | "ok"; onClick?: () => void;
+}) {
+  const toneCls = tone === "warn" ? "text-[#B4541A]" : tone === "ok" ? "text-emerald-700" : "text-ink";
+  const Tag = onClick ? "button" : "div";
+  return (
+    <Tag
+      type={onClick ? "button" : undefined}
+      onClick={onClick}
+      className={`rounded-[20px] border border-line bg-white p-5 text-left ${onClick ? "transition-colors hover:border-ink/30" : ""}`}
+    >
+      <p className="text-xs font-medium text-muted-ink">{label}</p>
+      <p className={`mt-2 font-display text-[26px] font-bold leading-none tracking-[-0.02em] tabular-nums ${toneCls}`}>{value}</p>
+      {hint && <p className="mt-2 text-xs text-muted-ink">{hint}</p>}
+    </Tag>
+  );
+}
+
+function OverviewTab({ overview, client, internal, onTab }: {
+  overview: Overview; client: { contract_end: string | null; website_url: string | null; ticket_block?: number }; internal: boolean; onTab: (id: string) => void;
+}) {
+  const days = client.contract_end ? Math.ceil((Date.parse(`${client.contract_end}T23:59:59+07:00`) - Date.now()) / 86400000) : null;
+  const expired = isContractExpired(client.contract_end);
+  const sitesOnline = overview.sites.filter((s) => s.online).length;
+  const updates = overview.sites.reduce((n, s) => n + s.updates, 0);
+  const backupBad = overview.sites.filter((s) => s.backupIssues.length > 0);
+  const months = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+  return (
+    <div className="space-y-5">
+      {Boolean(client.ticket_block) && (
+        <div className="rounded-[20px] border border-[#F6D3B0] bg-[#FFF7EE] px-5 py-3.5 text-sm text-[#7A3410]">
+          ระงับการเปิด ticket ของลูกค้ารายนี้อยู่ — ปลดได้ที่แท็บ “การเข้าถึง”
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard
+          label="เว็บไซต์ออนไลน์"
+          value={overview.sites.length ? `${sitesOnline}/${overview.sites.length}` : "—"}
+          hint={overview.sites.length ? (updates ? `รออัปเดต ${updates} รายการ` : "อัปเดตครบ") : "ยังไม่เชื่อมปลั๊กอิน"}
+          tone={overview.sites.length && sitesOnline < overview.sites.length ? "warn" : "default"}
+          onClick={() => onTab("sites")}
+        />
+        <StatCard
+          label="Backup"
+          value={!overview.sites.length ? "—" : backupBad.length ? `${backupBad.length} เว็บมีปัญหา` : "ปกติ"}
+          hint={backupBad[0] ? BACKUP_ISSUE_LABEL[backupBad[0].backupIssues[0]] : undefined}
+          tone={backupBad.length ? "warn" : overview.sites.length ? "ok" : "default"}
+          onClick={() => onTab("sites")}
+        />
+        {!internal && (
+          <StatCard
+            label="Ticket ที่เปิดอยู่"
+            value={String(overview.openTickets)}
+            hint={overview.ticketsToday ? `ใหม่ 24 ชม. ${overview.ticketsToday} เรื่อง` : undefined}
+            tone={overview.openTickets ? "warn" : "default"}
+          />
+        )}
+        {!internal && (
+          <StatCard
+            label="สัญญา"
+            value={!client.contract_end ? "รายเดือน" : expired ? "หมดอายุ" : `${days} วัน`}
+            hint={client.contract_end ? `สิ้นสุด ${client.contract_end}` : "ไม่มีวันหมดอายุ"}
+            tone={expired || (days !== null && days <= 30) ? "warn" : "default"}
+          />
+        )}
+      </div>
+
+      {!internal && (
+        <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
+          <section className="rounded-[20px] border border-line bg-white">
+            <div className="flex items-center justify-between border-b border-line-soft px-5 py-3.5">
+              <p className="text-sm font-semibold text-ink">Ticket ล่าสุด</p>
+              <a href="/admin/tickets" className="text-xs font-semibold text-muted-ink hover:text-ink">ดูทั้งหมด</a>
+            </div>
+            {overview.recentTickets.length === 0 ? (
+              <p className="px-5 py-6 text-sm text-muted-ink">ยังไม่มี ticket</p>
+            ) : (
+              <ul className="divide-y divide-line-soft">
+                {overview.recentTickets.map((tk) => (
+                  <li key={tk.id}>
+                    <a href={`/admin/tickets/${tk.id}`} className="flex items-center justify-between gap-3 px-5 py-3 hover:bg-paper/60">
+                      <span className="min-w-0 truncate text-sm text-ink">{tk.title}</span>
+                      <span className="shrink-0 rounded-full bg-paper px-2.5 py-0.5 text-[11px] font-semibold text-ink-soft">{TICKET_STATUS_TH[tk.status] ?? tk.status}</span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+          <section className="rounded-[20px] border border-line bg-white p-5">
+            <p className="text-sm font-semibold text-ink">รายงานล่าสุด</p>
+            {overview.latestReport ? (
+              <a href={`/admin/reports/${overview.latestReport.id}`} className="mt-3 block rounded-[14px] bg-paper px-4 py-3 hover:bg-paper-deep">
+                <span className="block text-[15px] font-semibold text-ink">{months[overview.latestReport.month - 1]} {overview.latestReport.year + 543}</span>
+                <span className="text-xs text-muted-ink">{overview.latestReport.status === "published" ? "เผยแพร่แล้ว" : "ร่าง"}</span>
+              </a>
+            ) : (
+              <p className="mt-3 text-sm text-muted-ink">ยังไม่มีรายงาน</p>
+            )}
+            <a href="/admin/reports/new" className="mt-3 inline-flex h-9 items-center rounded-full bg-ink px-4 text-[13px] font-semibold text-white hover:bg-black">สร้างรายงาน</a>
+          </section>
+        </div>
+      )}
+
+      {overview.sites.length > 0 && (
+        <section className="rounded-[20px] border border-line bg-white">
+          <div className="flex items-center justify-between border-b border-line-soft px-5 py-3.5">
+            <p className="text-sm font-semibold text-ink">เว็บไซต์</p>
+            <button type="button" onClick={() => onTab("sites")} className="text-xs font-semibold text-muted-ink hover:text-ink">จัดการ</button>
+          </div>
+          <ul className="divide-y divide-line-soft">
+            {overview.sites.map((st) => (
+              <li key={st.host} className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 text-sm">
+                <span className="flex items-center gap-2 text-ink">
+                  <span className={`h-2 w-2 rounded-full ${st.online ? "bg-emerald-500" : "bg-[#E0622A]"}`} />
+                  {st.host}
+                </span>
+                <span className="text-xs text-muted-ink">
+                  {st.updates ? `รออัปเดต ${st.updates}` : "อัปเดตครบ"}
+                  {st.backupIssues.length > 0 && <span className="text-[#B4541A]"> · {BACKUP_ISSUE_LABEL[st.backupIssues[0]]}</span>}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function TicketBlockCard({ blocked, ticketsToday }: { blocked: boolean; ticketsToday: number }) {
+  return (
+    <SectionCard
+      title="การเปิด ticket"
+      subtitle={`ลูกค้าเปิด ticket ได้ไม่เกิน 5 เรื่องต่อชั่วโมง และ 15 เรื่องต่อวัน (ทั้งจาก portal และ wp-admin) · 24 ชม. ล่าสุด ${ticketsToday} เรื่อง`}
+      action={
+        <Form method="post">
+          <input type="hidden" name="intent" value="set_ticket_block" />
+          <input type="hidden" name="blocked" value={blocked ? "0" : "1"} />
+          {blocked ? (
+            <button type="submit" className="inline-flex h-8 items-center rounded-full bg-ink px-3.5 text-xs font-semibold text-white hover:bg-black">
+              ปลดการระงับ
+            </button>
+          ) : (
+            <ConfirmButton
+              message="ระงับไม่ให้ลูกค้ารายนี้เปิด ticket ใหม่? ticket เดิมยังตอบกันได้ตามปกติ"
+              confirmLabel="ระงับ"
+              destructive
+              className="inline-flex h-8 items-center rounded-full border border-line bg-white px-3.5 text-xs font-semibold text-destructive hover:bg-[#FFF7EE]"
+            >
+              ระงับการเปิด ticket
+            </ConfirmButton>
+          )}
+        </Form>
+      }
+    >
+      <p className={`text-sm ${blocked ? "text-[#B4541A] font-semibold" : "text-muted-ink"}`}>
+        {blocked ? "ระงับอยู่ — ลูกค้าเปิด ticket ใหม่ไม่ได้ทั้งจาก portal และจากเว็บไซต์" : "เปิด ticket ได้ตามปกติ"}
+      </p>
+    </SectionCard>
+  );
+}
+
 const SSO_OUTCOME: Record<string, string> = {
   issued: "ออกตั๋วแล้ว",
   used: "เข้าสู่ระบบสำเร็จ",
@@ -484,12 +689,13 @@ export default function AdminClientDetailPage({ loaderData }: any) {
     siteJobs = [],
     ssoLog = [],
     carePaused = false,
+    overview,
     appUrl,
   } = loaderData;
   const { t } = useT();
   const actionData = useActionData() as ActionData | undefined;
   const [searchParams, setSearchParams] = useSearchParams();
-  const requestedTab = searchParams.get("tab") ?? "details";
+  const requestedTab = searchParams.get("tab") ?? "overview";
   const activeTab = client.kind === "internal" && requestedTab === "access" ? "details" : requestedTab;
   const isViewOnly = currentUser.role === "co-admin";
   const isAdmin = currentUser.role === "admin";
@@ -522,9 +728,11 @@ export default function AdminClientDetailPage({ loaderData }: any) {
 
   const internal = client.kind === "internal";
   const tabs = [
-    { id: "details", label: lang === "th" ? "รายละเอียด" : "Details", icon: <FaUser className="text-[10px]" /> },
+    { id: "overview", label: lang === "th" ? "ภาพรวม" : "Overview", icon: <FaHouse className="text-[10px]" /> },
+    { id: "sites", label: lang === "th" ? `เว็บไซต์ (${overview.sites.length})` : `Websites (${overview.sites.length})`, icon: <FaGlobe className="text-[10px]" /> },
+    { id: "details", label: lang === "th" ? (internal ? "ข้อมูลเว็บ" : "ข้อมูลลูกค้า") : "Details", icon: <FaUser className="text-[10px]" /> },
     ...(internal ? [] : [{ id: "access", label: lang === "th" ? "การเข้าถึง" : "Access", icon: <FaUserSecret className="text-[10px]" /> }]),
-    { id: "notes", label: lang === "th" ? "บันทึก" : "Notes", icon: <FaFileLines className="text-[10px]" /> },
+    { id: "notes", label: lang === "th" ? `บันทึก${notes.length ? ` (${notes.length})` : ""}` : "Notes", icon: <FaFileLines className="text-[10px]" /> },
   ];
 
   return (
@@ -635,6 +843,21 @@ export default function AdminClientDetailPage({ loaderData }: any) {
       </div>
 
       {/* ── Tab Content ── */}
+      {activeTab === "overview" && (
+        <OverviewTab overview={overview} client={client} internal={internal} onTab={(id) => setSearchParams({ tab: id })} />
+      )}
+
+      {(activeTab === "sites" || actionData?.pairCode) && (
+        <ConnectedSitesSection
+          sites={sites}
+          canManage={isAdmin}
+          pairCode={actionData?.pairCode}
+          appUrl={appUrl}
+          jobs={siteJobs}
+          paused={carePaused}
+        />
+      )}
+
       {activeTab === "details" && (
         <div className="space-y-5">
           {internal && (
@@ -743,17 +966,6 @@ export default function AdminClientDetailPage({ loaderData }: any) {
           </Form>
           )}
 
-          <ConnectedSitesSection
-            sites={sites}
-            canManage={isAdmin}
-            pairCode={actionData?.pairCode}
-            appUrl={appUrl}
-            jobs={siteJobs}
-            paused={carePaused}
-          />
-
-          {isAdmin && !internal && <SsoCard enabled={Boolean(client.sso_enabled)} log={ssoLog} />}
-
           {isAdmin && <KindSwitch internal={internal} error={(errors as any)?.kind_email?.[0]} />}
 
           {/* Danger zone */}
@@ -778,6 +990,8 @@ export default function AdminClientDetailPage({ loaderData }: any) {
 
       {activeTab === "access" && (
         <div className="space-y-5">
+          {isAdmin && <TicketBlockCard blocked={Boolean(client.ticket_block)} ticketsToday={overview.ticketsToday} />}
+          {isAdmin && <SsoCard enabled={Boolean(client.sso_enabled)} log={ssoLog} />}
           {/* Account access */}
           {!isViewOnly && (
             <SectionCard title={t("admin_change_email_title")} subtitle={t("admin_change_email_desc")}>

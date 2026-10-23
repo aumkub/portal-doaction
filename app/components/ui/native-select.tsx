@@ -1,6 +1,6 @@
 import { cn } from "~/lib/utils";
 
-type NativeSelectProps = React.ComponentProps<"select"> & {
+type NativeSelectProps = Omit<React.ComponentProps<"select">, "size"> & {
   size?: "default" | "sm";
   wrapperClassName?: string;
 };

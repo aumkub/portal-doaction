@@ -57,12 +57,12 @@
 		"db:init:local": "wrangler d1 execute portal --local --file=./migrations/0001_init.sql",
 		"build": "NODE_OPTIONS=--no-deprecation react-router build",
 		"cf-typegen": "wrangler types && react-router typegen",
-		"check": "tsc && react-router build && wrangler deploy --dry-run",
+		"check": "react-router typegen && tsc -b && react-router build && wrangler deploy --dry-run",
 		"deploy": "wrangler deploy",
 		"dev": "env -u HTTP_PROXY -u HTTPS_PROXY -u http_proxy -u https_proxy -u ALL_PROXY -u all_proxy react-router dev",
 		"dev:local": "react-router dev",
 		"preview": "npm run build && vite preview",
-		"typecheck": "npm run typegen && tsc -b"
+		"typecheck": "react-router typegen && tsc -b"
 	},
 	"type": "module",
 	"packageManager": "pnpm@10.33.2",

@@ -584,6 +584,7 @@ const en: Record<keyof typeof th, string> = {
   dash_domain_expiry: "Domain Expiry",
   dash_not_expired: "Not expired",
   dash_no_website: "No website info yet",
+  view_only: "View only",
   dash_backup_latest: "Latest backup",
   dash_contract_expiry: "Contract expiry",
   dash_contract_no_expiry: "Monthly (no expiry)",

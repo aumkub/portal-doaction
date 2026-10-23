@@ -55,7 +55,7 @@ export async function hotp(key: Uint8Array, counter: number, digits = 6): Promis
   }
   const cryptoKey = await crypto.subtle.importKey(
     "raw",
-    key,
+    key as BufferSource,
     { name: "HMAC", hash: "SHA-1" },
     false,
     ["sign"]
@@ -160,9 +160,9 @@ export async function decryptSecret(stored: string, sessionSecret: string): Prom
   if (version !== "v1" || !ivB64 || !ctB64) throw new Error("Unknown secret format");
   const key = await deriveKey(sessionSecret);
   const plain = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: fromB64(ivB64) },
+    { name: "AES-GCM", iv: fromB64(ivB64) as BufferSource },
     key,
-    fromB64(ctB64)
+    fromB64(ctB64) as BufferSource
   );
   return new TextDecoder().decode(plain);
 }

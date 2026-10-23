@@ -60,7 +60,7 @@ function NotificationDropdown({
   role,
 }: {
   notifications: Notification[];
-  role: "client" | "admin";
+  role: "client" | "admin" | "co-admin";
 }) {
   const { t, lang } = useT();
   const unread = notifications.filter((n) => !n.read);

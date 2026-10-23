@@ -1,4 +1,9 @@
-// Cloudflare bindings available in context.cloudflare.env
+// Cloudflare bindings available in context.cloudflare.env.
+// `export {}` makes this file a module, so `declare module "react-router"`
+// below augments react-router instead of replacing its types.
+export {};
+
+declare global {
 interface CloudflareEnv {
   // D1 database
   DB: D1Database;
@@ -16,6 +21,7 @@ interface CloudflareEnv {
   VALUE_FROM_CLOUDFLARE: string;
   // UptimeRobot API key (wrangler secret)
   UPTIMEROBOT_API_KEY?: string;
+}
 }
 
 declare module "react-router" {

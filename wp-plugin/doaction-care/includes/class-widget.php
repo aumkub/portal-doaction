@@ -31,6 +31,16 @@ class DoAction_Care_Widget {
 			return;
 		}
 		wp_add_dashboard_widget( 'doaction_care_widget', 'Do Action: Care', array( __CLASS__, 'render' ) );
+
+		// First box of the first column. A user who drags it elsewhere keeps their own order.
+		global $wp_meta_boxes;
+		$normal = isset( $wp_meta_boxes['dashboard']['normal']['core'] ) ? $wp_meta_boxes['dashboard']['normal']['core'] : array();
+		if ( isset( $normal['doaction_care_widget'] ) ) {
+			$ours = array( 'doaction_care_widget' => $normal['doaction_care_widget'] );
+			unset( $normal['doaction_care_widget'] );
+			$wp_meta_boxes['dashboard']['normal']['high'] = array_merge( $ours, isset( $wp_meta_boxes['dashboard']['normal']['high'] ) ? $wp_meta_boxes['dashboard']['normal']['high'] : array() );
+			$wp_meta_boxes['dashboard']['normal']['core'] = $normal;
+		}
 	}
 
 	public static function render() {
@@ -81,6 +91,10 @@ class DoAction_Care_Widget {
 						— ทีมจะติดต่อกลับผ่านบัญชีลูกค้าของเว็บไซต์นี้
 					<?php endif; ?>
 				</div>
+			<?php elseif ( 'blocked' === $notice ) : ?>
+				<div class="dac-notice is-error">การแจ้งปัญหาจากเว็บไซต์นี้ถูกระงับชั่วคราว กรุณาติดต่อทีม do action ทางอื่น</div>
+			<?php elseif ( 'rate' === $notice ) : ?>
+				<div class="dac-notice is-error">แจ้งเรื่องถี่เกินไป (ไม่เกิน 5 เรื่องต่อชั่วโมง) กรุณาเพิ่มรายละเอียดในเรื่องเดิมผ่านพอร์ทัล</div>
 			<?php elseif ( 'error' === $notice ) : ?>
 				<div class="dac-notice is-error">ส่งเรื่องไม่สำเร็จ ลองใหม่ หรือแจ้งผ่านพอร์ทัล</div>
 			<?php endif; ?>
@@ -197,6 +211,9 @@ class DoAction_Care_Widget {
 			$ok  = ! is_wp_error( $res ) && 200 === $res['status'];
 		}
 		$args = array( 'doaction_care_ticket' => $ok ? 'ok' : 'error' );
+		if ( ! $ok && ! is_wp_error( $res ) && is_array( $res ) && 429 === $res['status'] && is_array( $res['data'] ) ) {
+			$args['doaction_care_ticket'] = isset( $res['data']['error'] ) && 'blocked' === $res['data']['error'] ? 'blocked' : 'rate';
+		}
 		if ( $ok && is_array( $res['data'] ) && ! empty( $res['data']['can_open'] ) && preg_match( '/^[A-Za-z0-9_-]{8,64}$/', (string) $res['data']['ticket_id'] ) ) {
 			$args['doaction_care_open'] = (string) $res['data']['ticket_id'];
 		}

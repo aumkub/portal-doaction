@@ -1,4 +1,4 @@
-import { Form, Link, redirect } from "react-router";
+import { Form, Link, redirect, useLoaderData } from "react-router";
 import { emailTeamNewTicket } from "~/lib/email-alerts.server";
 import { z } from "zod";
 import { requireUser } from "~/lib/auth.server";
@@ -7,6 +7,7 @@ import { generateId } from "~/lib/utils";
 import { useT } from "~/lib/i18n";
 import { NativeSelect } from "~/components/ui/native-select";
 import { sendTelegramNotificationForClient } from "~/lib/telegram.server";
+import { ticketGate } from "~/lib/ticket-guard.server";
 
 const TicketSchema = z.object({
   title: z.string().min(1, "กรุณากรอกหัวข้อ"),
@@ -18,6 +19,14 @@ export function meta() {
   return [{ title: "New Ticket — do action portal" }];
 }
 
+export async function loader({ request, context }: any) {
+  const env = context.cloudflare.env;
+  const user = await requireUser(request, env.DB, env.SESSIONPORTAL);
+  const client = await createDB(env.DB).getClientByUserId(user.id);
+  const gate = client ? await ticketGate(env, client) : { ok: true as const };
+  return { blocked: gate.ok ? null : gate.message };
+}
+
 export async function action({ request, context }: any) {
   const user = await requireUser(
     request,
@@ -27,6 +36,8 @@ export async function action({ request, context }: any) {
   const db = createDB(context.cloudflare.env.DB);
   const client = await db.getClientByUserId(user.id);
   if (!client) return { error: "Client not found" };
+  const gate = await ticketGate(context.cloudflare.env, client);
+  if (!gate.ok) return { error: gate.message, errors: { title: [gate.message] } };
 
   const formData = await request.formData();
   const parsed = TicketSchema.safeParse(Object.fromEntries(formData));
@@ -86,6 +97,7 @@ export async function action({ request, context }: any) {
 export default function NewTicketPage({ actionData }: any) {
   const errors = actionData?.errors;
   const { t } = useT();
+  const { blocked } = useLoaderData() as { blocked: string | null };
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -94,7 +106,11 @@ export default function NewTicketPage({ actionData }: any) {
         <p className="mt-1 text-sm text-muted-ink">{t("new_ticket_subtitle")}</p>
       </div>
 
-      <div className="rounded-[20px] border border-line bg-white p-5 md:p-6">
+      {blocked && (
+        <div className="rounded-[20px] border border-[#F6D3B0] bg-[#FFF7EE] px-5 py-4 text-sm text-[#7A3410]">{blocked}</div>
+      )}
+
+      <div className={`rounded-[20px] border border-line bg-white p-5 md:p-6 ${blocked ? "pointer-events-none opacity-50" : ""}`} aria-disabled={Boolean(blocked)}>
         <Form method="post" className="space-y-5">
           <div>
             <label className="mb-1.5 block text-[13px] font-medium text-ink-soft">

@@ -22,7 +22,7 @@ export function randomHex(bytes: number): string {
 
 export async function sha256hex(data: string | Uint8Array): Promise<string> {
   const bytes = typeof data === "string" ? enc.encode(data) : data;
-  return toHex(await crypto.subtle.digest("SHA-256", bytes));
+  return toHex(await crypto.subtle.digest("SHA-256", bytes as BufferSource));
 }
 
 export async function hmacHex(secret: string, message: string): Promise<string> {

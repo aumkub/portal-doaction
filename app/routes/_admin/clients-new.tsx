@@ -56,11 +56,20 @@ export async function action({ request, context }: Route.ActionArgs) {
     const userId = generateId();
     // clients.user_id is required; internal sites get a placeholder user that
     // has no reachable email, so nobody can request a sign-in link for it.
-    await db.createUser({ id: userId, email: `internal-${clientId}@internal.invalid`, name: company_name, role: "client", avatar_url: null });
-    await db.createClient({
-      id: clientId, user_id: userId, company_name, website_url: website_url || null, cc_emails: null,
-      package: "basic", contract_start: null, contract_end: null, notes: notes || null, kind: "internal",
-    });
+    // One batch: either both rows exist or neither (no orphan user on failure).
+    try {
+      await env.DB.batch([
+        env.DB.prepare(
+          "INSERT INTO users (id, email, name, role, team_type, avatar_url, created_at, updated_at) VALUES (?, ?, ?, 'client', 'co-admin', NULL, unixepoch(), unixepoch())"
+        ).bind(userId, `internal-${clientId}@internal.invalid`, company_name),
+        env.DB.prepare(
+          "INSERT INTO clients (id, user_id, company_name, website_url, package, notes, kind) VALUES (?, ?, ?, ?, 'basic', ?, 'internal')"
+        ).bind(clientId, userId, company_name, website_url || null, notes || null),
+      ]);
+    } catch (e) {
+      console.error("[clients-new] internal create failed", e);
+      return { errors: { company_name: ["บันทึกไม่สำเร็จ ลองอีกครั้ง"] } };
+    }
     return redirect(`/admin/clients/${clientId}`);
   }
   const parsed = Schema.safeParse(Object.fromEntries(formData));
@@ -83,7 +92,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   const userId = generateId();
   const clientId = generateId();
 
-  await db.createUser({ id: userId, email, name, role: "client", avatar_url: null });
+  await db.createUser({ id: userId, email, name, role: "client", avatar_url: null, password_hash: null });
   await db.createClient({
     id: clientId,
     user_id: userId,

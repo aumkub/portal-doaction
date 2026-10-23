@@ -60,6 +60,8 @@ export interface Client {
   kind: ClientKind;
   /** 1 = the client may sign in from their wp-admin with one click (email must match). */
   sso_enabled: number;
+  /** 1 = an admin suspended new tickets from this client. */
+  ticket_block: number;
   deleted_at?: number | null;
   created_at: number;
 }
@@ -130,8 +132,8 @@ export interface SupportTicket {
   resolved_at: number | null;
   created_at: number;
   updated_at: number;
-  deleted_at: number | null;
-  deleted_by: string | null;
+  deleted_at?: number | null;
+  deleted_by?: string | null;
 }
 
 /** The slice of a user that is safe to send to the browser alongside messages. */

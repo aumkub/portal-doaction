@@ -111,7 +111,7 @@ export async function loader({ request, context }: any) {
     }
   }
 
-  const careAlert = await context.cloudflare.env.DB
+  const careAlert = await (context.cloudflare.env as CloudflareEnv).DB
     .prepare(
       `SELECT
          SUM(CASE WHEN s.last_seen_at IS NULL OR s.last_seen_at < ? THEN 1 ELSE 0 END) AS silent,

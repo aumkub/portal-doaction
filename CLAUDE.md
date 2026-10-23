@@ -17,7 +17,7 @@ npm run db:init:local   # Apply migrations to local D1
 npm run db:init:remote  # Apply migrations to production D1
 ```
 
-There are no tests. Use `npm run check` to validate TypeScript and build integrity before committing.
+There are no tests. Use `npm run check` to validate TypeScript and build integrity before committing. It runs `tsc -b`: the root `tsconfig.json` only references sub-projects, so a bare `tsc` checks nothing.
 
 ## Architecture
 
@@ -54,7 +54,7 @@ Routes are defined explicitly (not file-based) in `app/routes.ts`. Three layout 
 - `TicketMessage.is_internal` (0/1) — internal notes hidden from clients
 - All timestamps are Unix epoch integers
 
-### i18n (`app/lib/i18n.tsx`, `app/lib/translations.ts`)
+### i18n (`app/lib/i18n-provider.tsx` via `~/lib/i18n`, `app/lib/translations.ts`)
 - `I18nProvider` wraps the entire app in `app/root.tsx`
 - `useT()` returns `{ t, lang, setLang }` — use in any component
 - Language preference stored in `localStorage` under key `portal_lang`, defaults to `"th"`
