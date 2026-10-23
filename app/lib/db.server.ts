@@ -1289,6 +1289,8 @@ export function createDB(d1: D1Database) {
         .prepare(
           `SELECT j.*, s.site_url FROM site_jobs j JOIN sites s ON s.id = j.site_id
            WHERE s.client_id = ? AND j.status = 'succeeded' AND j.reported_at IS NULL
+             -- "Already up to date" runs also finish as succeeded; only real version changes go in a report.
+             AND j.result_version IS NOT NULL AND j.result_version IS NOT j.from_version
              AND j.finished_at >= ? AND j.finished_at < ?
            ORDER BY j.finished_at`
         )
