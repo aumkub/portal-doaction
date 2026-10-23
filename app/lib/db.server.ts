@@ -1196,7 +1196,7 @@ export function createDB(d1: D1Database) {
                SELECT id FROM site_jobs
                WHERE site_id = ? AND status = 'queued' AND not_before <= ?
                  AND NOT EXISTS (SELECT 1 FROM site_jobs WHERE site_id = ? AND status = 'running')
-               ORDER BY CASE kind WHEN 'plugin' THEN 0 WHEN 'theme' THEN 1 ELSE 2 END, created_at
+               ORDER BY slug = 'doaction-care/doaction-care.php' DESC, CASE kind WHEN 'plugin' THEN 0 WHEN 'theme' THEN 1 ELSE 2 END, created_at
                LIMIT 1
              )
              RETURNING *`

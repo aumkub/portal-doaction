@@ -18,7 +18,7 @@ import { InventorySchema, JobReportSchema, PairSchema, SsoRequestSchema, WidgetT
 import { parseClientCcEmails } from "~/lib/client-cc";
 import { RENEWAL_TITLE, ticketGate } from "~/lib/ticket-guard.server";
 import { clientSupportExpired } from "~/lib/contract";
-import { CARE_PAUSED_KEY, addJobToDraftReport } from "./jobs.server";
+import { CARE_PAUSED_KEY, addJobToDraftReport, wakeSite } from "./jobs.server";
 import type { SiteRow } from "~/lib/db.server";
 import { emailSsoVerification, emailTeamNewTicket, emailTicketReceipt } from "~/lib/email-alerts.server";
 import { sendTelegramNotificationForClient } from "~/lib/telegram.server";
@@ -93,7 +93,7 @@ async function pluginRelease(env: CloudflareEnv, origin: string) {
   }
 }
 
-export async function handleAgentRequest(request: Request, env: CloudflareEnv): Promise<Response> {
+export async function handleAgentRequest(request: Request, env: CloudflareEnv, ctx?: ExecutionContext): Promise<Response> {
   const { pathname } = new URL(request.url);
   const download = pathname.match(PLUGIN_FILE_RE);
   if (download && request.method === "GET") {
@@ -116,6 +116,7 @@ export async function handleAgentRequest(request: Request, env: CloudflareEnv): 
     if (pathname === "/agent/v1/jobs/report") return await handleJobReport(request, env);
     if (pathname === "/agent/v1/ticket") return await handleWidgetTicket(request, env);
     if (pathname === "/agent/v1/sso") return await handleSso(request, env);
+    if (pathname === "/agent/v1/jobs/continue") return await handleJobsContinue(request, env, ctx);
     return json(404, { error: "not_found" });
   } catch (err) {
     console.error("agent error", err);
@@ -314,6 +315,29 @@ async function handleJobsNext(request: Request, env: CloudflareEnv): Promise<Res
   return signedJson(auth.secret, 200, {
     job: job && { id: job.id, kind: job.kind, slug: job.slug, to_version: job.to_version },
   });
+}
+
+/**
+ * A site's run stopped on its time budget with work left: wake it again so
+ * the next batch starts in a fresh PHP request instead of an hour later.
+ */
+async function handleJobsContinue(request: Request, env: CloudflareEnv, ctx?: ExecutionContext): Promise<Response> {
+  const auth = await authenticate(request, env);
+  if (auth instanceof Response) return auth;
+  const left = await env.DB
+    .prepare("SELECT COUNT(*) AS n FROM site_jobs WHERE site_id = ? AND status = 'queued' AND not_before <= unixepoch()")
+    .bind(auth.site.id)
+    .first<{ n: number }>();
+  const more = (left?.n ?? 0) > 0 && !(await env.SESSIONPORTAL.get(CARE_PAUSED_KEY));
+  if (more) {
+    const invRow = await env.DB.prepare("SELECT json FROM site_inventory WHERE site_id = ?").bind(auth.site.id).first<{ json: string }>();
+    const home = invRow ? ((JSON.parse(invRow.json) as { home_url?: string }).home_url ?? auth.site.site_url) : auth.site.site_url;
+    // Give the site a moment to finish the request that called us.
+    const job = new Promise<void>((r) => setTimeout(r, 3000)).then(() => wakeSite(env, auth.site, home)).then(() => undefined);
+    if (ctx) ctx.waitUntil(job);
+    else await job;
+  }
+  return signedJson(auth.secret, 200, { ok: true, more });
 }
 
 async function handleJobReport(request: Request, env: CloudflareEnv): Promise<Response> {

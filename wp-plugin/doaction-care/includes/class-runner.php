@@ -42,9 +42,14 @@ class DoAction_Care_Runner {
 		$started      = time();
 		$ran          = 0;
 		$self_updated = false;
+		$out_of_time  = false;
 		try {
 			self::recover_interrupted();
-			while ( time() - $started < self::MAX_RUN_TIME ) {
+			while ( true ) {
+				if ( time() - $started >= self::MAX_RUN_TIME ) {
+					$out_of_time = true;
+					break;
+				}
 				set_transient( self::LOCK, time(), 15 * MINUTE_IN_SECONDS );
 				$res = DoAction_Care_Api_Client::signed_post( 'jobs/next', array() );
 				if ( is_wp_error( $res ) || 200 !== $res['status'] || empty( $res['data']['job'] ) || ! is_array( $res['data']['job'] ) ) {
@@ -72,6 +77,11 @@ class DoAction_Care_Runner {
 		} finally {
 			delete_transient( self::LOCK );
 			WP_Upgrader::release_lock( 'auto_updater' );
+		}
+		// Work left: ask the portal to wake us again for the next batch (a
+		// fresh request, so each batch stays inside the host's time limit).
+		if ( $out_of_time || $self_updated ) {
+			DoAction_Care_Api_Client::signed_post( 'jobs/continue', array() );
 		}
 		if ( $ran > 0 && ! $self_updated ) {
 			wp_clean_plugins_cache( true );

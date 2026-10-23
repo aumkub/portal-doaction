@@ -43,7 +43,7 @@ export default {
       return withSecurityHeaders(await handleMcpRequest(request, env));
     }
     if (isAgentPath(pathname)) {
-      return withSecurityHeaders(await handleAgentRequest(request, env));
+      return withSecurityHeaders(await handleAgentRequest(request, env, ctx));
     }
     return withSecurityHeaders(await requestHandler(request, {
       cloudflare: { env, ctx },

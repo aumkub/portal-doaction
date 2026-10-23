@@ -80,10 +80,24 @@ export async function wakeSite(env: CloudflareEnv, site: { id: string; secret_en
       body,
       signal: AbortSignal.timeout(25_000),
     });
+    await recordWake(env, site.id, res.ok, `HTTP ${res.status}`);
     return res.ok;
-  } catch {
+  } catch (e) {
+    await recordWake(env, site.id, false, e instanceof Error && e.name === "TimeoutError" ? "ไม่ตอบใน 25 วินาที" : "เชื่อมต่อไม่ได้");
     return false;
   }
+}
+
+export type WakeRecord = { at: number; ok: boolean; detail: string };
+
+/** Last wake attempt per site, so the UI can say why queued jobs have not started. */
+async function recordWake(env: CloudflareEnv, siteId: string, ok: boolean, detail: string) {
+  const rec: WakeRecord = { at: Math.floor(Date.now() / 1000), ok, detail };
+  await env.SESSIONPORTAL.put(`wake-last:${siteId}`, JSON.stringify(rec), { expirationTtl: 7 * 86400 }).catch(() => {});
+}
+
+export async function lastWake(env: CloudflareEnv, siteId: string): Promise<WakeRecord | null> {
+  return (await env.SESSIONPORTAL.get(`wake-last:${siteId}`, "json").catch(() => null)) as WakeRecord | null;
 }
 
 const KIND_LABEL: Record<SiteJobKind, string> = { plugin: "ปลั๊กอิน", theme: "ธีม", core: "WordPress core" };

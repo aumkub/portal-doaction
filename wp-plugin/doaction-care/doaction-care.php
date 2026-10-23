@@ -3,7 +3,7 @@
  * Plugin Name:       Do Action: Care
  * Plugin URI:        https://doaction.co.th
  * Description:       Connects this site to the do action client portal: reports versions and available updates, runs updates the do action team starts (with checks and automatic rollback), and shows a care summary on the dashboard.
- * Version:           0.4.3
+ * Version:           0.4.4
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            do action
@@ -16,7 +16,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'DOACTION_CARE_VERSION', '0.4.3' );
+define( 'DOACTION_CARE_VERSION', '0.4.4' );
 define( 'DOACTION_CARE_FILE', __FILE__ );
 if ( ! defined( 'DOACTION_CARE_PORTAL' ) ) {
 	define( 'DOACTION_CARE_PORTAL', 'https://portal.doaction.co.th' );
@@ -95,10 +95,21 @@ add_action(
 				'methods'             => 'POST',
 				'permission_callback' => array( 'DoAction_Care_Api_Client', 'verify_portal_request' ),
 				'callback'            => static function () {
-					if ( ! wp_next_scheduled( DOACTION_CARE_WAKE_HOOK ) ) {
-						wp_schedule_single_event( time(), DOACTION_CARE_WAKE_HOOK );
-					}
-					spawn_cron();
+					// Do the work in this request after the reply is sent, instead of
+					// relying on WP-cron's loopback (often blocked by WAFs/CDNs).
+					add_action(
+						'shutdown',
+						static function () {
+							ignore_user_abort( true );
+							if ( function_exists( 'fastcgi_finish_request' ) ) {
+								fastcgi_finish_request();
+							} elseif ( function_exists( 'litespeed_finish_request' ) ) {
+								litespeed_finish_request();
+							}
+							do_action( DOACTION_CARE_WAKE_HOOK );
+						},
+						PHP_INT_MAX
+					);
 					return new WP_REST_Response( array( 'ok' => true ), 202 );
 				},
 			)

@@ -6,7 +6,7 @@ import type { Route } from "./+types/sites";
 import { requireAdmin, requireCoAdminOrAdmin } from "~/lib/auth.server";
 import { createDB } from "~/lib/db.server";
 import { ONLINE_WINDOW_S, SILENT_AFTER_S, SiteCard, type ConnectedSite } from "~/components/admin/connected-sites";
-import { CARE_PAUSED_KEY, nextNightWindow, queueJobs, wakeSite, type JobRequest } from "~/lib/agent/jobs.server";
+import { CARE_PAUSED_KEY, lastWake, nextNightWindow, queueJobs, wakeSite, type JobRequest, type WakeRecord } from "~/lib/agent/jobs.server";
 import { InventorySchema } from "~/lib/agent/inventory";
 import { clientSupportExpired } from "~/lib/contract";
 import { ConfirmButton } from "~/components/ui/confirm-button";
@@ -40,6 +40,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const now = Math.floor(Date.now() / 1000);
   const jobs = await db.listSiteJobs({ site_ids: sites.map((x) => x.id), since: now - 30 * 86400, limit: 300 });
   const paused = Boolean(await env.SESSIONPORTAL.get(CARE_PAUSED_KEY));
+  const waiting = [...new Set(jobs.filter((j) => j.status === "queued" && j.not_before <= now).map((j) => j.site_id))];
+  const wakes = Object.fromEntries(await Promise.all(waiting.map(async (id) => [id, await lastWake(env, id)] as const)));
   // Clients and in-house records with no connected site yet (plugin not installed or paired).
   let unconnected = (
     await env.DB.prepare(
@@ -53,7 +55,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     unconnected = unconnected.filter((c) => assigned.has(c.id));
   }
   return {
-    sites, jobs, paused, now, canManage: user.role === "admin",
+    sites, jobs, paused, now, wakes, canManage: user.role === "admin",
     unconnected: unconnected.map((c) => ({ ...c, expired: clientSupportExpired(c) })),
   };
 }
@@ -148,10 +150,18 @@ function Spinner() {
   return <span className="inline-block h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-ink/20 border-t-ink" aria-hidden="true" />;
 }
 
-function SiteRow({ site, now, activity, open, onToggle, children }: {
-  site: SiteWithClient; now: number; activity: SiteActivity | null; open: boolean; onToggle: () => void; children: React.ReactNode;
+function SiteRow({ site, now, activity, wake, oldestQueued, open, onToggle, children }: {
+  site: SiteWithClient; now: number; activity: SiteActivity | null; wake: WakeRecord | null; oldestQueued: number;
+  open: boolean; onToggle: () => void; children: React.ReactNode;
 }) {
   const working = Boolean(activity && (activity.running || activity.queued));
+  // Queued for a while with nothing running: say why, so nobody waits blind.
+  const stalled = Boolean(activity && !activity.running && activity.queued && now - oldestQueued > 180);
+  const stallText = !stalled
+    ? null
+    : wake && !wake.ok
+      ? `เว็บยังไม่มารับงาน — ปลุกไม่สำเร็จ (${wake.detail}) จะเริ่มในรอบส่งข้อมูลถัดไป ภายใน 1 ชม.`
+      : "เว็บยังไม่มารับงาน — จะเริ่มในรอบส่งข้อมูลถัดไป ภายใน 1 ชม.";
   const inv = site.inventory;
   const offered = inv ? offeredUpdates(inv) : [];
   const majors = offered.filter((u) => u.level === "major").length;
@@ -222,13 +232,14 @@ function SiteRow({ site, now, activity, open, onToggle, children }: {
         </span>
         <span className={`text-faint-ink transition-transform ${open ? "rotate-90" : ""}`} aria-hidden="true">›</span>
       </button>
+      {stallText && <p className="-mt-1 px-5 pb-2.5 pl-[42px] text-[11px] text-[#B4541A]">{stallText}</p>}
       {open && <div className="px-3 pb-4 sm:px-5">{children}</div>}
     </li>
   );
 }
 
 export default function AdminSitesPage() {
-  const { sites, jobs, paused, now, canManage, unconnected } = useLoaderData<typeof loader>();
+  const { sites, jobs, paused, now, wakes, canManage, unconnected } = useLoaderData<typeof loader>();
   const [searchParams] = useSearchParams();
   const initial = searchParams.get("filter") as Filter | null;
   const [filter, setFilter] = useState<Filter>(initial && FILTERS.includes(initial) ? initial : "all");
@@ -371,6 +382,8 @@ export default function AdminSitesPage() {
                   site={s}
                   now={now}
                   activity={activity.get(s.id) ?? null}
+                  wake={wakes[s.id] ?? null}
+                  oldestQueued={jobs.filter((j) => j.site_id === s.id && j.status === "queued").reduce((m, j) => Math.min(m, j.created_at), Infinity)}
                   open={openId === s.id}
                   onToggle={() => setOpenId(openId === s.id ? null : s.id)}
                 >
