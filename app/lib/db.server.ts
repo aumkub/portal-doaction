@@ -1121,6 +1121,14 @@ export function createDB(d1: D1Database) {
       return d1.prepare("SELECT * FROM sites WHERE id = ?").bind(id).first<SiteRow>();
     },
 
+    /** Clients with at least one paired, non-revoked site. */
+    async listConnectedClientIds(): Promise<string[]> {
+      const result = await d1
+        .prepare("SELECT DISTINCT client_id FROM sites WHERE revoked_at IS NULL")
+        .all<{ client_id: string }>();
+      return result.results.map((r) => r.client_id);
+    },
+
     async listSitesWithInventoryByClient(client_id: string) {
       const { results } = await d1
         .prepare(

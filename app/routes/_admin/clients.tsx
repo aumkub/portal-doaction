@@ -10,7 +10,7 @@ import { formatRelativeTime } from "~/lib/utils";
 import type { Client } from "~/types";
 import { useT } from "~/lib/i18n";
 import type { TranslationKey } from "~/lib/translations";
-import { FaCirclePlus, FaChevronRight, FaGlobe, FaUserSecret, FaMagnifyingGlass, FaUsers, FaClock, FaFileCircleXmark, FaCircleCheck } from "react-icons/fa6";
+import { FaCirclePlus, FaChevronRight, FaGlobe, FaUserSecret, FaMagnifyingGlass, FaUsers, FaClock, FaFileCircleXmark, FaCircleCheck, FaLinkSlash } from "react-icons/fa6";
 
 export function meta() {
   return [{ title: "จัดการลูกค้า — Admin" }];
@@ -31,6 +31,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     clients = clients.filter((c) => assignedClientIds.includes(c.id));
   }
 
+  const connected = new Set(await db.listConnectedClientIds());
   const allClientsWithStatus = await Promise.all(
     clients.map(async (client) => {
       const u = await db.getUserById(client.user_id);
@@ -48,6 +49,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
         has_monthly_report: skipReportCheck ? true : has_monthly_report,
         skip_report_check: skipReportCheck,
         contract_expired: contractExpired,
+        site_connected: connected.has(client.id),
       };
     })
   );
@@ -215,7 +217,7 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
   const { care, careCount, clients, userRole, page, totalPages, total, currentMonth, currentYear, contractFilter, expiredCount, activeCount, internalCount } = loaderData as {
     care: Record<string, { at: number; by: string }>;
     careCount: number;
-    clients: Array<Client & { first_login_at: number | null; has_monthly_report: boolean; skip_report_check?: boolean; contract_expired: boolean }>;
+    clients: Array<Client & { first_login_at: number | null; has_monthly_report: boolean; skip_report_check?: boolean; contract_expired: boolean; site_connected: boolean }>;
     userRole: string;
     page: number;
     totalPages: number;
@@ -232,6 +234,7 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
   const [search, setSearch] = useState("");
   const [reportFilter, setReportFilter] = useState<"all" | "missing" | "has">("all");
   const [loginFilter, setLoginFilter] = useState<"all" | "activated" | "pending">("all");
+  const [siteFilter, setSiteFilter] = useState<"all" | "connected" | "unconnected">("all");
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -248,9 +251,13 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
         loginFilter === "all" ||
         (loginFilter === "activated" && !!c.first_login_at) ||
         (loginFilter === "pending" && !c.first_login_at);
-      return matchesSearch && matchesReport && matchesLogin;
+      const matchesSite =
+        siteFilter === "all" ||
+        (siteFilter === "connected" && c.site_connected) ||
+        (siteFilter === "unconnected" && !c.site_connected);
+      return matchesSearch && matchesReport && matchesLogin && matchesSite;
     });
-  }, [clients, search, reportFilter, loginFilter]);
+  }, [clients, search, reportFilter, loginFilter, siteFilter]);
 
   const isCoAdmin = userRole === "co-admin";
 
@@ -364,6 +371,17 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
             </div>
           </div>
           )}
+          <div className="inline-flex max-w-full overflow-x-auto rounded-full bg-paper p-[3px]">
+            {([
+              { v: "all" as const, label: L("ทุกเว็บ", "Any site") },
+              { v: "connected" as const, label: L("เชื่อมเว็บแล้ว", "Connected") },
+              { v: "unconnected" as const, label: L(`ยังไม่เชื่อมเว็บ (${clients.filter((c) => !c.site_connected).length})`, `Not connected (${clients.filter((c) => !c.site_connected).length})`) },
+            ]).map((o) => (
+              <button key={o.v} type="button" onClick={() => setSiteFilter(o.v)} className={segBtn(siteFilter === o.v)}>
+                {o.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {filtered.length === 0 ? (
@@ -372,7 +390,7 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
               <FaUsers />
             </span>
             <p className="text-sm text-muted-ink">
-              {search || reportFilter !== "all" || loginFilter !== "all" ? "ไม่พบลูกค้าที่ค้นหา" : t("admin_clients_empty")}
+              {search || reportFilter !== "all" || loginFilter !== "all" || siteFilter !== "all" ? "ไม่พบลูกค้าที่ค้นหา" : t("admin_clients_empty")}
             </p>
           </div>
         ) : (
@@ -394,6 +412,15 @@ export default function AdminClientsPage({ loaderData }: Route.ComponentProps) {
                         {site && (
                           <>
                             <span className="max-w-full truncate">{site}</span>
+                            <span aria-hidden="true">·</span>
+                          </>
+                        )}
+                        {!client.site_connected && (
+                          <>
+                            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700">
+                              <FaLinkSlash aria-hidden="true" className="h-2.5 w-2.5" />
+                              {L("ยังไม่เชื่อมเว็บ", "Not connected")}
+                            </span>
                             <span aria-hidden="true">·</span>
                           </>
                         )}
