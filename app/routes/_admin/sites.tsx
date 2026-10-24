@@ -99,7 +99,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     const invRow = await env.DB.prepare("SELECT json FROM site_inventory WHERE site_id = ?").bind(site.id).first<{ json: string }>();
     const home = invRow ? (JSON.parse(invRow.json) as { home_url?: string }).home_url : site.site_url;
     const ok = await wakeSite(env, site, home ?? site.site_url);
-    return ok ? { ok: "ขอข้อมูลใหม่แล้ว รอสักครู่แล้วรีเฟรชหน้า" } : { error: "ติดต่อเว็บไม่ได้" };
+    return ok ? { ok: "ขอข้อมูลใหม่แล้ว" } : { error: "ติดต่อเว็บไม่ได้" };
   }
   if (intent === "wake_queued") {
     if (await env.SESSIONPORTAL.get(CARE_PAUSED_KEY)) return { error: "ระบบถูกหยุดอยู่ กด “เปิดการอัปเดต” ก่อน" };

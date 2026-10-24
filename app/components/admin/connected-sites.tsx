@@ -1,4 +1,4 @@
-import { Form, Link, useFetcher } from "react-router";
+import { Form, Link, useFetcher, useRevalidator } from "react-router";
 import { useEffect, useState } from "react";
 import { ConfirmButton } from "~/components/ui/confirm-button";
 import { NativeSelect } from "~/components/ui/native-select";
@@ -131,18 +131,45 @@ function BackupLine({ inv }: { inv: NonNullable<ConnectedSite["inventory"]> }) {
   );
 }
 
-function RefreshButton({ siteId }: { siteId: string }) {
+function RefreshButton({ siteId, lastSeen }: { siteId: string; lastSeen: number | null }) {
   const fetcher = useFetcher<{ ok?: string; error?: string }>();
+  const revalidator = useRevalidator();
+  const [waitingSince, setWaitingSince] = useState<number | null>(null);
   const msg = fetcher.data?.ok ?? fetcher.data?.error;
+
+  // After a successful wake, reload the page data every 3 s until the site has
+  // sent fresh data (last_seen_at moves past the click), for at most 90 s.
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data?.ok && waitingSince === null) setWaitingSince(Math.floor(Date.now() / 1000) - 2);
+  }, [fetcher.state, fetcher.data, waitingSince]);
+  const arrived = waitingSince !== null && lastSeen !== null && lastSeen >= waitingSince;
+  useEffect(() => {
+    if (waitingSince === null || arrived) return;
+    const started = Date.now();
+    const t = setInterval(() => {
+      if (Date.now() - started > 90_000) { clearInterval(t); setWaitingSince(null); return; }
+      if (revalidator.state === "idle") revalidator.revalidate();
+    }, 3000);
+    return () => clearInterval(t);
+  }, [waitingSince, arrived, revalidator]);
+
+  const label = fetcher.state !== "idle" ? "กำลังขอข้อมูล…"
+    : fetcher.data?.error ? "ติดต่อไม่ได้"
+    : arrived ? "อัปเดตแล้ว ✓"
+    : waitingSince !== null ? "รอข้อมูลจากเว็บ…"
+    : "รีเฟรชข้อมูล";
   return (
     <button
       type="button"
-      disabled={fetcher.state !== "idle"}
+      disabled={fetcher.state !== "idle" || (waitingSince !== null && !arrived)}
       title={msg}
-      onClick={() => fetcher.submit({ intent: "site_refresh", site_id: siteId }, { method: "post", action: "/admin/sites" })}
-      className="text-[11px] font-semibold text-muted-ink hover:text-ink disabled:opacity-50"
+      onClick={() => { setWaitingSince(null); fetcher.submit({ intent: "site_refresh", site_id: siteId }, { method: "post", action: "/admin/sites" }); }}
+      className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-muted-ink hover:text-ink disabled:opacity-60"
     >
-      {fetcher.state !== "idle" ? "กำลังขอข้อมูล…" : fetcher.data?.ok ? "ขอแล้ว ✓" : fetcher.data?.error ? "ติดต่อไม่ได้" : "รีเฟรชข้อมูล"}
+      {(fetcher.state !== "idle" || (waitingSince !== null && !arrived)) && (
+        <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border-2 border-ink/20 border-t-ink" aria-hidden="true" />
+      )}
+      {label}
     </button>
   );
 }
@@ -218,7 +245,7 @@ function UpdateForm({ site, paused, jobs }: { site: ConnectedSite; paused: boole
             <>
               อัปเดต {pickable.length} รายการบน {site.site_url}?<br />
               ระบบจะอัปเดตทีละรายการ ตรวจหน้าเว็บหลังแต่ละรายการ และย้อนกลับเวอร์ชันเดิมอัตโนมัติถ้าเว็บพัง
-              {selected.has("core:wordpress") && " — WordPress core ย้อนกลับอัตโนมัติไม่ได้ ระบบจะเช็กว่ามี backup ก่อน"}
+              {selected.has("core:wordpress") && " — WordPress core ย้อนกลับอัตโนมัติไม่ได้"}
             </>
           }
           confirmLabel="เริ่มอัปเดต"
@@ -292,7 +319,7 @@ export function SiteCard({
           <div className="flex flex-wrap items-center gap-2">
             <p className="truncate text-sm font-semibold text-ink">{site.site_url}</p>
             <Status site={site} />
-            {canUpdate && !site.revoked_at && <RefreshButton siteId={site.id} />}
+            {canUpdate && !site.revoked_at && <RefreshButton siteId={site.id} lastSeen={site.last_seen_at} />}
           </div>
           {client && (
             <Link to={`/admin/clients/${client.id}`} className="mt-0.5 inline-block text-xs font-medium text-ink-soft hover:text-ink hover:underline underline-offset-2">

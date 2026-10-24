@@ -613,10 +613,6 @@ class DoAction_Care_Runner {
 
 	private function update_core() {
 		$age = self::latest_backup_age();
-		if ( null === $age ) {
-			$this->note( 'ไม่พบข้อมูล backup (UpdraftPlus / All-in-One WP Migration) — ไม่อัปเดต core เพื่อความปลอดภัย' );
-			return $this->result( 'failed' );
-		}
 		$before = $this->check_site();
 		if ( ! $before['ok'] ) {
 			$this->note( 'เว็บมีปัญหาอยู่แล้วก่อนอัปเดต: ' . $before['detail'] . ' — ไม่ได้อัปเดต' );
@@ -634,7 +630,7 @@ class DoAction_Care_Runner {
 			$this->note( 'ไม่มีอัปเดต WordPress core แล้ว' );
 			return $this->result( 'succeeded', get_bloginfo( 'version' ) );
 		}
-		$this->note( 'WordPress ' . get_bloginfo( 'version' ) . ' → ' . $update->current . ' (backup ล่าสุด ' . round( $age / 3600, 1 ) . ' ชม. ที่แล้ว)' );
+		$this->note( 'WordPress ' . get_bloginfo( 'version' ) . ' → ' . $update->current . ( null === $age ? ' (ไม่พบข้อมูล backup)' : ' (backup ล่าสุด ' . round( $age / 3600, 1 ) . ' ชม. ที่แล้ว)' ) );
 		$upgrader = new Core_Upgrader( new Automatic_Upgrader_Skin() );
 		$res      = $upgrader->upgrade( $update );
 		$this->clear_maintenance();
