@@ -66,13 +66,6 @@ async function readBody(request: Request): Promise<Uint8Array | null> {
 
 const PLUGIN_FILE_RE = /^\/agent\/v1\/plugin\/(doaction-care-\d+\.\d+\.\d+\.zip)$/;
 
-function newerVersion(a: string, b: string): boolean {
-  const pa = a.split(".").map(Number);
-  const pb = b.split(".").map(Number);
-  for (let i = 0; i < 3; i++) if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) > (pb[i] ?? 0);
-  return false;
-}
-
 /** Latest signed plugin release (uploaded by scripts/release-care-plugin.mjs). */
 async function pluginRelease(env: CloudflareEnv, origin: string) {
   const obj = await env.ATTACHMENTS.get("care-plugin/latest.json").catch(() => null);
@@ -227,21 +220,8 @@ async function handleHeartbeat(request: Request, env: CloudflareEnv): Promise<Re
   });
   await notifyNewMajorUpdates(env, site, inv).catch((e) => console.error("[agent] major notify failed", e));
 
+  // Our own plugin is updated like any other: only when an admin picks it.
   const release = await pluginRelease(env, new URL(request.url).origin);
-  // Our own agent is kept current without waiting for the team: queue a
-  // self-update (same backup/rollback path) when a newer signed release exists.
-  const alreadyDone = release && (await env.DB
-    // Any earlier attempt at this release (done, failed or rolled back) stops
-    // the hourly auto-queue; a failed release is retried only by a person.
-    .prepare("SELECT 1 FROM site_jobs WHERE site_id = ? AND slug = 'doaction-care/doaction-care.php' AND status != 'cancelled' AND (to_version = ? OR result_version = ?) LIMIT 1")
-    .bind(siteId, release.version, release.version)
-    .first());
-  if (release && !alreadyDone && newerVersion(release.version, inv.plugin_version) && !(await env.SESSIONPORTAL.get(CARE_PAUSED_KEY))) {
-    await db.queueSiteJobs([{
-      id: generateId(), site_id: siteId, kind: "plugin", slug: "doaction-care/doaction-care.php", name: "Do Action: Care",
-      from_version: inv.plugin_version, to_version: release.version, not_before: 0, created_by: "system", created_at: now,
-    }]);
-  }
   // Lets the site check back in 15 minutes instead of an hour while work is waiting.
   const jobsWaiting = !(await env.SESSIONPORTAL.get(CARE_PAUSED_KEY)) && !!(await env.DB
     .prepare("SELECT 1 FROM site_jobs WHERE site_id = ? AND status = 'queued' AND not_before <= ? LIMIT 1")

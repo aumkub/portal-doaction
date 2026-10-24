@@ -9,7 +9,6 @@ import { decryptSecret, randomHex, signPayload } from "./crypto";
 import { InventorySchema, type SiteInventory } from "./inventory";
 import { backupIssues, type BackupIssue } from "./backup-health";
 import { pendingUpdates, type PendingUpdate } from "./update-level";
-import { familyRoot } from "./families";
 
 export const CARE_PAUSED_KEY = "care:paused";
 /** A running job with no report after this long is marked failed. */
@@ -38,16 +37,8 @@ export async function queueJobs(opts: {
   userId: string;
   notBefore: number;
 }): Promise<number> {
-  const { env, siteId, inventory, userId, notBefore } = opts;
-  let { items } = opts;
+  const { env, siteId, inventory, items, userId, notBefore } = opts;
   const now = Math.floor(Date.now() / 1000);
-  // A plugin and its add-ons go together: asking for one queues the others that have an update too.
-  const slugs = inventory.plugins.map((p) => p.slug);
-  const roots = new Set(items.filter((i) => i.kind === "plugin").map((i) => familyRoot(i.slug, slugs)));
-  const family = inventory.plugins
-    .filter((p) => p.update_version && !p.update_blocked && roots.has(familyRoot(p.slug, slugs)))
-    .map((p): JobRequest => ({ kind: "plugin", slug: p.slug }));
-  items = [...items, ...family.filter((f) => !items.some((i) => i.kind === "plugin" && i.slug === f.slug))];
   const jobs = items.flatMap((it): { kind: SiteJobKind; slug: string; name: string; from: string; to: string | null }[] => {
     if (it.kind === "core") {
       return inventory.core_update && !inventory.core_update_blocked

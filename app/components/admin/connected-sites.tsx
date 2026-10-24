@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { ConfirmButton } from "~/components/ui/confirm-button";
 import { NativeSelect } from "~/components/ui/native-select";
 import { pendingUpdates, updateLevel, type UpdateLevel } from "~/lib/agent/update-level";
+import { familyRoot } from "~/lib/agent/families";
 import type { SiteInventory } from "~/lib/agent/inventory";
 
 export type ConnectedSite = {
@@ -194,17 +195,37 @@ function UpdateForm({ site, paused, jobs }: { site: ConnectedSite; paused: boole
   const inFlight = new Map(
     jobs.filter((j) => j.status === "queued" || j.status === "running").map((j) => [`${j.kind}:${j.kind === "core" ? "wordpress" : j.slug}`, j.status])
   );
-  const [selected, setSelected] = useState<Set<string>>(() => new Set(items.filter((i) => i.level !== "major" && !i.blocked).map((i) => i.key)));
+  // Nothing is picked until an admin picks it.
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
   if (items.length === 0) return null;
   const busy = fetcher.state !== "idle";
   const pickable = [...selected].filter((k) => !inFlight.has(k));
-  const toggle = (k: string) => setSelected((s) => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; });
+  // A plugin and its add-ons are picked together (they're updated as one set).
+  const slugs = inv.plugins.map((p) => p.slug);
+  const familyOf = (k: string) => {
+    if (!k.startsWith("plugin:")) return [k];
+    const root = familyRoot(k.slice(7), slugs);
+    return items.filter((i) => i.key.startsWith("plugin:") && !i.blocked && familyRoot(i.key.slice(7), slugs) === root).map((i) => i.key);
+  };
+  const toggle = (k: string) => setSelected((s) => {
+    const n = new Set(s);
+    const on = !n.has(k);
+    for (const key of familyOf(k)) on ? n.add(key) : n.delete(key);
+    return n;
+  });
+  const safe = items.filter((i) => i.level !== "major" && !i.blocked && !inFlight.has(i.key)).map((i) => i.key);
 
   return (
     <fetcher.Form method="post" action="/admin/sites" className="mt-3 rounded-xl border border-line-soft bg-white">
       <input type="hidden" name="intent" value="jobs_queue" />
       <input type="hidden" name="site_id" value={site.id} />
-      <p className="border-b border-line-soft px-3.5 py-2 text-xs font-semibold text-ink">เลือกรายการที่จะอัปเดต</p>
+      <div className="flex items-center justify-between gap-2 border-b border-line-soft px-3.5 py-2">
+        <p className="text-xs font-semibold text-ink">เลือกรายการที่จะอัปเดต</p>
+        <span className="flex gap-3 text-[11px] font-semibold">
+          {safe.length > 0 && <button type="button" onClick={() => setSelected(new Set(safe))} className="text-muted-ink hover:text-ink">เลือกที่ไม่ใช่ Major ({safe.length})</button>}
+          {selected.size > 0 && <button type="button" onClick={() => setSelected(new Set())} className="text-muted-ink hover:text-ink">ล้าง</button>}
+        </span>
+      </div>
       <ul className="max-h-72 divide-y divide-line-soft overflow-y-auto">
         {items.map((it) => (
           <li key={it.key}>
@@ -244,7 +265,7 @@ function UpdateForm({ site, paused, jobs }: { site: ConnectedSite; paused: boole
           message={
             <>
               อัปเดต {pickable.length} รายการบน {site.site_url}?<br />
-              ระบบจะอัปเดตทีละรายการ ตรวจหน้าเว็บหลังแต่ละรายการ และย้อนกลับเวอร์ชันเดิมอัตโนมัติถ้าเว็บพัง
+              ระบบจะอัปเดตทีละรายการ (ปลั๊กอินหลักกับส่วนเสริมอัปเดตเป็นชุด) ตรวจหน้าเว็บหลังอัปเดต และย้อนกลับเวอร์ชันเดิมอัตโนมัติถ้าเว็บพัง
               {selected.has("core:wordpress") && " — WordPress core ย้อนกลับอัตโนมัติไม่ได้"}
             </>
           }
