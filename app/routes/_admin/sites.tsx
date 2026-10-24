@@ -38,18 +38,20 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     },
   );
   const now = Math.floor(Date.now() / 1000);
-  const jobs = await db.listSiteJobs({ site_ids: sites.map((x) => x.id), since: now - 30 * 86400, limit: 300 });
-  const paused = Boolean(await env.SESSIONPORTAL.get(CARE_PAUSED_KEY));
+  const unconnectedP = env.DB.prepare(
+    `SELECT c.id, c.company_name, c.website_url, c.kind, c.contract_end FROM clients c
+     WHERE c.deleted_at IS NULL AND NOT EXISTS (SELECT 1 FROM sites s WHERE s.client_id = c.id AND s.revoked_at IS NULL)
+     ORDER BY c.kind DESC, c.company_name`
+  ).all<{ id: string; company_name: string; website_url: string | null; kind: string; contract_end: string | null }>();
+  const [jobs, pausedRaw] = await Promise.all([
+    db.listSiteJobs({ site_ids: sites.map((x) => x.id), since: now - 30 * 86400, limit: 300 }),
+    env.SESSIONPORTAL.get(CARE_PAUSED_KEY),
+  ]);
+  const paused = Boolean(pausedRaw);
   const waiting = [...new Set(jobs.filter((j) => j.status === "queued" && j.not_before <= now).map((j) => j.site_id))];
   const wakes = Object.fromEntries(await Promise.all(waiting.map(async (id) => [id, await lastWake(env, id)] as const)));
   // Clients and in-house records with no connected site yet (plugin not installed or paired).
-  let unconnected = (
-    await env.DB.prepare(
-      `SELECT c.id, c.company_name, c.website_url, c.kind, c.contract_end FROM clients c
-       WHERE c.deleted_at IS NULL AND NOT EXISTS (SELECT 1 FROM sites s WHERE s.client_id = c.id AND s.revoked_at IS NULL)
-       ORDER BY c.kind DESC, c.company_name`
-    ).all<{ id: string; company_name: string; website_url: string | null; kind: string; contract_end: string | null }>()
-  ).results;
+  let unconnected = (await unconnectedP).results;
   if (user.role !== "admin") {
     const assigned = new Set((await db.listCoAdminClients(user.id)).map((a) => a.client_id));
     unconnected = unconnected.filter((c) => assigned.has(c.id));

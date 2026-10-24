@@ -77,6 +77,10 @@ export async function loader({ request, params, context }: any) {
     db.listCustomerNotes(client.id),
   ]);
 
+  const carePausedP = context.cloudflare.env.SESSIONPORTAL.get(CARE_PAUSED_KEY);
+  const ssoLogP = env.DB.prepare(
+    "SELECT l.wp_email, l.outcome, l.created_at, s.site_url FROM sso_logins l JOIN sites s ON s.id = l.site_id WHERE l.client_id = ? ORDER BY l.created_at DESC LIMIT 8"
+  ).bind(client.id).all() as Promise<D1Result<{ wp_email: string; outcome: string; created_at: number; site_url: string }>>;
   const siteRows = await db.listSitesWithInventoryByClient(client.id);
   const sites: ConnectedSite[] = siteRows.map(({ secret_enc: _s, inventory_json, inventory_updated_at: _u, client_id: _c, ...row }) => {
     let inventory = null;
@@ -85,13 +89,8 @@ export async function loader({ request, params, context }: any) {
   });
 
   const siteJobs = await db.listSiteJobs({ site_ids: sites.map((x) => x.id), since: Math.floor(Date.now() / 1000) - 30 * 86400 });
-  const carePaused = Boolean(await context.cloudflare.env.SESSIONPORTAL.get(CARE_PAUSED_KEY));
-
-  const ssoLog = (
-    await env.DB.prepare(
-      "SELECT l.wp_email, l.outcome, l.created_at, s.site_url FROM sso_logins l JOIN sites s ON s.id = l.site_id WHERE l.client_id = ? ORDER BY l.created_at DESC LIMIT 8"
-    ).bind(client.id).all() as D1Result<{ wp_email: string; outcome: string; created_at: number; site_url: string }>
-  ).results;
+  const carePaused = Boolean(await carePausedP);
+  const ssoLog = (await ssoLogP).results;
 
   const nowS = Math.floor(Date.now() / 1000);
   const openTickets = tickets.filter((tk) => ["open", "in_progress", "waiting"].includes(tk.status));

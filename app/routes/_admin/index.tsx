@@ -102,12 +102,28 @@ export async function loader({ request, context }: any) {
     (a, b) => order[a.state] - order[b.state] || a.company_name.localeCompare(b.company_name)
   );
 
+  // The remaining reads don't depend on each other: start them together.
+  const cfEnv = context.cloudflare.env as CloudflareEnv;
+  const monitorsP = user.role === "admin" ? fetchAllMonitors(getUptimeRobotKey(cfEnv), cfEnv.SESSIONPORTAL) : null;
+  const careAlertP = cfEnv.DB
+    .prepare(
+      `SELECT
+         SUM(CASE WHEN s.last_seen_at IS NULL OR s.last_seen_at < ? THEN 1 ELSE 0 END) AS silent,
+         (SELECT COUNT(*) FROM site_jobs WHERE status = 'failed' AND finished_at > ?) AS failed
+       FROM sites s JOIN clients c ON c.id = s.client_id
+       WHERE s.revoked_at IS NULL AND c.deleted_at IS NULL`
+    )
+    .bind(Math.floor(Date.now() / 1000) - 3 * 3600, Math.floor(Date.now() / 1000) - 7 * 86400)
+    .first<{ silent: number | null; failed: number }>()
+    .catch(() => null);
+  const backupProblemsP = listBackupProblems(cfEnv).catch(() => []);
+  const siteRowsP = db.listAllSitesWithInventory().catch(() => []);
+
   // Website uptime (admin only): one cached UptimeRobot call, matched to
   // active clients by website host.
   let uptime: UptimeData | null = null;
-  if (user.role === "admin") {
-    const env = context.cloudflare.env;
-    const monitors = await fetchAllMonitors(getUptimeRobotKey(env), env.SESSIONPORTAL);
+  if (monitorsP) {
+    const monitors = await monitorsP;
     if (monitors) {
       const byHost = new Map(monitors.map((m) => [m.host, m]));
       const used = new Set<string>();
@@ -123,23 +139,12 @@ export async function loader({ request, context }: any) {
     }
   }
 
-  const careAlert = await (context.cloudflare.env as CloudflareEnv).DB
-    .prepare(
-      `SELECT
-         SUM(CASE WHEN s.last_seen_at IS NULL OR s.last_seen_at < ? THEN 1 ELSE 0 END) AS silent,
-         (SELECT COUNT(*) FROM site_jobs WHERE status = 'failed' AND finished_at > ?) AS failed
-       FROM sites s JOIN clients c ON c.id = s.client_id
-       WHERE s.revoked_at IS NULL AND c.deleted_at IS NULL`
-    )
-    .bind(Math.floor(Date.now() / 1000) - 3 * 3600, Math.floor(Date.now() / 1000) - 7 * 86400)
-    .first<{ silent: number | null; failed: number }>()
-    .catch(() => null);
-
-  const backupProblems = await listBackupProblems(context.cloudflare.env).catch(() => []);
+  const careAlert = await careAlertP;
+  const backupProblems = await backupProblemsP;
 
   // Connected-site health for the dashboard, same scope as the rest of the page.
   const nowS = Math.floor(Date.now() / 1000);
-  const siteRows = (await db.listAllSitesWithInventory().catch(() => [])).filter((r) => inScope(r.client_id));
+  const siteRows = (await siteRowsP).filter((r) => inScope(r.client_id));
   const siteSummaries: SiteSummary[] = siteRows.map((r) => {
     let updates: ReturnType<typeof offeredUpdates> = [];
     try {
