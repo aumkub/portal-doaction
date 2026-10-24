@@ -323,13 +323,17 @@ export default function AdminSitesPage() {
   const navigation = useNavigation();
   const waking = navigation.state !== "idle" && navigation.formData?.get("intent") === "wake_queued";
 
-  // While anything is updating, refresh every 4 s so progress shows live.
+  // While anything is updating, refresh every 8 s so progress shows live. Each
+  // refresh is a Worker request and a few D1 reads, so a tab left open stops
+  // polling after 30 minutes (any reload or click starts it again).
   const revalidator = useRevalidator();
   useEffect(() => {
     if (!busy) return;
+    const started = Date.now();
     const t = setInterval(() => {
+      if (Date.now() - started > 30 * 60_000) return clearInterval(t);
       if (revalidator.state === "idle" && document.visibilityState === "visible") revalidator.revalidate();
-    }, 4000);
+    }, 8000);
     return () => clearInterval(t);
   }, [busy, revalidator]);
 

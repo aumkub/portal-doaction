@@ -1286,13 +1286,16 @@ export function createDB(d1: D1Database) {
       if (opts.since) { where.push("j.created_at >= ?"); binds.push(opts.since); }
       const { results } = await d1
         .prepare(
-          `SELECT j.*, s.site_url, u.name AS created_by_name FROM site_jobs j
+          // No log column: lists are polled while updates run, logs load on demand.
+          `SELECT j.id, j.site_id, j.kind, j.slug, j.name, j.from_version, j.to_version, j.status, j.not_before,
+                  j.created_by, j.created_at, j.started_at, j.finished_at, j.result_version, j.reported_at,
+                  j.log IS NOT NULL AND j.log != '' AS has_log, s.site_url, u.name AS created_by_name FROM site_jobs j
            JOIN sites s ON s.id = j.site_id LEFT JOIN users u ON u.id = j.created_by
            ${where.length ? "WHERE " + where.join(" AND ") : ""}
            ORDER BY j.created_at DESC LIMIT ?`
         )
         .bind(...binds, opts.limit ?? 100)
-        .all<SiteJobRow & { site_url: string; created_by_name: string | null }>();
+        .all<Omit<SiteJobRow, "log"> & { has_log: number; site_url: string; created_by_name: string | null }>();
       return results;
     },
 

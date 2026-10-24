@@ -23,7 +23,7 @@ export type SiteJobView = {
   from_version: string | null; to_version: string | null; result_version: string | null;
   status: "queued" | "running" | "succeeded" | "rolled_back" | "failed" | "cancelled";
   not_before: number; created_at: number; finished_at: number | null;
-  log: string | null; created_by_name: string | null;
+  has_log: number | boolean; created_by_name: string | null;
 };
 
 const JOB_STATUS: Record<SiteJobView["status"], { label: string; cls: string }> = {
@@ -38,6 +38,7 @@ const JOB_STATUS: Record<SiteJobView["status"], { label: string; cls: string }> 
 function JobList({ jobs, siteId, canStop }: { jobs: SiteJobView[]; siteId: string; canStop: boolean }) {
   const fetcher = useFetcher();
   const stopper = useFetcher();
+  const logFetcher = useFetcher<{ log: string }>();
   const [openLog, setOpenLog] = useState<string | null>(null);
   if (jobs.length === 0) return null;
   const queued = jobs.filter((j) => j.status === "queued").length;
@@ -82,8 +83,8 @@ function JobList({ jobs, siteId, canStop }: { jobs: SiteJobView[]; siteId: strin
                     ยกเลิก
                   </button>
                 )}
-                {j.log && (
-                  <button type="button" onClick={() => setOpenLog(openLog === j.id ? null : j.id)} className="text-[11px] font-semibold text-muted-ink hover:text-ink">
+                {Boolean(j.has_log) && (
+                  <button type="button" onClick={() => { const next = openLog === j.id ? null : j.id; setOpenLog(next); if (next) logFetcher.load(`/api/site-job-log/${next}`); }} className="text-[11px] font-semibold text-muted-ink hover:text-ink">
                     log
                   </button>
                 )}
@@ -93,8 +94,8 @@ function JobList({ jobs, siteId, canStop }: { jobs: SiteJobView[]; siteId: strin
               {j.created_by_name ?? "อัตโนมัติ"} · {fmtDateTime(j.created_at)}
               {j.status === "queued" && j.not_before > j.created_at && ` · เริ่มได้ ${fmtDateTime(j.not_before)}`}
             </p>
-            {openLog === j.id && j.log && (
-              <pre className="mt-1.5 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg bg-paper p-2 text-[11px] text-ink-soft">{j.log}</pre>
+            {openLog === j.id && (
+              <pre className="mt-1.5 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg bg-paper p-2 text-[11px] text-ink-soft">{logFetcher.state !== "idle" && !logFetcher.data ? "กำลังโหลด…" : logFetcher.data?.log}</pre>
             )}
           </li>
         ))}
