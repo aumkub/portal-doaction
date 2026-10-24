@@ -7,6 +7,18 @@ import { getMonthName } from "~/lib/utils";
 import { fetchAllMonitors, hostOf, type MonitorSummary } from "~/lib/uptime.server";
 import { getUptimeRobotKey } from "~/lib/secrets.server";
 import { FaArrowRight, FaPlus } from "react-icons/fa6";
+import { InventorySchema } from "~/lib/agent/inventory";
+import { pendingUpdates as offeredUpdates } from "~/lib/agent/update-level";
+
+type SiteSummary = {
+  id: string;
+  host: string;
+  company_name: string;
+  internal: boolean;
+  silent: boolean;
+  updates: number;
+  majors: number;
+};
 
 const DAY = 86400;
 
@@ -125,7 +137,41 @@ export async function loader({ request, context }: any) {
 
   const backupProblems = await listBackupProblems(context.cloudflare.env).catch(() => []);
 
+  // Connected-site health for the dashboard, same scope as the rest of the page.
+  const nowS = Math.floor(Date.now() / 1000);
+  const siteRows = (await db.listAllSitesWithInventory().catch(() => [])).filter((r) => inScope(r.client_id));
+  const siteSummaries: SiteSummary[] = siteRows.map((r) => {
+    let updates: ReturnType<typeof offeredUpdates> = [];
+    try {
+      const inv = r.inventory_json ? InventorySchema.safeParse(JSON.parse(r.inventory_json)) : null;
+      if (inv?.success) updates = offeredUpdates(inv.data);
+    } catch {
+      // unreadable inventory counts as no updates
+    }
+    return {
+      id: r.id,
+      host: new URL(r.site_url).host,
+      company_name: r.client_company,
+      internal: r.client_kind === "internal",
+      silent: !r.last_seen_at || nowS - r.last_seen_at >= 3 * 3600,
+      updates: updates.length,
+      majors: updates.filter((u) => u.level === "major").length,
+    };
+  });
+  const connectedIds = new Set(siteRows.map((r) => r.client_id));
+  const sites = {
+    connected: siteSummaries.length,
+    silent: siteSummaries.filter((x) => x.silent).length,
+    needUpdates: siteSummaries.filter((x) => x.updates > 0).length,
+    totalUpdates: siteSummaries.reduce((n, x) => n + x.updates, 0),
+    majorSites: siteSummaries.filter((x) => x.majors > 0).length,
+    backup: backupProblems.filter((b) => siteSummaries.some((x) => x.id === b.site_id)).length,
+    unconnected: allClients.filter((c) => inScope(c.id) && !isContractExpired(c.contract_end) && !connectedIds.has(c.id)).length,
+    top: siteSummaries.filter((x) => x.updates > 0).sort((a, b) => b.majors - a.majors || b.updates - a.updates).slice(0, 5),
+  };
+
   return {
+    sites,
     careAlert: { silent: careAlert?.silent ?? 0, failed: careAlert?.failed ?? 0, backup: backupProblems.length },
     uptime,
     totalClients: clients.length,
@@ -459,8 +505,90 @@ export default function AdminOverviewPage({ loaderData }: any) {
         </a>
       )}
 
+      <SitesSection sites={data.sites} lang={lang} />
+
       {/* Website uptime — admin only */}
       {!isCoAdmin && data.uptime && <UptimeSection data={data.uptime} lang={lang} />}
     </div>
+  );
+}
+
+function SitesSection({
+  sites,
+  lang,
+}: {
+  sites: {
+    connected: number;
+    silent: number;
+    needUpdates: number;
+    totalUpdates: number;
+    majorSites: number;
+    backup: number;
+    unconnected: number;
+    top: SiteSummary[];
+  };
+  lang: string;
+}) {
+  const L = (th: string, en: string) => (lang === "en" ? en : th);
+  const tiles = [
+    { label: L("เชื่อมแล้ว", "Connected"), value: sites.connected, href: "/admin/sites", warn: false },
+    {
+      label: L("รออัปเดต", "Need updates"),
+      value: sites.needUpdates,
+      sub: L(`${sites.totalUpdates} รายการ`, `${sites.totalUpdates} items`),
+      href: "/admin/sites?filter=updates",
+      warn: false,
+    },
+    { label: "Major", value: sites.majorSites, href: "/admin/sites?filter=major", warn: sites.majorSites > 0 },
+    { label: L("ขาดการติดต่อ", "Silent"), value: sites.silent, href: "/admin/sites?filter=silent", warn: sites.silent > 0 },
+    { label: L("Backup มีปัญหา", "Backup issues"), value: sites.backup, href: "/admin/sites?filter=backup", warn: sites.backup > 0 },
+    { label: L("ยังไม่เชื่อม", "Not connected"), value: sites.unconnected, href: "/admin/sites#unconnected", warn: sites.unconnected > 0 },
+  ];
+  return (
+    <section className="rounded-[20px] border border-line bg-white p-5">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-[15px] font-bold text-ink">{L("เว็บไซต์ที่ดูแล", "Managed websites")}</h2>
+        <a href="/admin/sites" className="inline-flex items-center gap-1.5 text-[13px] font-medium text-muted-ink hover:text-ink">
+          {L("ดูทั้งหมด", "View all")} <FaArrowRight aria-hidden="true" className="h-3 w-3" />
+        </a>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
+        {tiles.map((t) => (
+          <a
+            key={t.label}
+            href={t.href}
+            className={`rounded-[14px] border p-3 transition-colors ${
+              t.warn ? "border-[#F6D3B0] bg-[#FFF7EE] hover:bg-[#FFEFDD]" : "border-line hover:border-ink/30"
+            }`}
+          >
+            <span className={`block text-xs font-medium ${t.warn ? "text-[#B4541A]" : "text-muted-ink"}`}>{t.label}</span>
+            <span className="mt-1 block font-display text-[24px] leading-none font-bold tabular-nums text-ink">{t.value}</span>
+            {t.sub && <span className="mt-1 block text-[11px] text-muted-ink">{t.sub}</span>}
+          </a>
+        ))}
+      </div>
+      {sites.top.length > 0 && (
+        <ul className="mt-4 divide-y divide-line-soft border-t border-line-soft">
+          {sites.top.map((x) => (
+            <li key={x.id}>
+              <a href="/admin/sites?filter=updates" className="flex items-center gap-3 py-2.5 hover:bg-paper/60">
+                <span className={`h-2 w-2 shrink-0 rounded-full ${x.silent ? "bg-[#E0622A]" : "bg-emerald-500"}`} aria-hidden="true" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-ink">{x.host}</span>
+                  <span className="block truncate text-xs text-muted-ink">
+                    {x.company_name}
+                    {x.internal && ` · ${L("ในเครือ", "In-house")}`}
+                  </span>
+                </span>
+                <span className="shrink-0 text-xs tabular-nums text-ink">{L(`${x.updates} รายการ`, `${x.updates} updates`)}</span>
+                {x.majors > 0 && (
+                  <span className="shrink-0 rounded-full bg-[#FDE7DA] px-1.5 py-px text-[10px] font-bold text-[#B4541A]">MAJOR {x.majors}</span>
+                )}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

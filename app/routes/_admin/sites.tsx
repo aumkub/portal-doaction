@@ -429,31 +429,42 @@ export default function AdminSitesPage() {
               </button>
             ))}
           </div>
-          <div className="overflow-hidden rounded-[20px] border border-line bg-white">
-            <div className="hidden grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1.3fr)_minmax(0,0.9fr)_24px] gap-3 border-b border-line-soft bg-paper/60 px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-ink md:grid">
-              <span>เว็บไซต์</span><span>WP / PHP</span><span>อัปเดต</span><span>Backup</span><span>ล่าสุด</span><span />
-            </div>
-            {shown.length === 0 && <p className="px-5 py-6 text-sm text-muted-ink">ไม่มีเว็บไซต์ในกลุ่มนี้</p>}
-            <ul className="divide-y divide-line-soft">
-              {shown.map((s) => (
-                <SiteRow
-                  key={s.id}
-                  site={s}
-                  now={now}
-                  activity={activity.get(s.id) ?? null}
-                  wake={wakes[s.id] ?? null}
-                  oldestQueued={jobs.filter((j) => j.site_id === s.id && j.status === "queued").reduce((m, j) => Math.min(m, j.created_at), Infinity)}
-                  open={openId === s.id}
-                  onToggle={() => setOpenId(openId === s.id ? null : s.id)}
-                >
-                  <SiteCard
-                    site={s} client={s.client} canManage={false}
-                    canUpdate={canManage} paused={paused} jobs={jobs.filter((j) => j.site_id === s.id)} supportExpired={s.expired}
-                  />
-                </SiteRow>
-              ))}
-            </ul>
-          </div>
+          {shown.length === 0 && <p className="px-1 text-sm text-muted-ink">ไม่มีเว็บไซต์ในกลุ่มนี้</p>}
+          {([
+            { key: "client", title: "เว็บลูกค้า", group: shown.filter((x) => !x.internal) },
+            { key: "internal", title: "เว็บในเครือ", group: shown.filter((x) => x.internal) },
+          ]).filter((sec) => sec.group.length > 0).map(({ key, title, group }) => (
+            <section key={key} className="space-y-2">
+              <h2 className="flex items-center gap-2 px-1 text-[15px] font-bold text-ink">
+                {title} <span className="rounded-full bg-paper px-2 py-0.5 text-xs font-semibold tabular-nums text-muted-ink">{group.length}</span>
+              </h2>
+              <div className="overflow-hidden rounded-[20px] border border-line bg-white">
+                <div className="hidden grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1.3fr)_minmax(0,0.9fr)_24px] gap-3 border-b border-line-soft bg-paper/60 px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-ink md:grid">
+                  <span>เว็บไซต์</span><span>WP / PHP</span><span>อัปเดต</span><span>Backup</span><span>ล่าสุด</span><span />
+                </div>
+                {group.length === 0 && <p className="px-5 py-6 text-sm text-muted-ink">ไม่มีเว็บไซต์ในกลุ่มนี้</p>}
+                <ul className="divide-y divide-line-soft">
+                  {group.map((s) => (
+                    <SiteRow
+                      key={s.id}
+                      site={s}
+                      now={now}
+                      activity={activity.get(s.id) ?? null}
+                      wake={wakes[s.id] ?? null}
+                      oldestQueued={jobs.filter((j) => j.site_id === s.id && j.status === "queued").reduce((m, j) => Math.min(m, j.created_at), Infinity)}
+                      open={openId === s.id}
+                      onToggle={() => setOpenId(openId === s.id ? null : s.id)}
+                    >
+                      <SiteCard
+                        site={s} client={s.client} canManage={false}
+                        canUpdate={canManage} paused={paused} jobs={jobs.filter((j) => j.site_id === s.id)} supportExpired={s.expired}
+                      />
+                    </SiteRow>
+                  ))}
+                </ul>
+              </div>
+            </section>
+          ))}
           <p className="text-xs text-muted-ink">
             เชื่อมเว็บใหม่หรือตัดการเชื่อมต่อได้ที่หน้ารายละเอียดลูกค้า
           </p>
@@ -461,7 +472,7 @@ export default function AdminSitesPage() {
       )}
 
       {unconnected.length > 0 && (
-        <section className="overflow-hidden rounded-[20px] border border-dashed border-line bg-white">
+        <section id="unconnected" className="scroll-mt-4 overflow-hidden rounded-[20px] border border-dashed border-line bg-white">
           <div className="border-b border-line-soft px-5 py-3.5">
             <p className="text-sm font-semibold text-ink">ยังไม่ได้เชื่อมปลั๊กอิน ({unconnected.length})</p>
             <p className="mt-0.5 text-xs text-muted-ink">ติดตั้ง Do Action: Care บนเว็บ แล้วจับคู่จากหน้าลูกค้า → แท็บเว็บไซต์ → “เชื่อมเว็บไซต์”</p>
