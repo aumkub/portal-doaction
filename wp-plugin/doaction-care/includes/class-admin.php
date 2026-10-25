@@ -181,8 +181,9 @@ class DoAction_Care_Admin {
 			array( 'อัปเดตเดือนนี้', ( isset( $w['updates_this_month'] ) ? (int) $w['updates_this_month'] : 0 ) . ' รายการ', false ),
 			array( 'Uptime 30 วัน', $uptime, false ),
 			array( 'เรื่องที่ดำเนินการ', ( isset( $w['open_tickets'] ) ? (int) $w['open_tickets'] : 0 ) . ' เรื่อง', false ),
-			array( 'Backup ล่าสุด', $backup, null === $age || $age > DAY_IN_SECONDS ),
+			DoAction_Care_Backup::ai1wm_active() ? array( 'Backup ล่าสุด', $backup, null === $age || $age > DAY_IN_SECONDS ) : null,
 		);
+		$stats  = array_values( array_filter( $stats ) );
 		$mods   = ! ( defined( 'DISALLOW_FILE_MODS' ) && DISALLOW_FILE_MODS ) && ( ! defined( 'FS_METHOD' ) || 'direct' === FS_METHOD );
 		?>
 		<?php if ( $expired ) : ?>

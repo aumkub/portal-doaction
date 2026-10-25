@@ -36,6 +36,14 @@ class DoAction_Care_Backup {
 		);
 	}
 
+	/** All-in-One WP Migration is active: only then is a backup date worth showing in wp-admin. */
+	public static function ai1wm_active() {
+		if ( ! function_exists( 'is_plugin_active' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+		return is_plugin_active( 'all-in-one-wp-migration/all-in-one-wp-migration.php' );
+	}
+
 	/** Seconds since the newest backup any supported tool recorded, or null. */
 	public static function latest_age() {
 		$s = self::status();

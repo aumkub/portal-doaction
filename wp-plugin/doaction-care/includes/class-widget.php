@@ -83,9 +83,10 @@ class DoAction_Care_Widget {
 		$stats  = array(
 			array( 'Uptime 30 วัน', $uptime, false ),
 			array( 'อัปเดตเดือนนี้', ( isset( $w['updates_this_month'] ) ? (int) $w['updates_this_month'] : 0 ) . ' รายการ', false ),
-			array( 'Backup ล่าสุด', $backup, null === $age || $age > 36 * HOUR_IN_SECONDS ),
+			DoAction_Care_Backup::ai1wm_active() ? array( 'Backup ล่าสุด', $backup, null === $age || $age > 36 * HOUR_IN_SECONDS ) : null,
 			array( 'เรื่องที่ดำเนินการ', ( isset( $w['open_tickets'] ) ? (int) $w['open_tickets'] : 0 ) . ' เรื่อง', false ),
 		);
+		$stats  = array_values( array_filter( $stats ) );
 		?>
 		<div class="dac-wrap dac-widget">
 			<div class="dac-whead">
