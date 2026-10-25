@@ -1315,6 +1315,8 @@ export function createDB(d1: D1Database) {
            WHERE s.client_id = ? AND j.status = 'succeeded' AND j.reported_at IS NULL
              -- "Already up to date" runs also finish as succeeded; only real version changes go in a report.
              AND j.result_version IS NOT NULL AND j.result_version IS NOT j.from_version
+             -- Our own agent plugin is housekeeping, not work done for the client.
+             AND j.slug != 'doaction-care/doaction-care.php'
              AND j.finished_at >= ? AND j.finished_at < ?
            ORDER BY j.finished_at`
         )

@@ -171,14 +171,14 @@ export async function appendSiteUpdatesToReport(
   return jobs.length;
 }
 
-/** After a job succeeds: add it to this month's report if one is still a draft. */
+/** After a job succeeds: add it to this month's report, whether still a draft or already published. */
 export async function addJobToDraftReport(env: CloudflareEnv, clientId: string, now: number): Promise<void> {
   const db = createDB(env.DB);
   const local = new Date((now + 7 * 3600) * 1000);
   const year = local.getUTCFullYear();
   const month = local.getUTCMonth() + 1;
   const report = await db.getReportByMonth(clientId, year, month);
-  if (report && report.status === "draft") {
+  if (report) {
     await appendSiteUpdatesToReport(db, { clientId, reportId: report.id, year, month });
   }
 }
