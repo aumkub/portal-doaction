@@ -10,12 +10,15 @@ import {
   sendTicketEmailToClient,
 } from "~/lib/ticket-email.server";
 import { notifyReportToClient } from "~/lib/report-notify.server";
+import { siteTools } from "./site-tools.server";
 
 export interface ToolContext {
   env: CloudflareEnv;
   db: DB;
   user: User;
   origin: string;
+  /** "read" tokens can only list and call read-only tools. */
+  scope: "read" | "full";
 }
 
 interface ToolDef<S extends z.ZodObject> {
@@ -649,4 +652,6 @@ export const tools = [
       return (await db.listEmailLogs(limit)).map(({ html_body: _h, text_body: _t, ...log }) => log);
     },
   }),
+
+  ...(siteTools(tool) as ToolDef<z.ZodObject>[]),
 ];

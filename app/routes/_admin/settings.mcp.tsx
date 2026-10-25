@@ -1,3 +1,4 @@
+import { NativeSelect } from "~/components/ui/native-select";
 import { Form, useActionData, useLoaderData, useNavigation } from "react-router";
 import { FaPlug, FaKey, FaTrash, FaCopy } from "react-icons/fa6";
 import { requireAdmin } from "~/lib/auth.server";
@@ -29,7 +30,8 @@ export async function action({ request, context }: any) {
 
   if (intent === "create") {
     const label = String(formData.get("label") ?? "").trim().slice(0, 60);
-    const token = await createMcpToken(env.SESSIONPORTAL, admin.id, label);
+    const scope = formData.get("scope") === "read" ? "read" : "full";
+    const token = await createMcpToken(env.SESSIONPORTAL, admin.id, label, scope);
     return { token };
   }
   if (intent === "revoke") {
@@ -85,6 +87,10 @@ export default function McpSettingsPage() {
         <Form method="post" className="flex flex-col sm:flex-row gap-2">
           <input type="hidden" name="intent" value="create" />
           <Input name="label" placeholder="ชื่อ token เช่น Claude Desktop (MacBook)" className="flex-1" />
+          <NativeSelect name="scope" defaultValue="read" wrapperClassName="sm:w-56">
+            <option value="read">อ่านอย่างเดียว</option>
+            <option value="full">สั่งงานได้ (อัปเดตเว็บ ส่งอีเมล)</option>
+          </NativeSelect>
           <Button type="submit" disabled={navigation.state === "submitting"}>
             สร้าง token
           </Button>
@@ -108,7 +114,7 @@ export default function McpSettingsPage() {
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-ink truncate">{tk.label}</p>
                   <p className="text-xs text-muted-ink">
-                    {tk.hint}… · {formatDate(tk.created_at, lang)}
+                    {tk.hint}… · {(tk.scope ?? "full") === "read" ? "อ่านอย่างเดียว" : "สั่งงานได้"} · {formatDate(tk.created_at, lang)}
                   </p>
                 </div>
                 <Form method="post">

@@ -13,6 +13,8 @@ export interface McpTokenRecord {
   /** First characters of the token, shown in the UI to tell tokens apart. */
   hint: string;
   created_at: number;
+  /** Missing on tokens made before scopes existed: those are "full". */
+  scope?: "read" | "full";
 }
 
 async function sha256Hex(value: string): Promise<string> {
@@ -24,7 +26,8 @@ async function sha256Hex(value: string): Promise<string> {
 export async function createMcpToken(
   kv: KVNamespace,
   userId: string,
-  label: string
+  label: string,
+  scope: "read" | "full" = "full"
 ): Promise<string> {
   const token = `pmcp_${generateId(40)}`;
   const record: McpTokenRecord = {
@@ -32,6 +35,7 @@ export async function createMcpToken(
     label: label || "MCP",
     hint: token.slice(0, 10),
     created_at: Math.floor(Date.now() / 1000),
+    scope,
   };
   await kv.put(PREFIX + (await sha256Hex(token)), JSON.stringify(record), {
     metadata: record,

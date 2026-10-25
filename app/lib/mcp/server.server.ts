@@ -14,7 +14,8 @@ const PROTOCOL_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"];
 const INSTRUCTIONS = `do action client portal (website maintenance clients of do action).
 Data: clients, support tickets (status open → in_progress → waiting → resolved → closed), monthly reports with tasks, email logs.
 Timestamps are Unix seconds. Report years are Gregorian.
-Anything that emails a client (send_email=true, send_report_to_client) must be confirmed by the user first.`;
+Anything that emails a client (send_email=true, send_report_to_client) must be confirmed by the user first.
+Site care: read with list_sites, get_site_updates, list_site_jobs, get_job_log, sites_needing_attention. queue_updates, stop_site and wake_site act on real client websites: show the exact items and get the admin's explicit yes first, every time. Never queue updates on your own initiative or on a schedule.`;
 
 type JsonRpcId = string | number | null;
 
@@ -49,6 +50,9 @@ function rpcError(id: JsonRpcId, code: number, message: string) {
 async function callTool(params: Record<string, unknown> | undefined, ctx: ToolContext) {
   const t = tools.find((x) => x.name === params?.name);
   if (!t) return { isError: true, content: [{ type: "text", text: `Unknown tool: ${String(params?.name)}` }] };
+  if (ctx.scope === "read" && !t.readOnly) {
+    return { isError: true, content: [{ type: "text", text: `${t.name} changes data; this MCP token is read-only` }] };
+  }
 
   const parsed = t.input.safeParse(params?.arguments ?? {});
   if (!parsed.success) {
@@ -79,7 +83,7 @@ async function handleMessage(msg: JsonRpcRequest, ctx: ToolContext) {
     case "ping":
       return rpcResult(id, {});
     case "tools/list":
-      return rpcResult(id, { tools: toolList });
+      return rpcResult(id, { tools: ctx.scope === "read" ? toolList.filter((t) => t.annotations.readOnlyHint) : toolList });
     case "tools/call":
       return rpcResult(id, await callTool(msg.params, ctx));
     default:
@@ -111,7 +115,7 @@ export async function handleMcpRequest(request: Request, env: CloudflareEnv): Pr
     return Response.json(rpcError(null, -32700, "Parse error"), { status: 400 });
   }
 
-  const ctx: ToolContext = { env, db, user, origin: new URL(request.url).origin };
+  const ctx: ToolContext = { env, db, user, origin: new URL(request.url).origin, scope: record?.scope ?? "full" };
   const batch = Array.isArray(body);
   const messages = (batch ? body : [body]) as JsonRpcRequest[];
 
