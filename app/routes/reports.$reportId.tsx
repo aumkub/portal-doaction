@@ -74,7 +74,7 @@ const CATEGORIES: Record<TaskCategory, { label: string; icon: React.ReactNode }>
 const backLinkCls =
   "inline-flex items-center gap-2 h-10 rounded-full border border-line bg-white px-4 text-[13px] font-semibold text-ink hover:bg-paper transition-colors";
 
-type SiteUpdate = { id: string; kind: string; name: string; from: string; to: string; host: string };
+type SiteUpdate = { id: string; kind: string; name: string; from: string; to: string; host: string; date: string | null };
 
 /** Update tasks are written by the site-care agent as "อัปเดต<kind> <name> <from> → <to>" with the host as description. */
 function parseUpdate(task: ReportTask): SiteUpdate | null {
@@ -82,7 +82,9 @@ function parseUpdate(task: ReportTask): SiteUpdate | null {
   if (!m) return null;
   const kind = m[1].startsWith("WordPress") ? "แกนหลัก" : m[1];
   const name = m[1].startsWith("WordPress") ? "WordPress" : m[2].trim() || m[1];
-  return { id: task.id, kind, name, from: m[3], to: m[4], host: (task.description ?? "").trim() || "เว็บไซต์" };
+  // Description is the host, plus " · <date>" for updates carried over from an earlier month.
+  const [host, date] = (task.description ?? "").split(" · ").map((x) => x.trim());
+  return { id: task.id, kind, name, from: m[3], to: m[4], host: host || "เว็บไซต์", date: date || null };
 }
 
 const PRINT_CSS = `
@@ -252,7 +254,10 @@ export default function PublicReportPage({ loaderData }: Route.ComponentProps) {
                     <tbody>
                       {list.map((u) => (
                         <tr key={u.id} className="border-b border-line-soft">
-                          <td className="py-2 pr-3 font-medium text-ink print:py-1">{u.name}</td>
+                          <td className="py-2 pr-3 font-medium text-ink print:py-1">
+                            {u.name}
+                            {u.date && <span className="ml-2 text-[11px] font-normal text-muted-ink print:text-[9px]">ทำเมื่อ {u.date}</span>}
+                          </td>
                           <td className="py-2 pr-3 text-muted-ink print:py-1">{u.kind}</td>
                           <td className="py-2 text-right tabular-nums text-muted-ink print:py-1">
                             {u.from} → <span className="font-semibold text-ink">{u.to}</span>

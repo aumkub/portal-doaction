@@ -139,6 +139,14 @@ export async function lastWake(env: CloudflareEnv, siteId: string): Promise<Wake
   return (await env.SESSIONPORTAL.get(`wake-last:${siteId}`, "json").catch(() => null)) as WakeRecord | null;
 }
 
+const THAI_MONTHS_SHORT = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+
+/** "28 ก.ย." in Bangkok time. */
+function thaiShortDate(unix: number): string {
+  const d = new Date((unix + 7 * 3600) * 1000);
+  return `${d.getUTCDate()} ${THAI_MONTHS_SHORT[d.getUTCMonth()]}`;
+}
+
 const KIND_LABEL: Record<SiteJobKind, string> = { plugin: "ปลั๊กอิน", theme: "ธีม", core: "WordPress core" };
 
 /**
@@ -149,16 +157,20 @@ export async function appendSiteUpdatesToReport(
   db: ReturnType<typeof createDB>,
   p: { clientId: string; reportId: string; year: number; month: number },
 ): Promise<number> {
-  const from = Date.UTC(p.year, p.month - 1, 1) / 1000 - 7 * 3600;
+  const monthStart = Date.UTC(p.year, p.month - 1, 1) / 1000 - 7 * 3600;
   const to = Date.UTC(p.year, p.month, 1) / 1000 - 7 * 3600;
+  // Updates done earlier that never made it into a report (e.g. no report that
+  // month) are carried into this one, dated, so nothing goes missing. 90 days back at most.
+  const from = monthStart - 90 * 86400;
   const jobs = await db.listUnreportedSiteJobs(p.clientId, from, to);
   if (jobs.length === 0) return 0;
   const existing = await db.listTasksByReport(p.reportId);
-  const seen = new Set(existing.map((t) => `${t.title}|${t.description ?? ""}`));
+  const seen = new Set(existing.map((t) => `${t.title}|${(t.description ?? "").split(" · ")[0]}`));
   let order = existing.length;
   for (const j of jobs) {
     const title = `อัปเดต${j.kind === "core" ? " WordPress" : `${KIND_LABEL[j.kind]} ${j.name}`} ${j.from_version ?? ""} → ${j.result_version ?? j.to_version ?? ""}`.replace(/\s+/g, " ").trim();
     const host = new URL(j.site_url).host;
+    const earlier = (j.finished_at ?? 0) < monthStart;
     // The same update can finish twice (re-queued after a retry); list it once.
     if (seen.has(`${title}|${host}`)) continue;
     seen.add(`${title}|${host}`);
@@ -167,7 +179,7 @@ export async function appendSiteUpdatesToReport(
       report_id: p.reportId,
       category: j.kind === "core" ? "security" : "maintenance",
       title,
-      description: host,
+      description: earlier ? `${host} · ${thaiShortDate(j.finished_at!)}` : host,
       completed: 1,
       sort_order: order++,
     });
