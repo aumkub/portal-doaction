@@ -19,6 +19,7 @@ import {
   verifyPasskeyAssertion,
 } from "~/lib/passkey.server";
 import type { TwoFactorMethod, User } from "~/types";
+import { forgetTrustedDevices, isTrustedDevice, takeApproval, trustDeviceCookie } from "~/lib/telegram-2fa.server";
 
 const CHALLENGE_TTL = 300;
 const SETUP_TTL = 600;
@@ -87,7 +88,8 @@ export async function completeLogin(opts: {
   const { request, env, user, redirectTo } = opts;
   const row = await getTotpRow(env.DB, user.id);
   const method = activeMethod(row);
-  if (method) {
+  // A device the user chose to remember skips 2FA for 30 days.
+  if (method && !(await isTrustedDevice(request, env, user.id))) {
     const token = generateId(32);
     await env.SESSIONPORTAL.put(
       `2fa:${token}`,
@@ -178,13 +180,34 @@ export async function loginPasskeyOptions(request: Request, env: CloudflareEnv) 
   return startPasskeyAuthentication(request, env, challenge.data.userId, `2fa-pk:${challenge.token}`);
 }
 
+/** Second factor passed: start the session, optionally remembering this device for 30 days. */
+async function finishChallenge(request: Request, env: CloudflareEnv, token: string, data: Challenge, remember: boolean): Promise<Response> {
+  await env.SESSIONPORTAL.delete(`2fa:${token}`);
+  const { lucia } = createAuth(env.DB, env.SESSIONPORTAL);
+  const session = await lucia.createSession(data.userId, {});
+  const headers = new Headers();
+  headers.append("Set-Cookie", lucia.createSessionCookie(session.id).serialize());
+  headers.append("Set-Cookie", clearCookieHeader(request));
+  if (remember) headers.append("Set-Cookie", await trustDeviceCookie(request, env, data.userId));
+  return redirect(safeRedirect(data.redirect, "/admin"), { headers });
+}
+
+/** Login page polling: signs in once the login was approved in Telegram. */
+export async function finishTelegramChallenge(request: Request, env: CloudflareEnv, remember: boolean): Promise<Response | { pending: true }> {
+  const challenge = await getChallenge(env, request);
+  if (!challenge) return redirect("/login?error=2fa_expired", { headers: { "Set-Cookie": clearCookieHeader(request) } });
+  if (!(await takeApproval(env, challenge.token))) return { pending: true };
+  return finishChallenge(request, env, challenge.token, challenge.data, remember);
+}
+
 export async function verifyChallenge(opts: {
   request: Request;
   env: CloudflareEnv;
   code: string;
   kind: ChallengeMethod;
+  remember?: boolean;
 }): Promise<Response | { error: string }> {
-  const { request, env, code, kind } = opts;
+  const { request, env, code, kind, remember = false } = opts;
   const challenge = await getChallenge(env, request);
   if (!challenge) {
     return redirect("/login?error=2fa_expired", {
@@ -206,13 +229,7 @@ export async function verifyChallenge(opts: {
     });
     return { error: kind === "passkey" ? "ยืนยันด้วย passkey ไม่สำเร็จ กรุณาลองอีกครั้ง" : "รหัสไม่ถูกต้อง กรุณาลองอีกครั้ง" };
   }
-  await env.SESSIONPORTAL.delete(`2fa:${token}`);
-  const { lucia } = createAuth(env.DB, env.SESSIONPORTAL);
-  const session = await lucia.createSession(data.userId, {});
-  const headers = new Headers();
-  headers.append("Set-Cookie", lucia.createSessionCookie(session.id).serialize());
-  headers.append("Set-Cookie", clearCookieHeader(request));
-  return redirect(safeRedirect(data.redirect, "/admin"), { headers });
+  return finishChallenge(request, env, token, data, remember);
 }
 
 // ─── Enrollment / management (settings page) ────────────────────────────────
@@ -388,6 +405,7 @@ export async function handleTwoFactorIntent(
       env.DB.prepare("DELETE FROM user_passkeys WHERE user_id = ?").bind(user.id),
     ]);
     await evictUserCache(env.SESSIONPORTAL, user.id);
+    await forgetTrustedDevices(env, user.id);
     return { twoFactor: { message: "ปิด 2FA แล้ว" } };
   }
 

@@ -18,6 +18,7 @@ export default [
   layout("routes/_auth/layout.tsx", [
     route("login", "routes/_auth/login.tsx"),
     route("login/2fa", "routes/_auth/login.2fa.tsx"),
+    route("login/2fa/approve", "routes/_auth/login.2fa.approve.tsx"),
     route("magic-link", "routes/_auth/magic-link.tsx"),
   ]),
 
