@@ -154,14 +154,20 @@ export async function appendSiteUpdatesToReport(
   const jobs = await db.listUnreportedSiteJobs(p.clientId, from, to);
   if (jobs.length === 0) return 0;
   const existing = await db.listTasksByReport(p.reportId);
+  const seen = new Set(existing.map((t) => `${t.title}|${t.description ?? ""}`));
   let order = existing.length;
   for (const j of jobs) {
+    const title = `อัปเดต${j.kind === "core" ? " WordPress" : `${KIND_LABEL[j.kind]} ${j.name}`} ${j.from_version ?? ""} → ${j.result_version ?? j.to_version ?? ""}`.replace(/\s+/g, " ").trim();
+    const host = new URL(j.site_url).host;
+    // The same update can finish twice (re-queued after a retry); list it once.
+    if (seen.has(`${title}|${host}`)) continue;
+    seen.add(`${title}|${host}`);
     await db.createReportTask({
       id: generateId(),
       report_id: p.reportId,
       category: j.kind === "core" ? "security" : "maintenance",
-      title: `อัปเดต${KIND_LABEL[j.kind]} ${j.name} ${j.from_version ?? ""} → ${j.result_version ?? j.to_version ?? ""}`.replace(/\s+/g, " ").trim(),
-      description: new URL(j.site_url).host,
+      title,
+      description: host,
       completed: 1,
       sort_order: order++,
     });
