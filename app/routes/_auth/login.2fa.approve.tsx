@@ -1,6 +1,7 @@
 import { Form, useActionData, useLoaderData } from "react-router";
 import type { Route } from "./+types/login.2fa.approve";
 import { approveLogin, getApprovalRequest } from "~/lib/telegram-2fa.server";
+import { finishTelegramChallenge, readChallengeToken } from "~/lib/two-factor.server";
 import { FaTelegram } from "react-icons/fa6";
 
 export function meta() {
@@ -20,8 +21,17 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
+  const env = context.cloudflare.env;
   const form = await request.formData();
-  const ok = await approveLogin(context.cloudflare.env, String(form.get("n") ?? ""));
+  const nonce = String(form.get("n") ?? "");
+  const req = await getApprovalRequest(env, nonce);
+  const ok = await approveLogin(env, nonce);
+  // Approved in the same browser that is logging in (e.g. Telegram Desktop or
+  // the phone itself): sign in right here and go to the portal's home page.
+  if (ok && req && readChallengeToken(request) === req.token) {
+    const res = await finishTelegramChallenge(request, env, true, "/admin");
+    if (res instanceof Response) return res;
+  }
   return { ok };
 }
 
@@ -43,7 +53,8 @@ export default function ApproveLoginPage() {
         {result?.ok ? (
           <>
             <h1 className="text-[26px] font-bold tracking-[-0.02em] text-ink">ยืนยันแล้ว</h1>
-            <p className="mt-2 text-sm text-muted-ink">กลับไปที่หน้าจอที่กำลังเข้าสู่ระบบ ระบบจะเข้าให้เองภายในไม่กี่วินาที ปิดหน้านี้ได้เลย</p>
+            <p className="mt-2 text-sm text-muted-ink">หน้าจอที่กำลังเข้าสู่ระบบจะเข้าหน้าแรกของ portal ให้เองภายในไม่กี่วินาที ปิดหน้านี้ได้เลย</p>
+            <a href="/admin" className="mt-5 inline-flex h-10 items-center rounded-full border border-line px-5 text-[13px] font-semibold text-ink hover:bg-paper">ไปหน้าแรก</a>
           </>
         ) : !data.valid || result?.ok === false ? (
           <>

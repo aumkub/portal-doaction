@@ -12,7 +12,7 @@ import {
   FaChartColumn,
   FaEnvelope,
   FaFileLines,
-  FaGear,
+  FaGear, FaShieldHalved,
   FaGlobe,
   FaHeadset,
   FaHouse,
@@ -42,6 +42,7 @@ const adminNav: NavItem[] = [
   { labelKey: "nav_all_tickets", href: "/admin/tickets", icon: FaTicket },
   { labelKey: "nav_email_logs", href: "/admin/email-logs", icon: FaEnvelope },
   { labelKey: "nav_attachments", href: "/admin/attachments", icon: FaPaperclip },
+  { labelKey: "nav_security", href: "/admin/security", icon: FaShieldHalved },
   { labelKey: "nav_settings", href: "/admin/settings", icon: FaGear },
 ];
 
@@ -51,6 +52,7 @@ const coAdminNav: NavItem[] = [
   { labelKey: "nav_sites", href: "/admin/sites", icon: FaGlobe },
   { labelKey: "nav_admin_reports", href: "/admin/reports", icon: FaFileLines },
   { labelKey: "nav_all_tickets", href: "/admin/tickets", icon: FaTicket },
+  { labelKey: "nav_security", href: "/admin/security", icon: FaShieldHalved },
 ];
 
 /** Counts shown beside nav items, keyed by href. */

@@ -193,11 +193,12 @@ async function finishChallenge(request: Request, env: CloudflareEnv, token: stri
 }
 
 /** Login page polling: signs in once the login was approved in Telegram. */
-export async function finishTelegramChallenge(request: Request, env: CloudflareEnv, remember: boolean): Promise<Response | { pending: true }> {
+export async function finishTelegramChallenge(request: Request, env: CloudflareEnv, remember: boolean, to = "/admin"): Promise<Response | { pending: true }> {
   const challenge = await getChallenge(env, request);
   if (!challenge) return redirect("/login?error=2fa_expired", { headers: { "Set-Cookie": clearCookieHeader(request) } });
   if (!(await takeApproval(env, challenge.token))) return { pending: true };
-  return finishChallenge(request, env, challenge.token, challenge.data, remember);
+  // Approved in Telegram: land on the portal's home page.
+  return finishChallenge(request, env, challenge.token, { ...challenge.data, redirect: to }, remember);
 }
 
 export async function verifyChallenge(opts: {
