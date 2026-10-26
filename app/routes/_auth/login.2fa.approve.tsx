@@ -19,7 +19,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const req = await getApprovalRequest(env, nonce);
   if (!req) return { valid: false as const, approved: false, nonce };
   const when = new Date(req.at * 1000).toLocaleString("th-TH", { timeZone: "Asia/Bangkok" });
-  return { valid: true as const, approved: false, nonce, ip: req.ip, ua: req.ua, when };
+  return { valid: true as const, approved: false, nonce, ip: req.ip, device: deviceLabel(req.ua), when };
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -64,7 +64,7 @@ export default function ApproveLoginPage() {
             <p className="mt-2 text-sm text-muted-ink">ยืนยันเฉพาะเมื่อคุณกำลังเข้าสู่ระบบอยู่ตอนนี้</p>
             <dl className="mt-5 space-y-2 rounded-2xl bg-paper px-4 py-3 text-sm">
               <div className="flex justify-between gap-3"><dt className="text-muted-ink">เวลา</dt><dd className="text-right text-ink">{data.when}</dd></div>
-              <div className="flex justify-between gap-3"><dt className="text-muted-ink">อุปกรณ์</dt><dd className="text-right text-ink">{deviceLabel(data.ua)}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-muted-ink">อุปกรณ์</dt><dd className="text-right text-ink">{data.device}</dd></div>
               <div className="flex justify-between gap-3"><dt className="text-muted-ink">IP</dt><dd className="text-right tabular-nums text-ink">{data.ip || "-"}</dd></div>
             </dl>
             <Form method="post" className="mt-6">
