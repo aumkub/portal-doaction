@@ -4,6 +4,7 @@ import { handleMcpRequest } from "~/lib/mcp/server.server";
 import { handleAgentRequest, isAgentPath } from "~/lib/agent/server";
 import { createDB } from "~/lib/db.server";
 import { JOB_STALE_AFTER_S } from "~/lib/agent/jobs.server";
+import { listTemporaryAttachmentKeys } from "~/lib/attachments.server";
 import { flushHeldTicketEmails, runDailyEmailAlerts } from "~/lib/email-alerts.server";
 
 // AppLoadContext is augmented in app/types/cloudflare.d.ts
@@ -57,9 +58,18 @@ export default {
     const now = Math.floor(Date.now() / 1000);
     ctx.waitUntil(createDB(env.DB).failStaleSiteJobs(now - JOB_STALE_AFTER_S));
     ctx.waitUntil(createDB(env.DB).expireUnclaimedSiteJobs(now - 86400));
+    ctx.waitUntil(sweepTemporaryAttachments(env));
     ctx.waitUntil(env.DB.batch([
       env.DB.prepare("DELETE FROM sso_tokens WHERE expires_at < ?").bind(now),
       env.DB.prepare("DELETE FROM agent_nonces WHERE expires_at < ?").bind(now),
     ]));
   },
 } satisfies ExportedHandler<CloudflareEnv>;
+
+/** Once a day: delete uploads never attached to a message, if they are over a day old. */
+async function sweepTemporaryAttachments(env: CloudflareEnv) {
+  if (await env.SESSIONPORTAL.get("attach-sweep")) return;
+  await env.SESSIONPORTAL.put("attach-sweep", "1", { expirationTtl: 86400 });
+  const keys = await listTemporaryAttachmentKeys(env.ATTACHMENTS, createDB(env.DB));
+  await Promise.all(keys.map((k) => env.ATTACHMENTS.delete(k)));
+}

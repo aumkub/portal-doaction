@@ -66,13 +66,10 @@ export async function action({ request, context }: any) {
     }
 
 
-    const linkedAttachment = await db.getTicketAttachmentByKey(fileKey);
-    if (linkedAttachment) {
-      return Response.json({ ok: true, skipped: "linked" });
-    }
-
-    await env.ATTACHMENTS.delete(fileKey);
-    return Response.json({ ok: true });
+    // Never delete here. This call races the reply that links the file (it is
+    // sent on unload/unmount while the form submits), and deleting first lost
+    // customers' images. Unlinked uploads are swept once they are a day old.
+    return Response.json({ ok: true, skipped: "deferred" });
   }
 
   const ticketId = formData.get("ticketId");

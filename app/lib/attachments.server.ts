@@ -129,10 +129,13 @@ export async function listAllStorageAttachments(
   return items;
 }
 
+/** Uploads never linked to a message, older than a day (a reply being written is never touched). */
 export async function listTemporaryAttachmentKeys(
   bucket: R2Bucket,
-  db: ReturnType<typeof createDB>
+  db: ReturnType<typeof createDB>,
+  olderThanS = 86400
 ): Promise<string[]> {
   const items = await listAllStorageAttachments(bucket, db);
-  return items.filter((i) => i.status === "temporary").map((i) => i.fileKey);
+  const cutoff = Math.floor(Date.now() / 1000) - olderThanS;
+  return items.filter((i) => i.status === "temporary" && i.uploadedAt < cutoff).map((i) => i.fileKey);
 }
