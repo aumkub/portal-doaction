@@ -214,7 +214,9 @@ function UpdateForm({ site, paused, jobs }: { site: ConnectedSite; paused: boole
     for (const key of familyOf(k)) on ? n.add(key) : n.delete(key);
     return n;
   });
+  const all = items.filter((i) => !i.blocked && !inFlight.has(i.key)).map((i) => i.key);
   const safe = items.filter((i) => i.level !== "major" && !i.blocked && !inFlight.has(i.key)).map((i) => i.key);
+  const allPicked = all.length > 0 && all.every((k) => selected.has(k));
 
   return (
     <fetcher.Form method="post" action="/admin/sites" className="mt-3 rounded-xl border border-line-soft bg-white">
@@ -223,7 +225,13 @@ function UpdateForm({ site, paused, jobs }: { site: ConnectedSite; paused: boole
       <div className="flex items-center justify-between gap-2 border-b border-line-soft px-3.5 py-2">
         <p className="text-xs font-semibold text-ink">เลือกรายการที่จะอัปเดต</p>
         <span className="flex gap-3 text-[11px] font-semibold">
-          {safe.length > 0 && <button type="button" onClick={() => setSelected(new Set(safe))} className="text-muted-ink hover:text-ink">เลือกที่ไม่ใช่ Major ({safe.length})</button>}
+          {all.length > 0 && (
+            <label className="flex cursor-pointer items-center gap-1.5 text-ink">
+              <input type="checkbox" checked={allPicked} onChange={() => setSelected(allPicked ? new Set() : new Set(all))} className="h-3.5 w-3.5 accent-ink" />
+              เลือกทั้งหมด ({all.length})
+            </label>
+          )}
+          {safe.length > 0 && safe.length < all.length && <button type="button" onClick={() => setSelected(new Set(safe))} className="text-muted-ink hover:text-ink">เฉพาะที่ไม่ใช่ Major ({safe.length})</button>}
           {selected.size > 0 && <button type="button" onClick={() => setSelected(new Set())} className="text-muted-ink hover:text-ink">ล้าง</button>}
         </span>
       </div>
