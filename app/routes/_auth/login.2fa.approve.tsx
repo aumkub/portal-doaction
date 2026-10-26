@@ -1,6 +1,6 @@
 import { Form, useActionData, useLoaderData } from "react-router";
 import type { Route } from "./+types/login.2fa.approve";
-import { approveLogin, getApprovalRequest } from "~/lib/telegram-2fa.server";
+import { approveLogin, getApprovalRequest, wasApproved } from "~/lib/telegram-2fa.server";
 import { finishTelegramChallenge, readChallengeToken } from "~/lib/two-factor.server";
 import { FaTelegram } from "react-icons/fa6";
 
@@ -14,10 +14,12 @@ export function meta() {
  */
 export async function loader({ request, context }: Route.LoaderArgs) {
   const nonce = new URL(request.url).searchParams.get("n") ?? "";
-  const req = await getApprovalRequest(context.cloudflare.env, nonce);
-  if (!req) return { valid: false as const, nonce };
+  const env = context.cloudflare.env;
+  if (await wasApproved(env, nonce)) return { valid: false as const, approved: true, nonce };
+  const req = await getApprovalRequest(env, nonce);
+  if (!req) return { valid: false as const, approved: false, nonce };
   const when = new Date(req.at * 1000).toLocaleString("th-TH", { timeZone: "Asia/Bangkok" });
-  return { valid: true as const, nonce, ip: req.ip, ua: req.ua, when };
+  return { valid: true as const, approved: false, nonce, ip: req.ip, ua: req.ua, when };
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -32,7 +34,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     const res = await finishTelegramChallenge(request, env, true, "/admin");
     if (res instanceof Response) return res;
   }
-  return { ok };
+  return { ok: ok || (await wasApproved(env, nonce)) };
 }
 
 function deviceLabel(ua: string): string {
@@ -50,7 +52,7 @@ export default function ApproveLoginPage() {
         <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-yellow">
           <FaTelegram className="text-lg text-ink" aria-hidden="true" />
         </div>
-        {result?.ok ? (
+        {result?.ok || data.approved ? (
           <>
             <h1 className="text-[26px] font-bold tracking-[-0.02em] text-ink">ยืนยันแล้ว</h1>
             <p className="mt-2 text-sm text-muted-ink">หน้าจอที่กำลังเข้าสู่ระบบจะเข้าหน้าแรกของ portal ให้เองภายในไม่กี่วินาที ปิดหน้านี้ได้เลย</p>

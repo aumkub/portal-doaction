@@ -147,7 +147,13 @@ export async function approveLogin(env: CloudflareEnv, nonce: string): Promise<b
   const state = await env.SESSIONPORTAL.get<ApprovalState>(stateKey, "json");
   if (!state || state.nonce !== nonce) return false; // superseded by a newer request
   await env.SESSIONPORTAL.put(stateKey, JSON.stringify({ ...state, status: "approved" }), { expirationTtl: APPROVE_TTL });
+  // Remembered so reopening the link, a reload or a double tap shows "approved", not "expired".
+  await env.SESSIONPORTAL.put(`2fa-tgd:${nonce}`, "1", { expirationTtl: APPROVE_TTL });
   return true;
+}
+
+export async function wasApproved(env: CloudflareEnv, nonce: string): Promise<boolean> {
+  return /^[A-Za-z0-9_-]{16,64}$/.test(nonce) && Boolean(await env.SESSIONPORTAL.get(`2fa-tgd:${nonce}`));
 }
 
 /** Whether the pending challenge was approved in Telegram; consumes the approval. */
