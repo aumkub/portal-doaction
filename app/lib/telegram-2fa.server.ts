@@ -3,12 +3,12 @@ import { generateId } from "~/lib/utils";
 /**
  * Telegram as a second way to approve a staff login, next to passkey/TOTP.
  *
- * Linking: the user enters their Telegram chat id, the bot sends a 6-digit
- * code there, and the user types it back, so only a chat they control can be
- * linked. Approving: the login page asks the bot to send a button that opens
- * /login/2fa/approve; a POST on that page marks the pending challenge approved
- * and the login tab, which polls, finishes signing in. Sending only (no
- * webhook), so the bot's other uses are unaffected.
+ * Linking: the security page opens t.me/<bot>?start=<one-time code>; pressing
+ * Start sends the code to our webhook, which links that private chat.
+ * Approving: the 2FA page asks the bot to send "อนุมัติ / ไม่ใช่ฉัน" buttons;
+ * a tap reaches the webhook (only from the linked chat counts) and the login
+ * tab, which polls, signs in. If the webhook can't be set, the bot sends a
+ * link to /login/2fa/approve instead.
  */
 
 const LINK_TTL = 600;
@@ -25,7 +25,18 @@ async function sha256(value: string): Promise<string> {
   return Array.from(new Uint8Array(d), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-async function send(env: CloudflareEnv, chatId: string, text: string, button?: { text: string; url: string }): Promise<string | null> {
+type Button = { text: string; url?: string; callback_data?: string };
+
+async function api(env: CloudflareEnv, method: string, body: unknown): Promise<{ ok?: boolean; description?: string } | null> {
+  const token = await botToken(env);
+  if (!token) return null;
+  const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  }).catch(() => null);
+  return (await res?.json().catch(() => null)) as { ok?: boolean; description?: string } | null;
+}
+
+async function send(env: CloudflareEnv, chatId: string, text: string, buttons?: Button | Button[][]): Promise<string | null> {
   const token = await botToken(env);
   if (!token) return "ยังไม่ได้ตั้งค่า Telegram bot ของ portal";
   const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
@@ -35,7 +46,7 @@ async function send(env: CloudflareEnv, chatId: string, text: string, button?: {
       chat_id: chatId,
       text,
       disable_web_page_preview: true,
-      ...(button ? { reply_markup: { inline_keyboard: [[button]] } } : {}),
+      ...(buttons ? { reply_markup: { inline_keyboard: Array.isArray(buttons) ? buttons : [[buttons]] } } : {}),
     }),
   }).catch(() => null);
   const data = (await res?.json().catch(() => null)) as { ok?: boolean; description?: string } | null;
@@ -62,32 +73,36 @@ export async function getBotUsername(env: CloudflareEnv): Promise<string | null>
   return name;
 }
 
-// ── Linking ────────────────────────────────────────────────────────────────
+// ── Webhook ────────────────────────────────────────────────────────────────
 
-export async function startTelegramLink(env: CloudflareEnv, userId: string, chatIdRaw: string): Promise<string | null> {
-  const chatId = chatIdRaw.trim();
-  // Private chats only (positive ids); groups would let others approve.
-  if (!/^\d{4,20}$/.test(chatId)) return "Chat ID ต้องเป็นตัวเลขของบัญชี Telegram ของคุณเอง (ไม่ใช่กลุ่ม)";
-  const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000).padStart(6, "0");
-  const err = await send(env, chatId, `รหัสยืนยันการเชื่อม Telegram กับ do action portal: ${code}\n\nถ้าคุณไม่ได้ขอ ไม่ต้องทำอะไร`);
-  if (err) return err;
-  await env.SESSIONPORTAL.put(`tg-link:${userId}`, JSON.stringify({ chatId, codeHash: await sha256(code), attempts: 0 }), { expirationTtl: LINK_TTL });
-  return null;
+/** Secret Telegram echoes in X-Telegram-Bot-Api-Secret-Token; derived, so no extra setting. */
+export async function webhookSecret(env: CloudflareEnv): Promise<string> {
+  return (await sha256(`tg-webhook:${env.SESSION_SECRET}`)).slice(0, 48);
 }
 
-export async function confirmTelegramLink(env: CloudflareEnv, userId: string, code: string): Promise<string | null> {
-  const key = `tg-link:${userId}`;
-  const pending = await env.SESSIONPORTAL.get<{ chatId: string; codeHash: string; attempts: number }>(key, "json");
-  if (!pending) return "หมดเวลา กรุณาส่งรหัสใหม่";
-  if ((await sha256(code.trim())) !== pending.codeHash) {
-    if (pending.attempts + 1 >= 5) await env.SESSIONPORTAL.delete(key);
-    else await env.SESSIONPORTAL.put(key, JSON.stringify({ ...pending, attempts: pending.attempts + 1 }), { expirationTtl: LINK_TTL });
-    return "รหัสไม่ถูกต้อง";
-  }
-  await env.SESSIONPORTAL.delete(key);
-  await env.DB.prepare("UPDATE users SET telegram_chat_id = ?, updated_at = unixepoch() WHERE id = ?").bind(pending.chatId, userId).run();
-  await send(env, pending.chatId, "เชื่อม Telegram กับ do action portal แล้ว — ใช้ยืนยันการเข้าสู่ระบบได้");
-  return null;
+/** Points the bot's webhook at this portal (once a day at most). */
+export async function ensureWebhook(env: CloudflareEnv, origin: string): Promise<boolean> {
+  if (await env.SESSIONPORTAL.get("tg-webhook-set")) return true;
+  const r = await api(env, "setWebhook", {
+    url: `${origin}/api/telegram/webhook`,
+    secret_token: await webhookSecret(env),
+    allowed_updates: ["message", "callback_query"],
+  });
+  if (!r?.ok) return false;
+  await env.SESSIONPORTAL.put("tg-webhook-set", "1", { expirationTtl: 86400 });
+  return true;
+}
+
+// ── Linking ────────────────────────────────────────────────────────────────
+
+/** One-time t.me deep link; pressing Start in Telegram links that chat to this user. */
+export async function telegramLinkUrl(request: Request, env: CloudflareEnv, userId: string): Promise<string | null> {
+  const bot = await getBotUsername(env);
+  if (!bot || !(await ensureWebhook(env, new URL(request.url).origin))) return null;
+  const code = generateId(24).replace(/[^A-Za-z0-9]/g, "").slice(0, 24);
+  await env.SESSIONPORTAL.put(`tg-start:${code}`, userId, { expirationTtl: LINK_TTL });
+  await env.SESSIONPORTAL.put(`tg-link:${userId}`, "1", { expirationTtl: LINK_TTL });
+  return `https://t.me/${bot}?start=${code}`;
 }
 
 export async function hasPendingTelegramLink(env: CloudflareEnv, userId: string): Promise<boolean> {
@@ -120,11 +135,15 @@ export async function sendLoginApproval(opts: {
   const ua = (request.headers.get("User-Agent") ?? "").slice(0, 160);
   const when = new Date(now * 1000).toLocaleString("th-TH", { timeZone: "Asia/Bangkok" });
   const url = `${new URL(request.url).origin}/login/2fa/approve?n=${nonce}`;
+  const webhook = await ensureWebhook(env, new URL(request.url).origin);
+  const device = deviceLabel(ua);
   const err = await send(
     env,
     chatId,
-    `มีการเข้าสู่ระบบ do action portal\nเวลา: ${when}\nIP: ${ip || "-"}\n\nถ้าเป็นคุณ กดปุ่มด้านล่างแล้วกด "ยืนยัน" (ใช้ได้ 5 นาที)\nถ้าไม่ใช่คุณ ไม่ต้องกด และควรเปลี่ยนรหัสผ่านอีเมล`,
-    { text: "✅ ยืนยันการเข้าสู่ระบบ", url },
+    `มีการเข้าสู่ระบบ do action portal\n${when} · ${device} · IP ${ip || "-"}\n\nเป็นคุณไหม? (ใช้ได้ 5 นาที)`,
+    webhook
+      ? [[{ text: "✅ อนุมัติ", callback_data: `ok:${nonce}` }, { text: "ไม่ใช่ฉัน", callback_data: `no:${nonce}` }]]
+      : { text: "✅ ยืนยันการเข้าสู่ระบบ", url },
   );
   if (err) return err;
   await env.SESSIONPORTAL.put(`2fa-tga:${nonce}`, JSON.stringify({ token: challengeToken, userId, ip, ua, at: now } satisfies ApprovalRequest), { expirationTtl: APPROVE_TTL });
@@ -200,4 +219,66 @@ export async function countTrustedDevices(env: CloudflareEnv, userId: string): P
 export async function forgetTrustedDevices(env: CloudflareEnv, userId: string): Promise<void> {
   const { keys } = await env.SESSIONPORTAL.list({ prefix: `trust:${userId}:` });
   await Promise.all(keys.map((k) => env.SESSIONPORTAL.delete(k.name)));
+}
+
+export function deviceLabel(ua: string): string {
+  const os = /iPhone|iPad/.test(ua) ? "iPhone/iPad" : /Android/.test(ua) ? "Android" : /Mac OS X/.test(ua) ? "Mac" : /Windows/.test(ua) ? "Windows" : /Linux/.test(ua) ? "Linux" : "";
+  const browser = /Edg\//.test(ua) ? "Edge" : /Chrome\//.test(ua) ? "Chrome" : /Firefox\//.test(ua) ? "Firefox" : /Safari\//.test(ua) ? "Safari" : "";
+  return [browser, os].filter(Boolean).join(" บน ") || "ไม่ทราบอุปกรณ์";
+}
+
+type Update = {
+  message?: { text?: string; chat?: { id?: number; type?: string } };
+  callback_query?: { id: string; data?: string; from?: { id?: number }; message?: { chat?: { id?: number }; message_id?: number; text?: string } };
+};
+
+/** Telegram → portal: Start with a link code, or a tap on อนุมัติ / ไม่ใช่ฉัน. */
+export async function handleTelegramWebhook(request: Request, env: CloudflareEnv): Promise<Response> {
+  if (request.headers.get("X-Telegram-Bot-Api-Secret-Token") !== (await webhookSecret(env))) {
+    return new Response("forbidden", { status: 403 });
+  }
+  const update = (await request.json().catch(() => null)) as Update | null;
+
+  const msg = update?.message;
+  const start = msg?.text?.match(/^\/start\s+([A-Za-z0-9]{12,40})$/);
+  if (msg?.chat?.id && msg.chat.type === "private" && start) {
+    const userId = await env.SESSIONPORTAL.get(`tg-start:${start[1]}`);
+    if (userId) {
+      await env.SESSIONPORTAL.delete(`tg-start:${start[1]}`);
+      await env.SESSIONPORTAL.delete(`tg-link:${userId}`);
+      await env.DB.prepare("UPDATE users SET telegram_chat_id = ?, updated_at = unixepoch() WHERE id = ?").bind(String(msg.chat.id), userId).run();
+      await send(env, String(msg.chat.id), "เชื่อม Telegram กับ do action portal แล้ว ✅\nต่อไปตอนเข้าสู่ระบบ กด \"อนุมัติ\" ในแชตนี้ได้เลย");
+    } else {
+      await send(env, String(msg.chat.id), "ลิงก์เชื่อมหมดอายุแล้ว กด \"เชื่อม Telegram\" ในหน้าความปลอดภัยบัญชีของ portal อีกครั้ง");
+    }
+    return new Response("ok");
+  }
+
+  const cq = update?.callback_query;
+  const m = cq?.data?.match(/^(ok|no):([A-Za-z0-9_-]{16,64})$/);
+  if (cq && m) {
+    const answer = (text: string) => api(env, "answerCallbackQuery", { callback_query_id: cq.id, text });
+    const edit = (text: string) => cq.message?.chat?.id && cq.message.message_id
+      ? api(env, "editMessageText", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, text })
+      : null;
+    const req = await getApprovalRequest(env, m[2]);
+    if (!req) {
+      await answer((await wasApproved(env, m[2])) ? "อนุมัติไปแล้ว" : "หมดอายุแล้ว");
+      return new Response("ok");
+    }
+    // Only the chat linked to the account being signed in to may answer.
+    if (String(cq.from?.id ?? "") !== ((await getTelegramChatId(env, req.userId)) ?? "-")) {
+      await answer("ไม่ได้รับอนุญาต");
+      return new Response("ok");
+    }
+    if (m[1] === "ok" && (await approveLogin(env, m[2]))) {
+      await answer("อนุมัติแล้ว");
+      await edit(`${cq.message?.text?.split("\n\n")[0] ?? "การเข้าสู่ระบบ"}\n\n✅ อนุมัติแล้ว`);
+    } else {
+      await env.SESSIONPORTAL.delete(`2fa-tga:${m[2]}`);
+      await answer("ปฏิเสธแล้ว");
+      await edit(`${cq.message?.text?.split("\n\n")[0] ?? "การเข้าสู่ระบบ"}\n\n⛔ ปฏิเสธแล้ว — ถ้าไม่ใช่คุณ ควรเปลี่ยนรหัสผ่านอีเมล`);
+    }
+  }
+  return new Response("ok");
 }

@@ -54,6 +54,13 @@ export default function TwoFactorLoginPage() {
   const [remember, setRemember] = useState(true);
   const tgSent = Boolean(tgSend.data && "telegramSent" in tgSend.data);
   const tgError = tgSend.data && "error" in tgSend.data ? tgSend.data.error : null;
+  // Linked to Telegram: send the approve request right away, no extra click.
+  const autoSent = useRef(false);
+  useEffect(() => {
+    if (!telegram || autoSent.current) return;
+    autoSent.current = true;
+    tgSend.submit({ intent: "telegram_send" }, { method: "post" });
+  }, [telegram, tgSend]);
   // After the approve button was sent, ask every 2 s whether it was pressed (5 minutes at most).
   useEffect(() => {
     if (!tgSent) return;
@@ -181,7 +188,7 @@ export default function TwoFactorLoginPage() {
                   <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-ink/20 border-t-ink" aria-hidden="true" />
                   รอยืนยันใน Telegram…
                 </p>
-                <p className="mt-1 text-xs text-muted-ink">เปิดข้อความจากบอท กด "ยืนยันการเข้าสู่ระบบ" แล้วกด "ยืนยัน" หน้านี้จะเข้าสู่ระบบให้เอง</p>
+                <p className="mt-1 text-xs text-muted-ink">ส่งคำขอไปที่ Telegram แล้ว กด "อนุมัติ" ในแชตบอท หน้านี้จะเข้าสู่ระบบให้เอง</p>
                 <button type="button" onClick={() => tgSend.submit({ intent: "telegram_send" }, { method: "post" })} className="mt-2 text-xs font-semibold text-muted-ink hover:text-ink">
                   ส่งอีกครั้ง
                 </button>

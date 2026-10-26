@@ -2,11 +2,12 @@ import type { Route } from "./+types/security";
 import { requireCoAdminOrAdmin } from "~/lib/auth.server";
 import { handleTwoFactorIntent, loadTwoFactorState } from "~/lib/two-factor.server";
 import { TwoFactorCard } from "~/components/settings/TwoFactorCard";
-import { Form, useNavigation } from "react-router";
+import { Form, redirect, useNavigation, useRevalidator } from "react-router";
+import { useEffect, useState } from "react";
 import { FaTelegram } from "react-icons/fa6";
 import {
-  confirmTelegramLink, countTrustedDevices, forgetTrustedDevices, getBotUsername, getTelegramChatId,
-  hasPendingTelegramLink, startTelegramLink, unlinkTelegram,
+  countTrustedDevices, forgetTrustedDevices, getBotUsername, getTelegramChatId,
+  hasPendingTelegramLink, telegramLinkUrl, unlinkTelegram,
 } from "~/lib/telegram-2fa.server";
 
 export function meta() {
@@ -36,13 +37,11 @@ export async function action({ request, context }: Route.ActionArgs) {
   const user = await requireCoAdminOrAdmin(request, env.DB, env.SESSIONPORTAL);
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "");
-  if (intent === "tg_link_start") {
-    const err = await startTelegramLink(env, user.id, String(formData.get("chat_id") ?? ""));
-    return { telegram: err ? { error: err } : { message: "ส่งรหัส 6 หลักไปที่ Telegram แล้ว" } };
-  }
-  if (intent === "tg_link_confirm") {
-    const err = await confirmTelegramLink(env, user.id, String(formData.get("code") ?? ""));
-    return { telegram: err ? { error: err } : { message: "เชื่อม Telegram แล้ว" } };
+  if (intent === "tg_link") {
+    // Opens Telegram on the bot with a one-time code; pressing Start links the chat.
+    const url = await telegramLinkUrl(request, env, user.id);
+    if (url) return redirect(url);
+    return { telegram: { error: "เชื่อม Telegram ไม่ได้ — ตรวจการตั้งค่าบอทในหน้าตั้งค่า" } };
   }
   if (intent === "tg_unlink") {
     await unlinkTelegram(env, user.id);
@@ -91,7 +90,6 @@ export default function SecurityPage({ loaderData, actionData }: Route.Component
   );
 }
 
-const inputCls = "h-10 w-full rounded-xl border border-line bg-white px-3.5 text-sm text-ink placeholder:text-faint-ink focus:border-ink/40 focus:outline-none focus:ring-2 focus:ring-ink/10";
 const btnCls = "inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-ink px-5 text-[13px] font-semibold text-white hover:bg-black disabled:opacity-50";
 const ghostCls = "inline-flex h-9 items-center rounded-full border border-line bg-white px-4 text-[12px] font-semibold text-ink hover:bg-paper";
 
@@ -101,6 +99,14 @@ function TelegramCard({ tg, trusted, result }: {
   result?: { error?: string; message?: string };
 }) {
   const busy = useNavigation().state !== "idle";
+  const revalidator = useRevalidator();
+  const [waiting, setWaiting] = useState(false);
+  // While a link is pending, check every 3 s whether Start was pressed in Telegram.
+  useEffect(() => {
+    if (tg.linked || !(tg.pending || waiting)) return;
+    const t = setInterval(() => { if (revalidator.state === "idle") revalidator.revalidate(); }, 3000);
+    return () => clearInterval(t);
+  }, [tg.linked, tg.pending, waiting, revalidator]);
   return (
     <section className="space-y-4 rounded-[20px] border border-line bg-white p-6">
       <div className="flex items-start gap-3">
@@ -117,24 +123,14 @@ function TelegramCard({ tg, trusted, result }: {
           <Form method="post"><input type="hidden" name="intent" value="tg_unlink" /><button className={ghostCls} disabled={busy}>ยกเลิกการเชื่อม</button></Form>
         </div>
       ) : (
-        <div className="space-y-3 text-sm">
-          <ol className="list-decimal space-y-1 pl-5 text-ink-soft">
-            <li>เปิดแชตกับบอท{tg.bot ? <> <a className="font-semibold text-ink underline" href={`https://t.me/${tg.bot}`} target="_blank" rel="noreferrer">@{tg.bot}</a></> : "ของ portal"} แล้วกด Start</li>
-            <li>หา Chat ID ของคุณ เช่น ส่งข้อความหา <a className="font-semibold text-ink underline" href="https://t.me/userinfobot" target="_blank" rel="noreferrer">@userinfobot</a> (ตัวเลขในบรรทัด Id)</li>
-            <li>กรอก Chat ID ด้านล่าง ระบบจะส่งรหัส 6 หลักไปให้ แล้วกรอกรหัสเพื่อยืนยัน</li>
-          </ol>
-          <Form method="post" className="flex flex-col gap-2 sm:flex-row">
-            <input type="hidden" name="intent" value="tg_link_start" />
-            <input name="chat_id" inputMode="numeric" placeholder="Chat ID เช่น 123456789" className={inputCls} required />
-            <button className={btnCls} disabled={busy}>ส่งรหัส</button>
+        <div className="space-y-2 text-sm">
+          <Form method="post" target="_blank" onSubmit={() => setWaiting(true)}>
+            <input type="hidden" name="intent" value="tg_link" />
+            <button className={btnCls} disabled={busy}><FaTelegram className="mr-2" aria-hidden="true" />เชื่อม Telegram</button>
           </Form>
-          {tg.pending && (
-            <Form method="post" className="flex flex-col gap-2 sm:flex-row">
-              <input type="hidden" name="intent" value="tg_link_confirm" />
-              <input name="code" inputMode="numeric" maxLength={6} placeholder="รหัส 6 หลักจาก Telegram" className={inputCls} required />
-              <button className={btnCls} disabled={busy}>ยืนยัน</button>
-            </Form>
-          )}
+          <p className="text-xs text-muted-ink">
+            {tg.pending || waiting ? "เปิด Telegram แล้วกด Start ที่บอท หน้านี้จะอัปเดตเองเมื่อเชื่อมเสร็จ" : `เปิดแชตกับบอท${tg.bot ? ` @${tg.bot}` : ""} แล้วกด Start ครั้งเดียว ก็เชื่อมเสร็จ`}
+          </p>
         </div>
       )}
 

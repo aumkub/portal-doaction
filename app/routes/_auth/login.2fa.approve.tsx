@@ -1,6 +1,6 @@
 import { Form, useActionData, useLoaderData } from "react-router";
 import type { Route } from "./+types/login.2fa.approve";
-import { approveLogin, getApprovalRequest, wasApproved } from "~/lib/telegram-2fa.server";
+import { approveLogin, deviceLabel, getApprovalRequest, wasApproved } from "~/lib/telegram-2fa.server";
 import { finishTelegramChallenge, readChallengeToken } from "~/lib/two-factor.server";
 import { FaTelegram } from "react-icons/fa6";
 
@@ -37,11 +37,6 @@ export async function action({ request, context }: Route.ActionArgs) {
   return { ok: ok || (await wasApproved(env, nonce)) };
 }
 
-function deviceLabel(ua: string): string {
-  const os = /iPhone|iPad/.test(ua) ? "iPhone/iPad" : /Android/.test(ua) ? "Android" : /Mac OS X/.test(ua) ? "Mac" : /Windows/.test(ua) ? "Windows" : /Linux/.test(ua) ? "Linux" : "";
-  const browser = /Edg\//.test(ua) ? "Edge" : /Chrome\//.test(ua) ? "Chrome" : /Firefox\//.test(ua) ? "Firefox" : /Safari\//.test(ua) ? "Safari" : "";
-  return [browser, os].filter(Boolean).join(" บน ") || "ไม่ทราบอุปกรณ์";
-}
 
 export default function ApproveLoginPage() {
   const data = useLoaderData<typeof loader>();
