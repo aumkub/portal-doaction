@@ -1262,6 +1262,19 @@ export function createDB(d1: D1Database) {
       return r.meta.changes ?? 0;
     },
 
+    /** A new run started on the site while this job was still running: the run that held it was killed. */
+    async failAbandonedSiteJobs(site_id: string): Promise<number> {
+      const r = await d1
+        .prepare(
+          `UPDATE site_jobs SET status = 'failed', finished_at = unixepoch(),
+             log = COALESCE(log, '') || 'การอัปเดตถูกตัดกลางคัน — ข้ามตัวนี้และทำงานที่เหลือต่อ'
+           WHERE site_id = ? AND status = 'running'`
+        )
+        .bind(site_id)
+        .run();
+      return r.meta.changes ?? 0;
+    },
+
     /** Queued jobs the site never picked up (offline, unpaired) expire. */
     async expireUnclaimedSiteJobs(olderThan: number): Promise<number> {
       const r = await d1

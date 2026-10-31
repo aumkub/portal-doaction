@@ -323,6 +323,11 @@ async function handleJobsNext(request: Request, env: CloudflareEnv): Promise<Res
       .run();
   }
   const now = Math.floor(Date.now() / 1000);
+  // The site holds its runner lock, so a job still running at the start of a run
+  // was left by a killed run. Fail it so it can't hold back the rest of the queue.
+  if ((parseBody(auth.raw) as { new_run?: unknown } | null)?.new_run === true) {
+    await db.failAbandonedSiteJobs(auth.site.id);
+  }
   const due = await db.listDueSiteJobs(auth.site.id, now);
   if (due.length === 0) return signedJson(auth.secret, 200, { job: null });
   const invRow = await env.DB.prepare("SELECT json FROM site_inventory WHERE site_id = ?").bind(auth.site.id).first<{ json: string }>();

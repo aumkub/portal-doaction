@@ -53,7 +53,15 @@ class DoAction_Care_Runner {
 					break;
 				}
 				set_transient( self::LOCK, time(), 15 * MINUTE_IN_SECONDS );
-				$res = DoAction_Care_Api_Client::signed_post( 'jobs/next', array( 'group' => true ) );
+				// We hold the lock, so a job still "running" at the start of a run was
+				// left by a killed run: the portal fails it and the queue moves on.
+				$res = DoAction_Care_Api_Client::signed_post(
+					'jobs/next',
+					array(
+						'group'   => true,
+						'new_run' => 0 === $ran,
+					)
+				);
 				if ( is_wp_error( $res ) || 200 !== $res['status'] || empty( $res['data']['job'] ) || ! is_array( $res['data']['job'] ) ) {
 					break;
 				}
@@ -63,16 +71,17 @@ class DoAction_Care_Runner {
 				// A plugin and its add-ons are updated together and checked once at the end.
 				$results = $group ? $runner->run_group( array_merge( array( $job ), $group ) ) : array( (string) $job['id'] => $runner->run( $job ) );
 				foreach ( $results as $job_id => $result ) {
-					DoAction_Care_Api_Client::signed_post(
-						'jobs/report',
-						array(
-							'job_id'         => (string) $job_id,
-							'status'         => $result['status'],
-							'result_version' => $result['version'],
-							'site_broken'    => $runner->broken,
-							'log'            => substr( implode( "\n", $runner->log ), 0, 7900 ),
-						)
+					$report = array(
+						'job_id'         => (string) $job_id,
+						'status'         => $result['status'],
+						'result_version' => $result['version'],
+						'site_broken'    => $runner->broken,
+						'log'            => substr( implode( "\n", $runner->log ), 0, 7900 ),
 					);
+					$sent = DoAction_Care_Api_Client::signed_post( 'jobs/report', $report );
+					if ( is_wp_error( $sent ) ) {
+						DoAction_Care_Api_Client::signed_post( 'jobs/report', $report ); // A lost report would hold the queue.
+					}
 				}
 				++$ran;
 				if ( $runner->broken ) {
@@ -343,9 +352,11 @@ class DoAction_Care_Runner {
 
 	/**
 	 * A plugin and its add-ons (grouped by the portal, parent first): back up all,
-	 * update all, check the site once, and on failure restore all of them. An
-	 * add-on built for the new parent (or the reverse) breaks the site when only
-	 * one side is updated, so they are never checked half-way.
+	 * update all, check the site once, and if the site broke restore all of them.
+	 * An add-on built for the new parent (or the reverse) breaks the site when only
+	 * one side is updated, so they are never checked half-way. A member that can't
+	 * be backed up or updated (e.g. an expired licence) is put back and skipped;
+	 * the final check decides whether the others can stay without it.
 	 *
 	 * @param array<int,array<string,mixed>> $jobs
 	 * @return array<string,array{status:string,version:?string}> by job id
@@ -411,12 +422,18 @@ class DoAction_Care_Runner {
 			foreach ( $items as $k => $i ) {
 				$zip = $this->backup( $i['target'] );
 				if ( ! $zip ) {
-					$this->note( 'สำรองไฟล์ ' . $i['name'] . ' ไม่สำเร็จ (หรือพื้นที่ดิสก์ไม่พอ) — ไม่ได้อัปเดตทั้งชุด' );
-					return $this->fill( $jobs, $out, 'failed' );
+					$this->note( 'สำรองไฟล์ ' . $i['name'] . ' ไม่สำเร็จ (หรือพื้นที่ดิสก์ไม่พอ) — ข้ามตัวนี้' );
+					$out[ $i['id'] ] = $this->result( 'failed' );
+					unset( $items[ $k ] );
+					continue;
 				}
 				$items[ $k ]['zip'] = $zip;
 			}
-			$this->note( 'สำรองไฟล์เดิมทั้งชุดไว้แล้ว' );
+			$items = array_values( $items );
+			if ( ! $items ) {
+				return $out;
+			}
+			$this->note( 'สำรองไฟล์เดิมไว้แล้ว' );
 			update_option(
 				self::PENDING,
 				array(
@@ -434,7 +451,6 @@ class DoAction_Care_Runner {
 				false
 			);
 
-			$updated = true;
 			foreach ( $items as $i ) {
 				try {
 					$skin     = new Automatic_Upgrader_Skin();
@@ -447,27 +463,28 @@ class DoAction_Care_Runner {
 				$this->clear_maintenance();
 				self::reactivate( $i );
 				if ( true !== $ok || is_wp_error( $ok ) ) {
-					$this->note( 'อัปเดต ' . $i['name'] . ' ไม่สำเร็จ: ' . ( is_wp_error( $ok ) ? $ok->get_error_message() : 'upgrader คืนค่า ' . var_export( $ok, true ) ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export
-					$updated = false;
-					break;
+					$this->note( 'อัปเดต ' . $i['name'] . ' ไม่สำเร็จ: ' . ( is_wp_error( $ok ) ? $ok->get_error_message() : 'upgrader คืนค่า ' . var_export( $ok, true ) ) . ' — ข้ามตัวนี้' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export
+					$back = self::restore_files( $i['zip'], $i['target'] );
+					self::reactivate( $i );
+					$out[ $i['id'] ] = $this->result( $back ? 'rolled_back' : 'failed', $i['from'] );
 				}
 			}
 
-			if ( $updated ) {
-				$this->settle_all( $items );
-				$after = $this->check_site();
-				if ( $after['ok'] ) {
-					wp_clean_plugins_cache( true );
-					$now = get_plugins();
-					$this->note( 'ตรวจหลังอัปเดตทั้งชุด: ' . $after['detail'] . ' — สำเร็จ' );
-					foreach ( $items as $i ) {
+			$this->settle_all( $items );
+			$after = $this->check_site();
+			if ( $after['ok'] ) {
+				wp_clean_plugins_cache( true );
+				$now = get_plugins();
+				$this->note( 'ตรวจหลังอัปเดตทั้งชุด: ' . $after['detail'] . ' — เว็บปกติ' );
+				foreach ( $items as $i ) {
+					if ( ! isset( $out[ $i['id'] ] ) ) {
 						$out[ $i['id'] ] = $this->result( 'succeeded', isset( $now[ $i['file'] ] ) ? (string) $now[ $i['file'] ]['Version'] : null );
 					}
-					delete_option( self::PENDING );
-					return $out;
 				}
-				$this->note( 'เว็บพังหลังอัปเดตชุด: ' . $after['detail'] );
+				delete_option( self::PENDING );
+				return $out;
 			}
+			$this->note( 'เว็บพังหลังอัปเดตชุด: ' . $after['detail'] );
 
 			// Put every member back, add-ons first.
 			$restored = true;
