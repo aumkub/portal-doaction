@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { needsMonthlyReport } from "~/lib/contract";
-import { useRevalidator } from "react-router";
+import { useFetcher, useRevalidator } from "react-router";
 import type { Route } from "./+types/reports";
 import Pagination from "~/components/ui/Pagination";
 import {
@@ -10,7 +10,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
-import { requireCoAdminOrAdmin } from "~/lib/auth.server";
+import { requireAdmin, requireCoAdminOrAdmin } from "~/lib/auth.server";
+import { runBulkReportAction, type BulkReportAction } from "~/lib/report-actions.server";
 import ReportCustomerEmailDialog, {
   type ReportRowForEmail,
 } from "~/components/reports/ReportCustomerEmailDialog";
@@ -32,6 +33,18 @@ import {
 
 export function meta() {
   return [{ title: "จัดการ Report — Admin" }];
+}
+
+export async function action({ request, context }: Route.ActionArgs) {
+  const env = context.cloudflare.env;
+  await requireAdmin(request, env.DB, env.SESSIONPORTAL);
+  const form = await request.formData();
+  const kind = String(form.get("bulk") ?? "") as BulkReportAction;
+  if (!["publish", "publish_send", "draft", "delete"].includes(kind)) return { error: "invalid" };
+  const ids = form.getAll("id").map(String).filter(Boolean).slice(0, 200);
+  if (ids.length === 0) return { error: "nothing_selected" };
+  const result = await runBulkReportAction({ env, db: createDB(env.DB), origin: new URL(request.url).origin, action: kind, ids });
+  return { kind, ...result };
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
@@ -247,6 +260,9 @@ export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
 
   const revalidator = useRevalidator();
   const [emailDialog, setEmailDialog] = useState<{ report: ReportRowForEmail; mode: "send" | "view" } | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(() => new Set());
+  const bulk = useFetcher<typeof action>();
+  const togglePick = (id: string) => setPicked((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | RowState>("all");
   const [telegramSending, setTelegramSending] = useState<string | null>(null);
@@ -282,6 +298,24 @@ export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
       return matchesSearch && matchesStatus;
     });
   }, [reports, search, statusFilter]);
+  const visibleIds = filtered.map((r) => r.id);
+  const pickedVisible = visibleIds.filter((id) => picked.has(id));
+  const allPicked = visibleIds.length > 0 && pickedVisible.length === visibleIds.length;
+  const runBulk = (kind: BulkReportAction) => {
+    const n = pickedVisible.length;
+    const ask: Record<BulkReportAction, string> = {
+      publish: `เผยแพร่ ${n} รายงาน? ลูกค้าจะเห็นรายงานในพอร์ทัลและได้รับแจ้งเตือน`,
+      publish_send: `เผยแพร่และส่งอีเมลรายงานถึงลูกค้า ${n} ราย? ระบบจะส่งอีเมลจริงทันที (ส่งซ้ำถ้าเคยส่งแล้ว)`,
+      draft: `เปลี่ยน ${n} รายงานกลับเป็นฉบับร่าง? ลูกค้าจะมองไม่เห็นจนกว่าจะเผยแพร่อีกครั้ง`,
+      delete: `ลบ ${n} รายงานถาวร? ลบแล้วกู้คืนไม่ได้ (รายการอัปเดตเว็บจะกลับไปรอใส่รายงานใหม่)`,
+    };
+    if (!window.confirm(ask[kind])) return;
+    const fd = new FormData();
+    fd.set("bulk", kind);
+    for (const id of pickedVisible) fd.append("id", id);
+    bulk.submit(fd, { method: "post" });
+    setPicked(new Set());
+  };
 
   // Group the filtered rows under report-month headings.
   const groups: { key: string; label: string; rows: ReportRowForEmail[] }[] = [];
@@ -461,7 +495,30 @@ export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
             )}
           </div>
         ) : (
-          groups.map((g) => (
+          <>
+          {!isCoAdmin && (
+            <div className="sticky top-0 z-[2] flex flex-wrap items-center gap-2 border-b border-line-soft bg-white px-5 py-2.5">
+              <label className="flex cursor-pointer items-center gap-2 text-[13px] font-semibold text-ink">
+                <input type="checkbox" checked={allPicked} onChange={() => setPicked(allPicked ? new Set() : new Set(visibleIds))} className="h-4 w-4 accent-ink" />
+                {pickedVisible.length ? `เลือก ${pickedVisible.length} รายงาน` : `เลือกทั้งหมด (${visibleIds.length})`}
+              </label>
+              {pickedVisible.length > 0 && (
+                <div className="ml-auto flex flex-wrap items-center gap-1.5">
+                  <button type="button" disabled={bulk.state !== "idle"} onClick={() => runBulk("publish")} className="h-8 rounded-full border border-line bg-white px-3.5 text-[12px] font-semibold text-ink hover:bg-paper disabled:opacity-50">เผยแพร่</button>
+                  <button type="button" disabled={bulk.state !== "idle"} onClick={() => runBulk("publish_send")} className="inline-flex h-8 items-center gap-1.5 rounded-full bg-ink px-3.5 text-[12px] font-semibold text-white hover:bg-black disabled:opacity-50"><FaPaperPlane className="text-[10px]" />เผยแพร่และส่งอีเมล</button>
+                  <button type="button" disabled={bulk.state !== "idle"} onClick={() => runBulk("draft")} className="h-8 rounded-full border border-line bg-white px-3.5 text-[12px] font-semibold text-ink hover:bg-paper disabled:opacity-50">กลับเป็นฉบับร่าง</button>
+                  <button type="button" disabled={bulk.state !== "idle"} onClick={() => runBulk("delete")} className="h-8 rounded-full border border-line bg-white px-3.5 text-[12px] font-semibold text-destructive hover:bg-[#FFF7EE] disabled:opacity-50">ลบ</button>
+                </div>
+              )}
+              {bulk.state !== "idle" && <span className="ml-auto text-xs text-muted-ink">กำลังดำเนินการ…</span>}
+              {bulk.state === "idle" && bulk.data && "ok" in bulk.data && (
+                <span className={`text-xs ${bulk.data.failed.length ? "text-[#B4541A]" : "text-emerald-700"}`}>
+                  สำเร็จ {bulk.data.ok} รายการ{bulk.data.failed.length ? ` · ไม่สำเร็จ ${bulk.data.failed.length} (${[...new Set(bulk.data.failed.map((f) => f.error))].join(", ")})` : ""}
+                </span>
+              )}
+            </div>
+          )}
+          {groups.map((g) => (
             <div key={g.key}>
               <p className="sticky top-0 z-[1] border-b border-line-soft bg-paper/80 px-5 py-2 text-xs font-semibold text-muted-ink backdrop-blur">
                 {g.label}
@@ -471,7 +528,10 @@ export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
                   const st = rowState(report);
                   const href = isCoAdmin ? `/reports/${report.id}` : `/admin/reports/${report.id}`;
                   return (
-                    <li key={report.id} className="flex min-w-0 flex-col gap-2.5 px-5 py-3.5 hover:bg-paper/60 sm:flex-row sm:items-center sm:gap-3.5">
+                    <li key={report.id} className={`flex min-w-0 flex-col gap-2.5 px-5 py-3.5 hover:bg-paper/60 sm:flex-row sm:items-center sm:gap-3.5 ${picked.has(report.id) ? "bg-brand-yellow/10" : ""}`}>
+                      {!isCoAdmin && (
+                        <input type="checkbox" aria-label={report.company_name} checked={picked.has(report.id)} onChange={() => togglePick(report.id)} className="h-4 w-4 shrink-0 accent-ink" />
+                      )}
                       <a href={href} {...(isCoAdmin ? { target: "_blank", rel: "noopener noreferrer" } : {})} className="flex min-w-0 flex-1 items-center gap-3.5">
                         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-paper text-xs font-semibold text-ink">{getInitials(report.company_name)}</span>
                         <span className="min-w-0 flex-1">
@@ -494,7 +554,8 @@ export default function AdminReportsPage({ loaderData }: Route.ComponentProps) {
                 })}
               </ul>
             </div>
-          ))
+          ))}
+          </>
         )}
 
         {filtered.length > 0 && (
