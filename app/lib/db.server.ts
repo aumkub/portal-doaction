@@ -20,6 +20,9 @@ import type {
 
 export function createDB(d1: D1Database) {
   return {
+    /** The underlying binding, for one-off queries that don't warrant a method. */
+    raw: d1,
+
     // ── Users ────────────────────────────────────────────────────────────────
 
     async getUserById(id: string): Promise<User | null> {

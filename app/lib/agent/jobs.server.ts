@@ -198,8 +198,54 @@ export async function syncReportSiteUpdates(
   db: ReturnType<typeof createDB>,
   report: { id: string; client_id: string; year: number; month: number },
 ): Promise<number> {
-  return appendSiteUpdatesToReport(db, { clientId: report.client_id, reportId: report.id, year: report.year, month: report.month })
-    .catch((e) => { console.error("[reports] site update sync failed", e); return 0; });
+  try {
+    const moved = await moveUpdatesFromUnsentReports(db, report);
+    return moved + (await appendSiteUpdatesToReport(db, { clientId: report.client_id, reportId: report.id, year: report.year, month: report.month }));
+  } catch (e) {
+    console.error("[reports] site update sync failed", e);
+    return 0;
+  }
+}
+
+/**
+ * Site-update lines sitting in an earlier report of the same client that was
+ * never emailed move into this one, so they reach the client in the report
+ * that does get sent. Sent reports keep theirs.
+ */
+async function moveUpdatesFromUnsentReports(
+  db: ReturnType<typeof createDB>,
+  report: { id: string; client_id: string; year: number; month: number },
+): Promise<number> {
+  const d1 = db.raw;
+  const { results } = await d1
+    .prepare(
+      `SELECT t.id FROM report_tasks t JOIN monthly_reports r ON r.id = t.report_id
+       WHERE r.client_id = ? AND r.id != ? AND r.client_notified_at IS NULL
+         AND (r.year * 12 + r.month) < ?
+         AND t.title LIKE 'อัปเดต%' AND t.description LIKE '%.%'`
+    )
+    .bind(report.client_id, report.id, report.year * 12 + report.month)
+    .all<{ id: string }>();
+  if (results.length === 0) return 0;
+  const existing = await db.listTasksByReport(report.id);
+  const seen = new Set(existing.map((t) => `${t.title}|${(t.description ?? "").split(" · ")[0]}`));
+  let order = existing.length;
+  const stmts = [];
+  for (const { id } of results) {
+    const t = await d1.prepare("SELECT title, description FROM report_tasks WHERE id = ?").bind(id).first<{ title: string; description: string | null }>();
+    if (!t) continue;
+    const key = `${t.title}|${(t.description ?? "").split(" · ")[0]}`;
+    stmts.push(seen.has(key)
+      ? d1.prepare("DELETE FROM report_tasks WHERE id = ?").bind(id)
+      : d1.prepare("UPDATE report_tasks SET report_id = ?, sort_order = ? WHERE id = ?").bind(report.id, order++, id));
+    seen.add(key);
+  }
+  await d1.batch(stmts);
+  await d1.prepare(
+    `UPDATE monthly_reports SET total_tasks = (SELECT count(*) FROM report_tasks WHERE report_id = monthly_reports.id)
+     WHERE client_id = ? AND (id = ? OR client_notified_at IS NULL)`
+  ).bind(report.client_id, report.id).run();
+  return results.length;
 }
 
 /** After a job succeeds: add it to this month's report, whether still a draft or already published. */
