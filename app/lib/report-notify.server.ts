@@ -1,3 +1,4 @@
+import { syncReportSiteUpdates } from "~/lib/agent/jobs.server";
 import type { DB } from "~/lib/db.server";
 import { getReportLinkSecret } from "~/lib/secrets.server";
 import { sendEmail } from "~/lib/email.server";
@@ -30,6 +31,8 @@ export async function notifyReportToClient(params: {
 
   const client = await db.getClientById(report.client_id);
   if (!client) return { ok: false, error: "no_client", status: 400 };
+  // Sent reports carry every site update done so far, single or bulk send alike.
+  await syncReportSiteUpdates(db, report);
 
   const user = await db.getUserById(client.user_id);
   if (!user?.email) return { ok: false, error: "no_email", status: 400 };

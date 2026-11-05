@@ -189,6 +189,19 @@ export async function appendSiteUpdatesToReport(
   return jobs.length;
 }
 
+/**
+ * Brings a report up to date with site updates finished since it was made
+ * (its month, plus unreported ones from up to 90 days before). Safe to call
+ * any time: updates already in a report are never added twice.
+ */
+export async function syncReportSiteUpdates(
+  db: ReturnType<typeof createDB>,
+  report: { id: string; client_id: string; year: number; month: number },
+): Promise<number> {
+  return appendSiteUpdatesToReport(db, { clientId: report.client_id, reportId: report.id, year: report.year, month: report.month })
+    .catch((e) => { console.error("[reports] site update sync failed", e); return 0; });
+}
+
 /** After a job succeeds: add it to this month's report, whether still a draft or already published. */
 export async function addJobToDraftReport(env: CloudflareEnv, clientId: string, now: number): Promise<void> {
   const db = createDB(env.DB);

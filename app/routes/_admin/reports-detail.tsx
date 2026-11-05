@@ -1,3 +1,4 @@
+import { syncReportSiteUpdates } from "~/lib/agent/jobs.server";
 import { redirect } from "react-router";
 import { z } from "zod";
 import type { Route } from "./+types/reports-detail";
@@ -41,6 +42,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 
   const report = await db.getReport(params.reportId);
   if (!report) throw new Response("Not Found", { status: 404 });
+  await syncReportSiteUpdates(db, report);
 
   const [tasks, clients] = await Promise.all([
     db.listTasksByReport(report.id),

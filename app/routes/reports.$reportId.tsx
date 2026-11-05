@@ -1,3 +1,4 @@
+import { syncReportSiteUpdates } from "~/lib/agent/jobs.server";
 import { Form } from "react-router";
 import { getReportLinkSecret } from "~/lib/secrets.server";
 import type { Route } from "./+types/reports.$reportId";
@@ -48,6 +49,8 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     }
   }
 
+  // Admin preview shows what will be sent: pull in site updates done since the report was made.
+  if (isAdminPreview) await syncReportSiteUpdates(db, report);
   const tasks = await db.listTasksByReport(report.id);
   const loginRedirect = `/reports/${report.id}`;
   return {
