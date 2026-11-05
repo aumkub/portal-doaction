@@ -147,6 +147,11 @@ function thaiShortDate(unix: number): string {
   return `${d.getUTCDate()} ${THAI_MONTHS_SHORT[d.getUTCMonth()]}`;
 }
 
+/** Report line for one update; also used to find that line again. */
+function updateTitle(j: { kind: SiteJobKind; name: string; from_version: string | null; result_version: string | null; to_version: string | null }): string {
+  return `อัปเดต${j.kind === "core" ? " WordPress" : `${KIND_LABEL[j.kind]} ${j.name}`} ${j.from_version ?? ""} → ${j.result_version ?? j.to_version ?? ""}`.replace(/\s+/g, " ").trim();
+}
+
 const KIND_LABEL: Record<SiteJobKind, string> = { plugin: "ปลั๊กอิน", theme: "ธีม", core: "WordPress core" };
 
 /**
@@ -168,7 +173,7 @@ export async function appendSiteUpdatesToReport(
   const seen = new Set(existing.map((t) => `${t.title}|${(t.description ?? "").split(" · ")[0]}`));
   let order = existing.length;
   for (const j of jobs) {
-    const title = `อัปเดต${j.kind === "core" ? " WordPress" : `${KIND_LABEL[j.kind]} ${j.name}`} ${j.from_version ?? ""} → ${j.result_version ?? j.to_version ?? ""}`.replace(/\s+/g, " ").trim();
+    const title = updateTitle(j);
     const host = new URL(j.site_url).host;
     const earlier = (j.finished_at ?? 0) < monthStart;
     // The same update can finish twice (re-queued after a retry); list it once.
@@ -208,9 +213,9 @@ export async function syncReportSiteUpdates(
 }
 
 /**
- * Site-update lines sitting in an earlier report of the same client that was
- * never emailed move into this one, so they reach the client in the report
- * that does get sent. Sent reports keep theirs.
+ * Site-update lines that never reached the client by email move into this
+ * report: lines in an earlier report that was never emailed, and lines added
+ * to an earlier report after it was emailed. What the client was sent stays.
  */
 async function moveUpdatesFromUnsentReports(
   db: ReturnType<typeof createDB>,
@@ -226,6 +231,32 @@ async function moveUpdatesFromUnsentReports(
     )
     .bind(report.client_id, report.id, report.year * 12 + report.month)
     .all<{ id: string }>();
+  // Lines added to an already-emailed report afterwards: their update was reported after the email.
+  const late = await d1
+    .prepare(
+      `SELECT r.id AS report_id, r.client_notified_at AS sent_at FROM monthly_reports r
+       WHERE r.client_id = ? AND r.id != ? AND r.client_notified_at IS NOT NULL AND (r.year * 12 + r.month) < ?`
+    )
+    .bind(report.client_id, report.id, report.year * 12 + report.month)
+    .all<{ report_id: string; sent_at: number }>();
+  for (const r of late.results) {
+    const jobs = await d1
+      .prepare(
+        `SELECT j.kind, j.name, j.from_version, j.result_version, j.to_version, s.site_url FROM site_jobs j JOIN sites s ON s.id = j.site_id
+         WHERE s.client_id = ? AND j.status = 'succeeded' AND j.reported_at > ?`
+      )
+      .bind(report.client_id, r.sent_at)
+      .all<{ kind: SiteJobKind; name: string; from_version: string | null; result_version: string | null; to_version: string | null; site_url: string }>();
+    const keys = new Set(jobs.results.map((j) => `${updateTitle(j)}|${new URL(j.site_url).host}`));
+    if (keys.size === 0) continue;
+    const tasks = await d1
+      .prepare("SELECT id, title, description FROM report_tasks WHERE report_id = ? AND title LIKE 'อัปเดต%'")
+      .bind(r.report_id)
+      .all<{ id: string; title: string; description: string | null }>();
+    for (const t of tasks.results) {
+      if (keys.has(`${t.title}|${(t.description ?? "").split(" · ")[0]}`)) results.push({ id: t.id });
+    }
+  }
   if (results.length === 0) return 0;
   const existing = await db.listTasksByReport(report.id);
   const seen = new Set(existing.map((t) => `${t.title}|${(t.description ?? "").split(" · ")[0]}`));
@@ -243,8 +274,8 @@ async function moveUpdatesFromUnsentReports(
   await d1.batch(stmts);
   await d1.prepare(
     `UPDATE monthly_reports SET total_tasks = (SELECT count(*) FROM report_tasks WHERE report_id = monthly_reports.id)
-     WHERE client_id = ? AND (id = ? OR client_notified_at IS NULL)`
-  ).bind(report.client_id, report.id).run();
+     WHERE client_id = ?`
+  ).bind(report.client_id).run();
   return results.length;
 }
 
@@ -255,7 +286,8 @@ export async function addJobToDraftReport(env: CloudflareEnv, clientId: string, 
   const year = local.getUTCFullYear();
   const month = local.getUTCMonth() + 1;
   const report = await db.getReportByMonth(clientId, year, month);
-  if (report) {
+  // Already emailed: leave the update for the next report, so the client actually gets it.
+  if (report && !report.client_notified_at) {
     await appendSiteUpdatesToReport(db, { clientId, reportId: report.id, year, month });
   }
 }
