@@ -26,7 +26,8 @@
   },
   "vars": {
     "VALUE_FROM_CLOUDFLARE": "Hello from Cloudflare",
-    "APP_URL": "https://portal.doaction.co.th"
+    "APP_URL": "https://portal.doaction.co.th",
+    "WAKE_RELAY_URL": "https://187-53-130-168.sslip.io/wake"
   },
   "d1_databases": [
     {

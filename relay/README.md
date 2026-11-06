@@ -18,7 +18,8 @@ bash relay/install.sh
 ## Portal
 
 ```bash
-npx wrangler secret put WAKE_RELAY_URL      # https://187-53-130-168.sslip.io/wake (not a doaction.co.th name: same-zone Worker fetches loop)
+# WAKE_RELAY_URL is a plain var in wrangler.json: https://187-53-130-168.sslip.io/wake
+# (not a doaction.co.th name: same-zone Worker fetches loop)
 npx wrangler secret put WAKE_RELAY_SECRET   # same value as RELAY_SECRET
 ```
 

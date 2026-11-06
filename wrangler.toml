@@ -21,6 +21,8 @@ crons = ["*/15 * * * *"]
 
 [vars]
 APP_URL = "https://portal.doaction.co.th"
+# Wake relay (relay/install.sh). Not a secret; WAKE_RELAY_SECRET stays a Worker secret.
+WAKE_RELAY_URL = "https://187-53-130-168.sslip.io/wake"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # ขั้นตอน deploy (Cloudflare Pages)
