@@ -18,7 +18,7 @@
 ```
 แอดมิน ──(กดอัปเดต)──▶ Portal (Cloudflare Worker + D1)
                             │  1. บันทึกงานลง site_jobs (status = queued)
-                            │  2. ปลุกเว็บ ──▶ relay บน OVH ──▶ เว็บลูกค้า /?rest_route=/doaction-care/v1/wake
+                            │  2. ปลุกเว็บ ──▶ relay บน VPS ──▶ เว็บลูกค้า /?rest_route=/doaction-care/v1/wake
                             ▼
                  เว็บลูกค้า (ปลั๊กอิน Do Action: Care)
                             │  3. ส่งข้อมูล (heartbeat) + ขอรับงาน (jobs/next)
@@ -44,7 +44,7 @@
 | `app/components/admin/connected-sites.tsx` | การ์ดเว็บ, รายการอัปเดต, ประวัติงาน |
 | `app/routes/api/site-job-log.ts` | โหลด log ของงานทีละงาน |
 | `app/lib/mcp/site-tools.server.ts` | เครื่องมือ MCP สำหรับดูแลเว็บ |
-| `relay/wake-relay.mjs` | ตัวกลางส่งสัญญาณปลุก บนเซิร์ฟเวอร์ OVH |
+| `relay/wake-relay.mjs` | ตัวกลางส่งสัญญาณปลุก บน VPS (187.53.130.168) |
 
 ### ฝั่งปลั๊กอิน (`wp-plugin/doaction-care/`)
 
@@ -86,7 +86,7 @@ portal ตอบกลับว่ามีงานรออยู่หรื�
 **สั่งไม่ได้เมื่อ:** กด "หยุดทั้งหมด" อยู่, เว็บขาดการติดต่อเกิน 3 ชม., เว็บปิดการแก้ไขไฟล์ (`DISALLOW_FILE_MODS`), สัญญาลูกค้าหมดอายุ
 
 ### 4. ปลุกเว็บ
-portal เซ็นคำขอแล้วส่งผ่าน **relay บน OVH** (`https://51-79-223-252.sslip.io/wake`) ไปที่เว็บ
+portal เซ็นคำขอแล้วส่งผ่าน **relay บน VPS** (`https://187-53-130-168.sslip.io/wake`) ไปที่เว็บ
 
 ทำไมต้องมี relay:
 - Cloudways/nginx ของลูกค้าบางเจ้าบล็อกคำขอจาก Cloudflare Worker (403)
@@ -191,9 +191,9 @@ node scripts/release-care-plugin.mjs
 - เว็บจะไม่อัปเดตปลั๊กอินเอง แอดมินต้องติ๊ก "Do Action: Care" ในรายการอัปเดตของแต่ละเว็บ
 - migration ใหม่ต้องรัน**ก่อน** deploy: `npx wrangler d1 execute DB --remote --file migrations/<ไฟล์>.sql`
 
-### relay บน OVH
-- รันเป็น container `wake-relay` ข้าง Caddy ของ PDPC (`/opt/pdpc/deploy/Caddyfile`)
-- ติดตั้ง/อัปเดต: `bash relay/install-ovh.sh`, เพิ่มชื่อ sslip.io: `bash relay/add-sslip-host.sh`
+### relay บน VPS
+- รันเป็น container `wake-relay` บน VPS 187.53.130.168 หลัง Caddy กลาง (`/opt/proxy/sites/wake-relay.caddy`)
+- ติดตั้ง/อัปเดต: `bash relay/install.sh`
 - secret ฝั่ง portal: `WAKE_RELAY_URL`, `WAKE_RELAY_SECRET` (ลบทั้งคู่เพื่อกลับไปปลุกตรงจาก Worker)
 - รายละเอียดเพิ่มเติม: [relay/README.md](../relay/README.md)
 
@@ -202,8 +202,8 @@ node scripts/release-care-plugin.mjs
 | อาการ | สาเหตุที่เป็นไปได้ | ทำอย่างไร |
 |---|---|---|
 | งานรอคิวนาน | ปลุกไม่สำเร็จ, เว็บคนเข้าน้อย | ดูข้อความใต้แถวเว็บใน `/admin/sites`, กด "ปลุกเว็บที่รอคิว" หรือกดปุ่มในหน้าตั้งค่าปลั๊กอิน |
-| ปลุกไม่สำเร็จ `HTTP 403` | ไฟร์วอลล์ของเว็บบล็อก | ตรวจว่า relay ทำงาน (`curl -X POST https://51-79-223-252.sslip.io/wake` ต้องได้ `unauthorized`) |
-| ปลุกไม่สำเร็จ `relay HTTP …` | relay ล่มหรือ secret ไม่ตรง | ตรวจ container `wake-relay` บน OVH และ secret ทั้งสองฝั่ง |
+| ปลุกไม่สำเร็จ `HTTP 403` | ไฟร์วอลล์ของเว็บบล็อก | ตรวจว่า relay ทำงาน (`curl -X POST https://187-53-130-168.sslip.io/wake` ต้องได้ `unauthorized`) |
+| ปลุกไม่สำเร็จ `relay HTTP …` | relay ล่มหรือ secret ไม่ตรง | ตรวจ container `wake-relay` บน VPS และ secret ทั้งสองฝั่ง |
 | งาน running ค้าง | PHP ถูกตัดกลางทาง | ระบบตั้งเป็น failed เองหลัง 20 นาที และปลั๊กอินกู้ไฟล์จากจุดกู้คืนในรอบถัดไป |
 | เว็บพังหลังอัปเดตแม้ย้อนกลับแล้ว | ปลั๊กอินแก้ฐานข้อมูล | ใช้ Recovery Mode ของ WordPress หรือเปลี่ยนชื่อโฟลเดอร์ปลั๊กอินใน `wp-content/plugins/` แล้วดู PHP error log |
 | รายงานไม่มีรายการอัปเดต | ยังไม่มีรายงานของเดือนนั้น | สร้างรายงาน ระบบจะดึงงานค้างย้อนหลัง 90 วันให้ |

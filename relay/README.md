@@ -6,50 +6,19 @@ sends the same signed call from a normal server instead. It only forwards to
 `https://<public host>/?rest_route=/doaction-care/v1/wake`, and the site still
 checks the portal's HMAC signature, so the relay holds no site secrets.
 
-## Install (Ubuntu/Debian, Node 18+)
+## Install
+
+It runs as the `wake-relay` container on the VPS (187.53.130.168), behind the shared
+Caddy at `https://187-53-130-168.sslip.io/wake`. Install or update from the repo root:
 
 ```bash
-sudo mkdir -p /opt/wake-relay && sudo cp wake-relay.mjs /opt/wake-relay/
-openssl rand -hex 32   # the RELAY_SECRET; keep it for the portal too
-```
-
-`/etc/systemd/system/wake-relay.service`:
-
-```ini
-[Unit]
-Description=Do Action Care wake relay
-After=network-online.target
-
-[Service]
-Environment=RELAY_SECRET=<secret>
-Environment=PORT=8787
-ExecStart=/usr/bin/node /opt/wake-relay/wake-relay.mjs
-Restart=always
-DynamicUser=yes
-NoNewPrivileges=yes
-ProtectSystem=strict
-ProtectHome=yes
-
-[Install]
-WantedBy=multi-user.target
-```
-
-```bash
-sudo systemctl daemon-reload && sudo systemctl enable --now wake-relay
-```
-
-The relay listens on 127.0.0.1 only. Put HTTPS in front, e.g. Caddy:
-
-```
-relay.doaction.co.th {
-  reverse_proxy 127.0.0.1:8787
-}
+bash relay/install.sh
 ```
 
 ## Portal
 
 ```bash
-npx wrangler secret put WAKE_RELAY_URL      # https://51-79-223-252.sslip.io/wake (not a doaction.co.th name: same-zone Worker fetches loop)
+npx wrangler secret put WAKE_RELAY_URL      # https://187-53-130-168.sslip.io/wake (not a doaction.co.th name: same-zone Worker fetches loop)
 npx wrangler secret put WAKE_RELAY_SECRET   # same value as RELAY_SECRET
 ```
 
